@@ -1,0 +1,17 @@
+GW2 Timer
+Copyright (c) 2026 RadMageIRL. The code is under the MIT License (see LICENSE).
+
+GW2 Timer is an unofficial fansite. It is not affiliated with, endorsed, sponsored or approved by
+ArenaNet or NCSOFT.
+
+Guild Wars Games © ArenaNet LLC. All rights reserved. NCSOFT, ArenaNet, Guild Wars, Guild Wars 2, GW2, Heart of Thorns, Path of Fire, End of Dragons, Secrets of the Obscure, Janthir Wilds, Visions of Eternity, and all associated logos, designs, and composite marks are trademarks or registered trademarks of NCSOFT Corporation. All other trademarks are the property of their respective owners.
+
+Event, map and waypoint names are ArenaNet's game content and are not covered by the MIT License.
+Waypoint chat codes come from the official Guild Wars 2 API.
+
+Schedule times are facts restated in this project's own format. They were checked against the
+Guild Wars 2 Wiki (content under the GNU Free Documentation License 1.3; no wiki text, code or
+data file is included here) and compared with qjv/event-timers (MIT; nothing from it is included).
+
+The news panel loads headlines from ArenaNet's official feed at runtime and links to the posts;
+no ArenaNet text is stored in this repository.

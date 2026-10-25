@@ -1,0 +1,20 @@
+{
+ "$comment": "https://api.guildwars2.com/v2/worldbosses fetched 2026-10-25",
+ "ids": [
+  "admiral_taidha_covington",
+  "claw_of_jormag",
+  "drakkar",
+  "fire_elemental",
+  "great_jungle_wurm",
+  "inquest_golem_mark_ii",
+  "karka_queen",
+  "megadestroyer",
+  "mists_and_monsters_titans",
+  "modniir_ulgoth",
+  "shadow_behemoth",
+  "svanir_shaman_chief",
+  "tequatl_the_sunless",
+  "the_shatterer",
+  "triple_trouble_wurm"
+ ]
+}

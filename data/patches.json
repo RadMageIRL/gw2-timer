@@ -1,0 +1,84 @@
+{
+  "$comment": "ArenaNet game updates whose notes were reviewed for schedule changes. Written by tools/patch-review.mjs. A review records what was read; it never verifies a schedule (see verification evidence in schedule.source.json).",
+  "reviews": [
+    {
+      "id": "2026-09-15",
+      "title": "Game Update Notes: September 15, 2026",
+      "url": "https://en-forum.guildwars2.com/topic/176681-game-update-notes-september-15-2026/",
+      "postedOn": "2026-09-10",
+      "reviewedOn": "2026-10-25",
+      "mode": "full-read",
+      "buildObserved": null,
+      "sourcesRead": [
+        "https://en-forum.guildwars2.com/topic/176681-game-update-notes-september-15-2026/",
+        "https://www.guildwars2.com/en/news/code-of-creation-concludes-visions-of-eternity-on-september-15/",
+        "https://www.guildwars2.com/en/news/play-the-finale-of-visions-of-eternity-today-with-code-of-creation/"
+      ],
+      "flagged": [],
+      "findings": [
+        "News 2026-09-08: Depths of Cruelty runs on a three-hour cycle, like the Convergences.",
+        "News 2026-09-08: the Shackles of the Ancients start moved five minutes earlier. No new time is given.",
+        "News 2026-09-08: Leyspring Hollows closes after its meta, with a prompt to move within an hour.",
+        "Notes: Hammerhart Rumble world boss event damage fix (no timing change)."
+      ],
+      "newContent": [
+        "Leyspring Hollows: Depths of Cruelty meta",
+        "Convergence: Nexus of Eternity",
+        "Raid: Nexus of Eternity",
+        "Fractal: Solitary Throne"
+      ],
+      "result": "schedule changes announced"
+    },
+    {
+      "id": "2026-09-29",
+      "title": "Game Update Notes: September 29, 2026",
+      "url": "https://en-forum.guildwars2.com/topic/177321-game-update-notes-september-29-2026/",
+      "postedOn": "2026-09-28",
+      "reviewedOn": "2026-10-25",
+      "mode": "full-read",
+      "buildObserved": null,
+      "sourcesRead": [
+        "https://en-forum.guildwars2.com/topic/177321-game-update-notes-september-29-2026/",
+        "https://www.guildwars2.com/en/news/play-the-new-world-vs-world-borderlands-map-beta-on-november-10/",
+        "https://www.guildwars2.com/en/news/get-four-weeks-of-loot-with-the-code-of-creation-supply-drop/"
+      ],
+      "flagged": [],
+      "findings": [
+        "Notes: Depths of Cruelty bug fixes only (skill effects, Kuda's shield, a skill fact).",
+        "Notes: Challenge Mode added to the Nexus of Eternity Convergence (no timing change).",
+        "Notes: Dismount Rush bonus event (news: September 29 to October 6); no schedule effect."
+      ],
+      "newContent": [],
+      "result": "no schedule changes found"
+    },
+    {
+      "id": "2026-10-13",
+      "title": "Game Update Notes: October 13, 2026",
+      "url": "https://en-forum.guildwars2.com/topic/177745-game-update-notes-october-13-2026/",
+      "postedOn": "2026-10-12",
+      "reviewedOn": "2026-10-25",
+      "mode": "full-read",
+      "buildObserved": { "id": 209026, "observedOn": "2026-10-25", "source": "https://api.guildwars2.com/v2/build" },
+      "sourcesRead": [
+        "https://en-forum.guildwars2.com/topic/177745-game-update-notes-october-13-2026/",
+        "https://www.guildwars2.com/en/news/shadow-of-the-mad-king-2026-is-now-live/",
+        "https://www.guildwars2.com/en/news/living-world-seasons-are-now-included-with-guild-wars-2-expansions/",
+        "https://en-forum.guildwars2.com/discover/6.xml/"
+      ],
+      "flagged": [],
+      "findings": [
+        "Notes: Halloween runs October 13 to November 3; news: Mad King Says every two hours (a festival event, not in the dataset).",
+        "Notes: fixed announcements showing at the wrong time during the Depths of Cruelty meta-event. This is message timing, not the schedule.",
+        "Notes: Legendary Mode for the Nexus of Eternity raid (not the Convergence schedule).",
+        "Dev tracker 2026-10-21: the wikis are down for maintenance."
+      ],
+      "newContent": [],
+      "result": "no schedule changes found"
+    }
+  ],
+  "upcoming": [
+    { "date": "2026-11-03", "what": "Halloween ends", "source": "https://www.guildwars2.com/en/news/code-of-creation-concludes-visions-of-eternity-on-september-15/" },
+    { "date": "2026-11-10", "what": "Skills and balance update; Fractal Incursion event (to December 1); WvW new map beta", "source": "https://www.guildwars2.com/en/news/code-of-creation-concludes-visions-of-eternity-on-september-15/" },
+    { "date": "2026-12-08", "what": "Wintersday (to January 5)", "source": "https://www.guildwars2.com/en/news/code-of-creation-concludes-visions-of-eternity-on-september-15/" }
+  ]
+}

@@ -1,0 +1,209 @@
+{
+ "$comment": "Waypoints from https://api.guildwars2.com/v2/continents/1/floors/1 and /49, fetched 2026-10-25",
+ "pois": {
+  "962": {
+   "name": "Krennak's Homestead Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BMIDAAA=]",
+   "map": "Wayfarer Foothills"
+  },
+  "634": {
+   "name": "Earthshake Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BHoCAAA=]",
+   "map": "Frostgorge Sound"
+  },
+  "3129": {
+   "name": "Still Waters Speaking Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BDkMAAA=]",
+   "map": "Bjora Marches"
+  },
+  "846": {
+   "name": "Lowland Burns Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BE4DAAA=]",
+   "map": "Blazeridge Steppes"
+  },
+  "247": {
+   "name": "Swamplost Haven Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BPcAAAA=]",
+   "map": "Queensdale"
+  },
+  "176": {
+   "name": "Junction Camp Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BLAAAAA=]",
+   "map": "Harathi Hinterlands"
+  },
+  "424": {
+   "name": "Laughing Gull Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BKgBAAA=]",
+   "map": "Bloodtide Coast"
+  },
+  "426": {
+   "name": "Firthside Vigil Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BKoBAAA=]",
+   "map": "Bloodtide Coast"
+  },
+  "1749": {
+   "name": "Pearl Islet Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BNUGAAA=]",
+   "map": "Southsun Cove"
+  },
+  "1345": {
+   "name": "Twilight Arbor Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BEEFAAA=]",
+   "map": "Caledon Forest"
+  },
+  "71": {
+   "name": "Muridian Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BEcAAAA=]",
+   "map": "Metrica Province"
+  },
+  "717": {
+   "name": "Maelstrom's Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BM0CAAA=]",
+   "map": "Mount Maelstrom"
+  },
+  "724": {
+   "name": "Old Sledge Site Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BNQCAAA=]",
+   "map": "Mount Maelstrom"
+  },
+  "464": {
+   "name": "Splintered Coast Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BNABAAA=]",
+   "map": "Sparkfly Fen"
+  },
+  "2064": {
+   "name": "Pact Base Camp Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BBAIAAA=]",
+   "map": "Dragon's Stand"
+  },
+  "2050": {
+   "name": "Southwatch Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BAIIAAA=]",
+   "map": "Auric Basin"
+  },
+  "2037": {
+   "name": "Ley-Line Confluence Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BPUHAAA=]",
+   "map": "Tangled Depths"
+  },
+  "2056": {
+   "name": "Pact Encampment Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BAgIAAA=]",
+   "map": "Verdant Brink"
+  },
+  "3882": {
+   "name": "Stricken Plains Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BCoPAAA=]",
+   "map": "Janthir Syntri"
+  },
+  "3937": {
+   "name": "Mantle's Arrival Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BGEPAAA=]",
+   "map": "Bava Nisos"
+  },
+  "3234": {
+   "name": "Jade Quarry Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BKIMAAA=]",
+   "map": "Dragon's End"
+  },
+  "3353": {
+   "name": "Ministry Ward Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BBkNAAA=]",
+   "map": "New Kaineng City"
+  },
+  "3429": {
+   "name": "Daigo Ward Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BGUNAAA=]",
+   "map": "Seitung Province"
+  },
+  "3276": {
+   "name": "Kropa Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BMwMAAA=]",
+   "map": "The Echovald Wilds"
+  },
+  "3518": {
+   "name": "Droknar's Light Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BL4NAAA=]",
+   "map": "Skywatch Archipelago"
+  },
+  "3636": {
+   "name": "Bastion of the Natural Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BDQOAAA=]",
+   "map": "Amnytas"
+  },
+  "3998": {
+   "name": "Priory Expedition Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BJ4PAAA=]",
+   "map": "Starlit Weald"
+  },
+  "3985": {
+   "name": "Pub Canach Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BJEPAAA=]",
+   "map": "Shipwreck Strand"
+  },
+  "4092": {
+   "name": "Pilgrim's Rest Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BPwPAAA=]",
+   "map": "Eternity's Garden"
+  },
+  "4150": {
+   "name": "Hall of Assemblage Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BDYQAAA=]",
+   "map": "Leyspring Hollows"
+  },
+  "2747": {
+   "name": "Amnoon Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BLsKAAA=]",
+   "map": "Crystal Oasis"
+  },
+  "2723": {
+   "name": "The Darklands Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BKMKAAA=]",
+   "map": "The Desolation"
+  },
+  "2643": {
+   "name": "Augury's Shadow Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BFMKAAA=]",
+   "map": "Elon Riverlands"
+  },
+  "2676": {
+   "name": "Market Ruins Waypoint",
+   "type": "waypoint",
+   "chat_link": "[&BHQKAAA=]",
+   "map": "Domain of Vabbi"
+  }
+ }
+}

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://www.guildwars2.com; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="dark light">
+  <script src="js/theme-boot.js?v=0.1.0"></script>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23101114'/%3E%3Ccircle cx='32' cy='34' r='19' fill='none' stroke='%23d9a441' stroke-width='5'/%3E%3Cpath d='M32 34V22M32 34l9 6' stroke='%23e9e4da' stroke-width='5' stroke-linecap='round'/%3E%3Crect x='26' y='6' width='12' height='7' rx='2' fill='%23d9a441'/%3E%3C/svg%3E">
+  <title>GW2 Timer v0.1.0 - World Bosses, Meta Events &amp; More | Unofficial fansite | RadMage Labs</title>
+  <meta name="description" content="Guild Wars 2 world boss and meta-event timer: what is scheduled now and next in your local time, day and night cycles, daily and weekly resets, and waypoint links. Unofficial fansite.">
+  <link rel="canonical" href="https://radmagelabs.com/gw2-timer/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="RadMage Labs">
+  <meta property="og:url" content="https://radmagelabs.com/gw2-timer/">
+  <meta property="og:title" content="GW2 Timer: World Bosses, Meta Events &amp; More">
+  <meta property="og:description" content="Guild Wars 2 world boss and meta-event schedules in your local time. Unofficial fansite.">
+  <meta property="og:image" content="https://radmagelabs.com/assets/og/gw2-timer.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="GW2 Timer: the day and night strip, events inside their scheduled window, and the Coming up list in local time">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebApplication","name":"GW2 Timer","url":"https://radmagelabs.com/gw2-timer/","applicationCategory":"GameApplication","operatingSystem":"Any","isAccessibleForFree":true,"description":"Guild Wars 2 world boss and meta-event timer. Unofficial fansite.","image":"https://radmagelabs.com/assets/og/gw2-timer.png","screenshot":"https://radmagelabs.com/assets/og/gw2-timer.png","author":{"@type":"Person","name":"RadMageIRL","url":"https://radmagelabs.com/"},"sameAs":"https://github.com/RadMageIRL/gw2-timer"}
+  </script>
+  <link rel="stylesheet" href="style.css?v=0.1.0">
+</head>
+<body>
+  <a class="skip" href="#coming-title">Skip to Coming up</a>
+  <header class="topbar">
+    <div class="brand">
+      <h1>GW2 Timer</h1>
+      <span class="tag">v0.1.0 · World Bosses, Meta Events &amp; More · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
+    </div>
+    <div class="clock" aria-label="Current time">
+      <div class="now" id="local-time">--:--</div>
+      <div class="sub" id="utc-time"></div>
+    </div>
+    <div class="tools">
+      <button type="button" class="btn" id="theme-btn" aria-label="Theme: dark">Dark</button>
+      <button type="button" class="btn" id="about-btn" aria-haspopup="dialog">About</button>
+    </div>
+  </header>
+
+  <main>
+    <p class="notice-bar" id="clock-notice" hidden></p>
+
+    <section class="strip panel" aria-label="Day and night, and resets">
+      <ul class="strip-list" id="strip"></ul>
+    </section>
+
+    <section class="controls panel" aria-label="Filters">
+      <div class="seg" role="group" aria-label="Show">
+        <button type="button" class="seg-btn" data-filter="all" aria-pressed="true">All</button>
+        <button type="button" class="seg-btn" data-filter="world-boss" aria-pressed="false">World bosses</button>
+        <button type="button" class="seg-btn" data-filter="meta" aria-pressed="false">Meta events</button>
+        <button type="button" class="seg-btn" data-filter="starred" aria-pressed="false">Starred</button>
+      </div>
+      <div class="chips" id="region-chips" role="group" aria-label="Regions"></div>
+      <div class="control-row">
+        <label class="field">Coming up for
+          <select id="ahead">
+            <option value="60">1 hour</option>
+            <option value="120">2 hours</option>
+            <option value="240">4 hours</option>
+            <option value="480">8 hours</option>
+          </select>
+        </label>
+        <button type="button" class="btn small" id="compact-btn" aria-pressed="false">Compact</button>
+        <button type="button" class="btn small" id="utc-btn" aria-pressed="true">UTC</button>
+        <button type="button" class="btn small" id="hidden-btn" aria-haspopup="dialog">Hidden (0)</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="now-title">
+      <div class="section-head">
+        <h2 id="now-title">Happening now</h2>
+        <span class="hint">scheduled windows</span>
+      </div>
+      <p class="explain">These events are inside their scheduled window. The game has no public live-event feed, so your map may be early, late, mid-fight, finished or failed.</p>
+      <div class="cards" id="now-list"></div>
+      <p class="empty" id="now-empty" hidden>Nothing you follow is in its scheduled window right now.</p>
+    </section>
+
+    <section aria-labelledby="coming-title">
+      <div class="section-head">
+        <h2 id="coming-title" tabindex="-1">Coming up</h2>
+        <span class="hint" id="coming-hint"></span>
+      </div>
+      <ol class="rows" id="next-list"></ol>
+      <p class="empty" id="next-empty" hidden>Nothing you follow starts in this time span.</p>
+    </section>
+
+    <section class="news panel" aria-labelledby="news-title">
+      <div class="section-head">
+        <h2 id="news-title">Latest news</h2>
+        <button type="button" class="link-btn" id="news-toggle"></button>
+      </div>
+      <p class="news-note" id="news-note"></p>
+      <ul class="news-list" id="news-list"></ul>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p class="revision" id="revision"></p>
+    <p>Unofficial fansite. Free, no ads, no tracking. Made by <a href="https://radmagelabs.com/">RadMage Labs</a>.</p>
+    <p class="legal">Guild Wars Games © ArenaNet LLC. All rights reserved. NCSOFT, ArenaNet, Guild Wars, Guild Wars 2, GW2, Heart of Thorns, Path of Fire, End of Dragons, Secrets of the Obscure, Janthir Wilds, Visions of Eternity, and all associated logos, designs, and composite marks are trademarks or registered trademarks of NCSOFT Corporation. All other trademarks are the property of their respective owners.</p>
+  </footer>
+
+  <dialog id="about" aria-labelledby="about-title">
+    <div class="dialog-close"><button type="button" class="btn small" data-close>Close</button></div>
+    <h2 id="about-title">GW2 Timer v0.1.0</h2>
+    <p>A Guild Wars 2 timer for world bosses and meta-events: what is in its scheduled window now, what starts next, in your local time. Unofficial fansite, not affiliated with ArenaNet or NCSOFT.</p>
+    <h3>Scheduled, not live</h3>
+    <p>Every time here is a scheduled start. The game publishes no live state for events, so a map can run early, late, fail, or close. "Happening now" means the scheduled window is open, not that the fight is on in your map.</p>
+    <h3>Schedule data</h3>
+    <p id="about-data"></p>
+    <p>Most times agree across at least two independent sources. A few carry a label:</p>
+    <ul>
+      <li><strong>Unverified</strong>: new, or the sources disagree. If you see it start at another time, use <strong>Adjust</strong> on that event to set the time you saw. Your setting stays in this browser.</li>
+      <li><strong>Recheck</strong>: a game update may have changed it; the time shown is the previous schedule until it is checked.</li>
+    </ul>
+    <p>Sources: the Guild Wars 2 Wiki's event timer data, ArenaNet's game update notes and news, and the official Guild Wars 2 API for waypoint codes. Times were also compared with an independent community schedule (qjv/event-timers).</p>
+    <h3>Privacy</h3>
+    <p>Settings, stars and adjustments are saved in this browser only. Two things leave it: the clock check asks this site's own address for the time, and the news panel loads headlines from guildwars2.com, so ArenaNet sees that request. You can turn news off.</p>
+    <h3>Notice</h3>
+    <p class="legal">Guild Wars Games © ArenaNet LLC. All rights reserved. NCSOFT, ArenaNet, Guild Wars, Guild Wars 2, GW2, Heart of Thorns, Path of Fire, End of Dragons, Secrets of the Obscure, Janthir Wilds, Visions of Eternity, and all associated logos, designs, and composite marks are trademarks or registered trademarks of NCSOFT Corporation. All other trademarks are the property of their respective owners.</p>
+    <p>The app is MIT licensed; event names and game content are ArenaNet's. Made by <a href="https://radmagelabs.com/">RadMage Labs</a>. Source: <a href="https://github.com/RadMageIRL/gw2-timer">github.com/RadMageIRL/gw2-timer</a>.</p>
+  </dialog>
+
+  <dialog id="hidden-dialog" aria-labelledby="hidden-title">
+    <div class="dialog-close"><button type="button" class="btn small" data-close>Close</button></div>
+    <h2 id="hidden-title">Hidden events</h2>
+    <ul class="hidden-list" id="hidden-list"></ul>
+    <p class="empty" id="hidden-empty">Nothing is hidden.</p>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="events-data.js?r=1"></script>
+  <script src="js/schedule.js?v=0.1.0"></script>
+  <script src="js/store.js?v=0.1.0"></script>
+  <script src="js/news.js?v=0.1.0"></script>
+  <script src="js/clock.js?v=0.1.0"></script>
+  <script src="js/app.js?v=0.1.0"></script>
+</body>
+</html>

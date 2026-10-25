@@ -1,0 +1,218 @@
+{
+  "$comment": "Written by tools/build-events.mjs. Do not edit by hand.",
+  "datasetRevision": 1,
+  "revisionHash": "sha256:b307f6287f2f17e314cdc5094c528cc59ea7807b6ada764fdc7c8f6a8cf503a4",
+  "schedules": {
+    "event:admiral-taidha-covington": "sha256:d81a0d8cc4d894bd23ceff1c99756c3032200f415efd2a4ea6696ef05af113fe",
+    "event:svanir-shaman-chief": "sha256:2a205eaae04264ac211a7dd4ce5eb5576b3351be684488604d9bedddc21652e8",
+    "event:megadestroyer": "sha256:9cde3331e35eaa52844c785a84732c3749255236fd61b24c11d5d9945a4d9f0c",
+    "event:fire-elemental": "sha256:f0b9b279de8d4f083509425afd4f824b9d65f23922aedaa31a1cc3366dbf0010",
+    "event:the-shatterer": "sha256:5d298c5248ad481a15e8d84c5142ca06fec2dee93784a964ec0f5c09cf17cb6d",
+    "event:great-jungle-wurm": "sha256:8b308abeb00f57f6a8d2fc3e95464bfdb717b43030d085ae451031d4f72d0286",
+    "event:modniir-ulgoth": "sha256:3928dd3d6ac6472c090c5d581600f81527d7ac5dd731385817d0190d8ddc9a6b",
+    "event:shadow-behemoth": "sha256:bc00fded16335bbb9d4500ead13253b887dd08a75cd4de4de34308406c754255",
+    "event:inquest-golem-mark-ii": "sha256:50fd62bf693be53445e69b9e6d01d8938040775ecfe9a9b58b4dc5e65ed56d15",
+    "event:claw-of-jormag": "sha256:aa0a33e447443935f787fd08fee287cc0b23be9c372344d9a0c1206807bb8be0",
+    "event:tequatl-the-sunless": "sha256:413059b48a7004ffc84799d6153ea8611cf86b48e33ca77e8f8d5d6c4c147647",
+    "event:triple-trouble": "sha256:b5d9cc89e10bfbac6c976d1934e8a3b8d361026820b025a23ed290071799cd93",
+    "event:karka-queen": "sha256:893d9bdac861e875bf5e0299cb0a386ccde52042406037fb363558cf8bcdad8c",
+    "event:drakkar": "sha256:e8f76e205887f4ed9c0ed8fa3e344992019507dd398d5134bf103af47bff9184",
+    "event:of-mists-and-monsters": "sha256:7ddbd85be0047fa1fd316a78364e13cfa07baf909e2655d0187eb5786e70bd76",
+    "event:night-and-the-enemy": "sha256:b6655517b800b6ded021553bd0f109f90d161433d38e574be6073e9c4e75652d",
+    "event:octovine": "sha256:b75ce0f6f720401e8230d7526c4b057c9bfbcfb5ce3c7702f284fe2e16888830",
+    "event:chak-gerent": "sha256:b9df6cbb8b191e4c430c002e91a5b6a77398de4eed4114e21def3b137ea17ac3",
+    "event:dragons-stand": "sha256:b464cc7f7ce738816983d39e4bbbb7773fc5ee8c884491c1d34e1ceb5699b97b",
+    "event:casino-blitz": "sha256:1bf7c5917da8efe7cdfeec6d0d169bb0ad05cc63837f218c0248c0d1b02c22a2",
+    "event:path-to-ascension": "sha256:a08d60794e00a07708d6f404c7e4d5b546330063b908c718470c8e3f13ba1428",
+    "event:maws-of-torment": "sha256:b75ce0f6f720401e8230d7526c4b057c9bfbcfb5ce3c7702f284fe2e16888830",
+    "event:serpents-ire": "sha256:e17d9ad1bed5b3bc1a7e34bd2c46b24e63cab99c9b41961c4b241701ef94b300",
+    "event:aetherblade-assault": "sha256:dd67dffb43bda8affe9af1ced3d6f664c88233b90fd59ea6c1772ce70bd05758",
+    "event:kaineng-blackout": "sha256:7504a3035b309b6ecc8fed2d4a1bb7cb03c56d3a4b7c5ebcb6a6515cdf5c83be",
+    "event:gang-war": "sha256:e73192fcab48adb054eee4a80ba7743361999540cab3398b47deb01aacb46635",
+    "event:battle-for-the-jade-sea": "sha256:630fd7bfcedd569da137791ad6e27d214414d043f7edd0438c452ef5c153316f",
+    "event:unlocking-the-wizards-tower": "sha256:597a2dc04163cfdaa82c8da268681f76a6735841f540ebebab20a6b18070958c",
+    "event:defense-of-amnytas": "sha256:d4aec4d01cd87b928d5b03d7193e1566a62d61dad560b1ddebacfba00f255a34",
+    "event:a-titanic-voyage": "sha256:a7a023750719fc9a8aa69c486aa785db4d69fb2d6fe334af4effa885880310dd",
+    "event:hammerhart-rumble": "sha256:56f6228482cfaf3d29dc9dbbf7ff9cb1ec4a17cdbb508b3f8431d7fdc8ab255d",
+    "event:secrets-of-the-weald": "sha256:3ba29eea45f4406606db6ec208e880bd78c2a24f2ee2fe74651e608dc2c3f559",
+    "event:shackles-of-the-ancients": "sha256:b6f347af993dc4843ed9570d2dcecda8bbe5fb6827739c26fd90a22d5adc9c41",
+    "event:depths-of-cruelty": "sha256:a30da0ce8572f31a328c5e014075c51f7e46eae64cd07bc15b8a825570679f43",
+    "event:nexus-of-eternity": "sha256:824247bc877a7f785679e25b267125e821fd643e71a021d43f7172cf97adbc44",
+    "cycle:tyria": "sha256:4c51e57dc9f15cc1ab59390479989b165295389facc068ad6b26bbc3560ce92b",
+    "cycle:cantha": "sha256:02e3b41cce3815e6abbaf6948360ffdb0c5a45e17bbcd9532630c325c07e0f9b",
+    "cycle:castora": "sha256:02e3b41cce3815e6abbaf6948360ffdb0c5a45e17bbcd9532630c325c07e0f9b",
+    "reset:daily": "sha256:312110b961896fe14f98dae615ea5db1943b6b30e8e203810d24332a7ef18ed0",
+    "reset:weekly": "sha256:b7645cbf6ac69ff177ebd04abd8e08905659ea0127aa751e5d489d2b6b2b7e52"
+  },
+  "evidence": {
+    "event:admiral-taidha-covington": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:svanir-shaman-chief": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:megadestroyer": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:fire-elemental": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:the-shatterer": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:great-jungle-wurm": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:modniir-ulgoth": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:shadow-behemoth": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:inquest-golem-mark-ii": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:claw-of-jormag": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:tequatl-the-sunless": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:triple-trouble": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:karka-queen": {
+      "count": 3,
+      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+    },
+    "event:drakkar": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:of-mists-and-monsters": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:night-and-the-enemy": {
+      "count": 2,
+      "hash": "sha256:070d64dd376dd9fca870981a125f4bfb0b82d87fd93757235c4033821647c0ee"
+    },
+    "event:octovine": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:chak-gerent": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:dragons-stand": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:casino-blitz": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:path-to-ascension": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:maws-of-torment": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:serpents-ire": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:aetherblade-assault": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:kaineng-blackout": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:gang-war": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:battle-for-the-jade-sea": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:unlocking-the-wizards-tower": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:defense-of-amnytas": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:a-titanic-voyage": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:hammerhart-rumble": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "event:secrets-of-the-weald": {
+      "count": 2,
+      "hash": "sha256:bdb1015bdfbd4cc053bc5abbb99b1696604a9a13976b8fe069286fc50a612034"
+    },
+    "event:shackles-of-the-ancients": {
+      "count": 3,
+      "hash": "sha256:6a8606d5fafbad3133c3001b5d13a3c25c1c4d726017076c185015a3d02f2a59"
+    },
+    "event:depths-of-cruelty": {
+      "count": 3,
+      "hash": "sha256:600685b2ee6fb1d7e5099b48a8ccc695ed789efa9a816a757bf2fdcef7411f6b"
+    },
+    "event:nexus-of-eternity": {
+      "count": 2,
+      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+    },
+    "cycle:tyria": {
+      "count": 3,
+      "hash": "sha256:f07bcaf24cb742d689cf71bf3df7db24e2e58130dd93cae755f29cf74812eecc"
+    },
+    "cycle:cantha": {
+      "count": 3,
+      "hash": "sha256:f07bcaf24cb742d689cf71bf3df7db24e2e58130dd93cae755f29cf74812eecc"
+    },
+    "cycle:castora": {
+      "count": 3,
+      "hash": "sha256:f07bcaf24cb742d689cf71bf3df7db24e2e58130dd93cae755f29cf74812eecc"
+    },
+    "reset:daily": {
+      "count": 1,
+      "hash": "sha256:1e3942f91ee1b3108f320f707009dd77da9ce0b082879691bc120808e74dcba4"
+    },
+    "reset:weekly": {
+      "count": 1,
+      "hash": "sha256:7eb80b97c997cfd372a8bf7325640b5cab774864d2b2a0350234a3f999dfc88b"
+    }
+  },
+  "history": [
+    {
+      "revision": 1,
+      "date": "2026-10-25",
+      "kind": "initial",
+      "hash": "sha256:b307f6287f2f17e314cdc5094c528cc59ea7807b6ada764fdc7c8f6a8cf503a4",
+      "scheduleChanged": []
+    }
+  ]
+}

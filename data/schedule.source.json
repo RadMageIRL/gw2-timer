@@ -1,0 +1,2103 @@
+{
+  "$comment": "GW2 Timer schedule source. Hand-maintained; see docs/MAINTENANCE.md (local). All times are UTC minutes. The build (tools/build-events.mjs) checks every rule.",
+  "meta": {
+    "datasetRevision": 1,
+    "reviewedOn": "2026-10-25",
+    "reviewedThroughPatch": "2026-10-13",
+    "verifiedOn": "2026-10-25",
+    "verifiedAgainst": [
+      "wiki-widget-v5.4",
+      "wiki-world-boss-2026-10-06",
+      "qjv-8e09f2b6",
+      "anet-news-2026-09-08",
+      "wiki-day-night-2026-09-17",
+      "wiki-server-reset-2026-09-29"
+    ],
+    "waypointsCheckedOn": "2026-10-25"
+  },
+  "regions": [
+    {
+      "id": "core",
+      "name": "Core Tyria",
+      "short": "Core"
+    },
+    {
+      "id": "hot",
+      "name": "Heart of Thorns",
+      "short": "HoT"
+    },
+    {
+      "id": "pof",
+      "name": "Path of Fire",
+      "short": "PoF"
+    },
+    {
+      "id": "ibs",
+      "name": "The Icebrood Saga",
+      "short": "Icebrood"
+    },
+    {
+      "id": "eod",
+      "name": "End of Dragons",
+      "short": "EoD"
+    },
+    {
+      "id": "soto",
+      "name": "Secrets of the Obscure",
+      "short": "SotO"
+    },
+    {
+      "id": "jw",
+      "name": "Janthir Wilds",
+      "short": "Janthir"
+    },
+    {
+      "id": "voe",
+      "name": "Visions of Eternity",
+      "short": "VoE"
+    }
+  ],
+  "sources": {
+    "wiki-widget-v5.4": {
+      "title": "Guild Wars 2 Wiki, Widget:Event timer/data.json (config v5.4)",
+      "url": "https://wiki.guildwars2.com/wiki/Widget:Event_timer/data.json",
+      "retrieved": "Wayback Machine snapshot 2026-10-15 16:45 UTC",
+      "license": "GFDL 1.3 (facts restated, nothing copied)"
+    },
+    "wiki-world-boss-2026-10-06": {
+      "title": "Guild Wars 2 Wiki, World boss: Full schedule",
+      "url": "https://wiki.guildwars2.com/wiki/World_boss",
+      "retrieved": "Wayback Machine snapshot 2026-10-06",
+      "license": "GFDL 1.3 (facts restated, nothing copied)"
+    },
+    "wiki-day-night-2026-09-17": {
+      "title": "Guild Wars 2 Wiki, Day and night",
+      "url": "https://wiki.guildwars2.com/wiki/Day_and_night",
+      "retrieved": "Wayback Machine snapshot 2026-09-17",
+      "license": "GFDL 1.3 (facts restated, nothing copied)"
+    },
+    "wiki-server-reset-2026-09-29": {
+      "title": "Guild Wars 2 Wiki, Server reset",
+      "url": "https://wiki.guildwars2.com/wiki/Server_reset",
+      "retrieved": "Wayback Machine snapshot 2026-09-29",
+      "license": "GFDL 1.3 (facts restated, nothing copied)"
+    },
+    "qjv-8e09f2b6": {
+      "title": "qjv/event-timers, event_tracks.json at commit 8e09f2b6",
+      "url": "https://github.com/qjv/event-timers/blob/8e09f2b609ee39c33a41622291d914cb4b343a32/event_tracks.json",
+      "retrieved": "2026-10-25",
+      "license": "MIT (compared only, nothing copied)"
+    },
+    "anet-news-2026-09-08": {
+      "title": "ArenaNet: \"Code of Creation\" Concludes Visions of Eternity on September 15",
+      "url": "https://www.guildwars2.com/en/news/code-of-creation-concludes-visions-of-eternity-on-september-15/",
+      "retrieved": "2026-10-25",
+      "license": "ArenaNet"
+    },
+    "gw2-api-floors": {
+      "title": "Guild Wars 2 API, /v2/continents/1/floors/1 and /49 (waypoint chat links)",
+      "url": "https://api.guildwars2.com/v2/continents/1/floors/1",
+      "retrieved": "2026-10-25",
+      "license": "ArenaNet Content Terms of Use"
+    }
+  },
+  "resets": [
+    {
+      "id": "daily",
+      "name": "Daily reset",
+      "rule": {
+        "type": "every",
+        "periodMin": 1440,
+        "offsetMin": 0
+      },
+      "evidence": [
+        {
+          "kind": "source",
+          "ref": "wiki-server-reset-2026-09-29",
+          "on": "2026-09-29",
+          "checked": "2026-10-25",
+          "agrees": true
+        }
+      ]
+    },
+    {
+      "id": "weekly",
+      "name": "Weekly reset",
+      "rule": {
+        "type": "weekly",
+        "weekday": 1,
+        "minuteUtc": 450
+      },
+      "evidence": [
+        {
+          "kind": "source",
+          "ref": "wiki-server-reset-2026-09-29",
+          "on": "2026-09-29",
+          "checked": "2026-10-25",
+          "agrees": true,
+          "note": "Monday 07:30 UTC"
+        }
+      ]
+    }
+  ],
+  "cycles": [
+    {
+      "id": "tyria",
+      "name": "Tyria",
+      "maps": "Core Tyria, Heart of Maguuma and Crystal Desert maps",
+      "periodMin": 120,
+      "phases": [
+        {
+          "name": "Dawn",
+          "startMin": 25,
+          "durMin": 5
+        },
+        {
+          "name": "Day",
+          "startMin": 30,
+          "durMin": 70
+        },
+        {
+          "name": "Dusk",
+          "startMin": 100,
+          "durMin": 5
+        },
+        {
+          "name": "Night",
+          "startMin": 105,
+          "durMin": 40
+        }
+      ],
+      "verification": {
+        "status": "documented",
+        "lastVerifiedOn": "2026-10-25",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-day-night-2026-09-17",
+            "on": "2026-09-17",
+            "checked": "2026-10-25",
+            "agrees": true,
+            "note": "Same phase lengths; Tyrian midnight on even UTC hours."
+          }
+        ]
+      }
+    },
+    {
+      "id": "cantha",
+      "name": "Cantha",
+      "maps": "Cantha maps",
+      "periodMin": 120,
+      "phases": [
+        {
+          "name": "Dawn",
+          "startMin": 35,
+          "durMin": 5
+        },
+        {
+          "name": "Day",
+          "startMin": 40,
+          "durMin": 55
+        },
+        {
+          "name": "Dusk",
+          "startMin": 95,
+          "durMin": 5
+        },
+        {
+          "name": "Night",
+          "startMin": 100,
+          "durMin": 55
+        }
+      ],
+      "verification": {
+        "status": "documented",
+        "lastVerifiedOn": "2026-10-25",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-day-night-2026-09-17",
+            "on": "2026-09-17",
+            "checked": "2026-10-25",
+            "agrees": true,
+            "note": "Same phase lengths; Tyrian midnight on even UTC hours."
+          }
+        ]
+      }
+    },
+    {
+      "id": "castora",
+      "name": "Castora",
+      "maps": "Castora maps",
+      "periodMin": 120,
+      "phases": [
+        {
+          "name": "Dawn",
+          "startMin": 35,
+          "durMin": 5
+        },
+        {
+          "name": "Day",
+          "startMin": 40,
+          "durMin": 55
+        },
+        {
+          "name": "Dusk",
+          "startMin": 95,
+          "durMin": 5
+        },
+        {
+          "name": "Night",
+          "startMin": 100,
+          "durMin": 55
+        }
+      ],
+      "verification": {
+        "status": "documented",
+        "lastVerifiedOn": "2026-10-25",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-day-night-2026-09-17",
+            "on": "2026-09-17",
+            "checked": "2026-10-25",
+            "agrees": true,
+            "note": "Same phase lengths; Tyrian midnight on even UTC hours."
+          }
+        ]
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "admiral-taidha-covington",
+      "name": "Admiral Taidha Covington",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Bloodtide Coast",
+      "apiId": "admiral_taidha_covington",
+      "waypoint": {
+        "name": "Laughing Gull Waypoint",
+        "chat": "[&BKgBAAA=]",
+        "poi": 424,
+        "map": "Bloodtide Coast"
+      },
+      "wiki": "Kill Admiral Taidha Covington",
+      "schedule": {
+        "type": "every",
+        "periodMin": 180,
+        "offsetMin": 0,
+        "windowMin": 15
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "svanir-shaman-chief",
+      "name": "Svanir Shaman Chief",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Wayfarer Foothills",
+      "apiId": "svanir_shaman_chief",
+      "waypoint": {
+        "name": "Krennak's Homestead Waypoint",
+        "chat": "[&BMIDAAA=]",
+        "poi": 962,
+        "map": "Wayfarer Foothills"
+      },
+      "wiki": "Kill the Svanir shaman chief to break his control over the ice elemental",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 15,
+        "windowMin": 15
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "megadestroyer",
+      "name": "Megadestroyer",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Mount Maelstrom",
+      "apiId": "megadestroyer",
+      "waypoint": {
+        "name": "Maelstrom's Waypoint",
+        "chat": "[&BM0CAAA=]",
+        "poi": 717,
+        "map": "Mount Maelstrom"
+      },
+      "wiki": "Kill the megadestroyer before it blows everyone up",
+      "schedule": {
+        "type": "every",
+        "periodMin": 180,
+        "offsetMin": 30,
+        "windowMin": 15
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "fire-elemental",
+      "name": "Fire Elemental",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Metrica Province",
+      "apiId": "fire_elemental",
+      "waypoint": {
+        "name": "Muridian Waypoint",
+        "chat": "[&BEcAAAA=]",
+        "poi": 71,
+        "map": "Metrica Province"
+      },
+      "wiki": "Destroy the fire elemental created from chaotic energy fusing with the C.L.E.A.N. 5000's energy core",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 45,
+        "windowMin": 15
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "the-shatterer",
+      "name": "The Shatterer",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Blazeridge Steppes",
+      "apiId": "the_shatterer",
+      "waypoint": {
+        "name": "Lowland Burns Waypoint",
+        "chat": "[&BE4DAAA=]",
+        "poi": 846,
+        "map": "Blazeridge Steppes"
+      },
+      "wiki": "Slay the Shatterer",
+      "schedule": {
+        "type": "every",
+        "periodMin": 180,
+        "offsetMin": 60,
+        "windowMin": 15
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "great-jungle-wurm",
+      "name": "Great Jungle Wurm",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Caledon Forest",
+      "apiId": "great_jungle_wurm",
+      "waypoint": {
+        "name": "Twilight Arbor Waypoint",
+        "chat": "[&BEEFAAA=]",
+        "poi": 1345,
+        "map": "Caledon Forest"
+      },
+      "wiki": "Defeat the great jungle wurm",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 75,
+        "windowMin": 15
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "modniir-ulgoth",
+      "name": "Modniir Ulgoth",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Harathi Hinterlands",
+      "apiId": "modniir_ulgoth",
+      "waypoint": {
+        "name": "Junction Camp Waypoint",
+        "chat": "[&BLAAAAA=]",
+        "poi": 176,
+        "map": "Harathi Hinterlands"
+      },
+      "wiki": "Defeat Ulgoth the Modniir and his minions",
+      "schedule": {
+        "type": "every",
+        "periodMin": 180,
+        "offsetMin": 90,
+        "windowMin": 15
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "shadow-behemoth",
+      "name": "Shadow Behemoth",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Queensdale",
+      "apiId": "shadow_behemoth",
+      "waypoint": {
+        "name": "Swamplost Haven Waypoint",
+        "chat": "[&BPcAAAA=]",
+        "poi": 247,
+        "map": "Queensdale"
+      },
+      "wiki": "Defeat the shadow behemoth",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 105,
+        "windowMin": 15
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "inquest-golem-mark-ii",
+      "name": "Inquest Golem Mark II",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Mount Maelstrom",
+      "apiId": "inquest_golem_mark_ii",
+      "waypoint": {
+        "name": "Old Sledge Site Waypoint",
+        "chat": "[&BNQCAAA=]",
+        "poi": 724,
+        "map": "Mount Maelstrom"
+      },
+      "wiki": "Defeat the Inquest's golem Mark II",
+      "schedule": {
+        "type": "every",
+        "periodMin": 180,
+        "offsetMin": 120,
+        "windowMin": 15
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "claw-of-jormag",
+      "name": "Claw of Jormag",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Frostgorge Sound",
+      "apiId": "claw_of_jormag",
+      "waypoint": {
+        "name": "Earthshake Waypoint",
+        "chat": "[&BHoCAAA=]",
+        "poi": 634,
+        "map": "Frostgorge Sound"
+      },
+      "wiki": "Defeat the Claw of Jormag",
+      "schedule": {
+        "type": "every",
+        "periodMin": 180,
+        "offsetMin": 150,
+        "windowMin": 15
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "tequatl-the-sunless",
+      "name": "Tequatl the Sunless",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Sparkfly Fen",
+      "apiId": "tequatl_the_sunless",
+      "waypoint": {
+        "name": "Splintered Coast Waypoint",
+        "chat": "[&BNABAAA=]",
+        "poi": 464,
+        "map": "Sparkfly Fen"
+      },
+      "wiki": "Defeat Tequatl the Sunless",
+      "schedule": {
+        "type": "daily",
+        "startsUtc": [
+          0,
+          180,
+          420,
+          690,
+          960,
+          1140
+        ],
+        "windowMin": 30
+      },
+      "adjustable": false,
+      "note": "Hardcore boss: needs an organized map to win.",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "triple-trouble",
+      "name": "Triple Trouble",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Bloodtide Coast",
+      "apiId": "triple_trouble_wurm",
+      "waypoint": {
+        "name": "Firthside Vigil Waypoint",
+        "chat": "[&BKoBAAA=]",
+        "poi": 426,
+        "map": "Bloodtide Coast"
+      },
+      "wiki": "Triple Trouble",
+      "schedule": {
+        "type": "daily",
+        "startsUtc": [
+          60,
+          240,
+          480,
+          750,
+          1020,
+          1200
+        ],
+        "windowMin": 30
+      },
+      "adjustable": false,
+      "note": "Hardcore boss: three wurm heads, needs an organized map.",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "karka-queen",
+      "name": "Karka Queen",
+      "kind": "world-boss",
+      "region": "core",
+      "map": "Southsun Cove",
+      "apiId": "karka_queen",
+      "waypoint": {
+        "name": "Pearl Islet Waypoint",
+        "chat": "[&BNUGAAA=]",
+        "poi": 1749,
+        "map": "Southsun Cove"
+      },
+      "wiki": "Defeat the Karka Queen threatening the settlements",
+      "schedule": {
+        "type": "daily",
+        "startsUtc": [
+          120,
+          360,
+          630,
+          900,
+          1080,
+          1380
+        ],
+        "windowMin": 30
+      },
+      "adjustable": false,
+      "note": "Hardcore boss.",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-world-boss-2026-10-06",
+            "on": "2026-10-06",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "drakkar",
+      "name": "Drakkar",
+      "kind": "world-boss",
+      "region": "ibs",
+      "map": "Bjora Marches",
+      "apiId": "drakkar",
+      "waypoint": {
+        "name": "Still Waters Speaking Waypoint",
+        "chat": "[&BDkMAAA=]",
+        "poi": 3129,
+        "map": "Bjora Marches"
+      },
+      "wiki": "Champion of the Ice Dragon",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 65,
+        "windowMin": 35
+      },
+      "adjustable": false,
+      "note": "Spirits of the Wild run alongside.",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "of-mists-and-monsters",
+      "name": "Of Mists and Monsters",
+      "kind": "world-boss",
+      "region": "jw",
+      "map": "Janthir Syntri",
+      "apiId": "mists_and_monsters_titans",
+      "waypoint": {
+        "name": "Stricken Plains Waypoint",
+        "chat": "[&BCoPAAA=]",
+        "poi": 3882,
+        "map": "Janthir Syntri"
+      },
+      "wiki": null,
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 30,
+        "windowMin": 25
+      },
+      "adjustable": false,
+      "note": "The titans Decima and Greer.",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "night-and-the-enemy",
+      "name": "Night and the Enemy",
+      "kind": "meta",
+      "region": "hot",
+      "map": "Verdant Brink",
+      "waypoint": {
+        "name": "Pact Encampment Waypoint",
+        "chat": "[&BAgIAAA=]",
+        "poi": 2056,
+        "map": "Verdant Brink"
+      },
+      "wiki": "Night and the Enemy",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 10,
+        "windowMin": 20
+      },
+      "adjustable": false,
+      "note": "Night bosses. The night phase itself starts at xx:45.",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true,
+            "note": "qjv lists xx:09; within the 2-minute tolerance"
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "octovine",
+      "name": "Battle in Tarir (Octovine)",
+      "kind": "meta",
+      "region": "hot",
+      "map": "Auric Basin",
+      "waypoint": {
+        "name": "Southwatch Waypoint",
+        "chat": "[&BAIIAAA=]",
+        "poi": 2050,
+        "map": "Auric Basin"
+      },
+      "wiki": "Battle in Tarir",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 60,
+        "windowMin": 20
+      },
+      "adjustable": false,
+      "note": "Pylons from xx:30 lead into it.",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "chak-gerent",
+      "name": "King of the Jungle (Chak Gerent)",
+      "kind": "meta",
+      "region": "hot",
+      "map": "Tangled Depths",
+      "waypoint": {
+        "name": "Ley-Line Confluence Waypoint",
+        "chat": "[&BPUHAAA=]",
+        "poi": 2037,
+        "map": "Tangled Depths"
+      },
+      "wiki": "King of the Jungle",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 30,
+        "windowMin": 20
+      },
+      "adjustable": false,
+      "note": "Needs the outposts held first.",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "dragons-stand",
+      "name": "Dragon's Stand",
+      "kind": "meta",
+      "region": "hot",
+      "map": "Dragon's Stand",
+      "waypoint": {
+        "name": "Pact Base Camp Waypoint",
+        "chat": "[&BBAIAAA=]",
+        "poi": 2064,
+        "map": "Dragon's Stand"
+      },
+      "wiki": "Advancing on the Blighting Towers",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 90,
+        "windowMin": 120
+      },
+      "adjustable": false,
+      "note": "A two-hour map meta; this is its start.",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "casino-blitz",
+      "name": "Casino Blitz",
+      "kind": "meta",
+      "region": "pof",
+      "map": "Crystal Oasis",
+      "waypoint": {
+        "name": "Amnoon Waypoint",
+        "chat": "[&BLsKAAA=]",
+        "poi": 2747,
+        "map": "Crystal Oasis"
+      },
+      "wiki": "Casino Blitz",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 5,
+        "windowMin": 16
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "path-to-ascension",
+      "name": "The Path to Ascension",
+      "kind": "meta",
+      "region": "pof",
+      "map": "Elon Riverlands",
+      "waypoint": {
+        "name": "Augury's Shadow Waypoint",
+        "chat": "[&BFMKAAA=]",
+        "poi": 2643,
+        "map": "Elon Riverlands"
+      },
+      "wiki": "The Path to Ascension",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 90,
+        "windowMin": 25
+      },
+      "adjustable": false,
+      "note": "Augury Rock, then the Doppelganger at xx:55.",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "maws-of-torment",
+      "name": "Maws of Torment",
+      "kind": "meta",
+      "region": "pof",
+      "map": "The Desolation",
+      "waypoint": {
+        "name": "The Darklands Waypoint",
+        "chat": "[&BKMKAAA=]",
+        "poi": 2723,
+        "map": "The Desolation"
+      },
+      "wiki": null,
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 60,
+        "windowMin": 20
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "serpents-ire",
+      "name": "Serpents' Ire",
+      "kind": "meta",
+      "region": "pof",
+      "map": "Domain of Vabbi",
+      "waypoint": {
+        "name": "Market Ruins Waypoint",
+        "chat": "[&BHQKAAA=]",
+        "poi": 2676,
+        "map": "Domain of Vabbi"
+      },
+      "wiki": null,
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 30,
+        "windowMin": 30
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "aetherblade-assault",
+      "name": "Aetherblade Assault",
+      "kind": "meta",
+      "region": "eod",
+      "map": "Seitung Province",
+      "waypoint": {
+        "name": "Daigo Ward Waypoint",
+        "chat": "[&BGUNAAA=]",
+        "poi": 3429,
+        "map": "Seitung Province"
+      },
+      "wiki": null,
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 90,
+        "windowMin": 30
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "kaineng-blackout",
+      "name": "Kaineng Blackout",
+      "kind": "meta",
+      "region": "eod",
+      "map": "New Kaineng City",
+      "waypoint": {
+        "name": "Ministry Ward Waypoint",
+        "chat": "[&BBkNAAA=]",
+        "poi": 3353,
+        "map": "New Kaineng City"
+      },
+      "wiki": null,
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 0,
+        "windowMin": 40
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "gang-war",
+      "name": "The Gang War of Echovald",
+      "kind": "meta",
+      "region": "eod",
+      "map": "The Echovald Wilds",
+      "waypoint": {
+        "name": "Kropa Waypoint",
+        "chat": "[&BMwMAAA=]",
+        "poi": 3276,
+        "map": "The Echovald Wilds"
+      },
+      "wiki": "The Gang War of Echovald",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 30,
+        "windowMin": 35
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "battle-for-the-jade-sea",
+      "name": "Battle for the Jade Sea",
+      "kind": "meta",
+      "region": "eod",
+      "map": "Dragon's End",
+      "waypoint": {
+        "name": "Jade Quarry Waypoint",
+        "chat": "[&BKIMAAA=]",
+        "poi": 3234,
+        "map": "Dragon's End"
+      },
+      "wiki": null,
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 60,
+        "windowMin": 60
+      },
+      "adjustable": false,
+      "note": "Preparations and the Jade Maw come first.",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "unlocking-the-wizards-tower",
+      "name": "Unlocking the Wizard's Tower",
+      "kind": "meta",
+      "region": "soto",
+      "map": "Skywatch Archipelago",
+      "waypoint": {
+        "name": "Droknar's Light Waypoint",
+        "chat": "[&BL4NAAA=]",
+        "poi": 3518,
+        "map": "Skywatch Archipelago"
+      },
+      "wiki": "Unlocking the Wizard's Tower",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 60,
+        "windowMin": 25
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "defense-of-amnytas",
+      "name": "Defense of Amnytas",
+      "kind": "meta",
+      "region": "soto",
+      "map": "Amnytas",
+      "waypoint": {
+        "name": "Bastion of the Natural Waypoint",
+        "chat": "[&BDQOAAA=]",
+        "poi": 3636,
+        "map": "Amnytas"
+      },
+      "wiki": "The Defense of Amnytas",
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 0,
+        "windowMin": 25
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2024-10-06",
+        "flag": null
+      }
+    },
+    {
+      "id": "a-titanic-voyage",
+      "name": "A Titanic Voyage",
+      "kind": "meta",
+      "region": "jw",
+      "map": "Bava Nisos",
+      "waypoint": {
+        "name": "Mantle's Arrival Waypoint",
+        "chat": "[&BGEPAAA=]",
+        "poi": 3937,
+        "map": "Bava Nisos"
+      },
+      "wiki": null,
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 80,
+        "windowMin": 25
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2025-06-04",
+        "flag": null
+      }
+    },
+    {
+      "id": "hammerhart-rumble",
+      "name": "Hammerhart Rumble!",
+      "kind": "meta",
+      "region": "voe",
+      "map": "Shipwreck Strand",
+      "waypoint": {
+        "name": "Pub Canach Waypoint",
+        "chat": "[&BJEPAAA=]",
+        "poi": 3985,
+        "map": "Shipwreck Strand"
+      },
+      "wiki": null,
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 40,
+        "windowMin": 20
+      },
+      "adjustable": false,
+      "note": "",
+      "verification": {
+        "status": "documented",
+        "needsInGameCheck": false,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2025-10-30",
+        "flag": null
+      }
+    },
+    {
+      "id": "secrets-of-the-weald",
+      "name": "Secrets of the Weald",
+      "kind": "meta",
+      "region": "voe",
+      "map": "Starlit Weald",
+      "waypoint": {
+        "name": "Priory Expedition Waypoint",
+        "chat": "[&BJ4PAAA=]",
+        "poi": 3998,
+        "map": "Starlit Weald"
+      },
+      "wiki": null,
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 100,
+        "windowMin": 35
+      },
+      "adjustable": true,
+      "note": "",
+      "verification": {
+        "status": "disputed",
+        "needsInGameCheck": true,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": false,
+            "note": "qjv lists xx:45 with a 20 min window"
+          }
+        ],
+        "since": "2025-10-30",
+        "flag": null
+      }
+    },
+    {
+      "id": "shackles-of-the-ancients",
+      "name": "Shackles of the Ancients",
+      "kind": "meta",
+      "region": "voe",
+      "map": "Eternity's Garden",
+      "waypoint": {
+        "name": "Pilgrim's Rest Waypoint",
+        "chat": "[&BPwPAAA=]",
+        "poi": 4092,
+        "map": "Eternity's Garden"
+      },
+      "wiki": null,
+      "schedule": {
+        "type": "every",
+        "periodMin": 120,
+        "offsetMin": 75,
+        "windowMin": 25
+      },
+      "adjustable": true,
+      "note": "",
+      "verification": {
+        "status": "disputed",
+        "needsInGameCheck": true,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "official",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "official",
+            "ref": "anet-news-2026-09-08",
+            "on": "2026-09-08",
+            "checked": "2026-10-25",
+            "agrees": false,
+            "note": "Start moved \"five minutes earlier\". The wiki had xx:10 before the move, which would give xx:05, but it now lists xx:15 (as does qjv)."
+          }
+        ],
+        "since": "2026-09-20",
+        "flag": null
+      }
+    },
+    {
+      "id": "depths-of-cruelty",
+      "name": "Depths of Cruelty",
+      "kind": "meta",
+      "region": "voe",
+      "map": "Leyspring Hollows",
+      "waypoint": {
+        "name": "Hall of Assemblage Waypoint",
+        "chat": "[&BDYQAAA=]",
+        "poi": 4150,
+        "map": "Leyspring Hollows"
+      },
+      "wiki": "Depths of Cruelty",
+      "schedule": {
+        "type": "every",
+        "periodMin": 180,
+        "offsetMin": 120,
+        "windowMin": 30
+      },
+      "adjustable": true,
+      "note": "The map closes after the meta, with a prompt to move within an hour.",
+      "verification": {
+        "status": "unverified",
+        "needsInGameCheck": true,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "official",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "official",
+            "ref": "anet-news-2026-09-08",
+            "on": "2026-09-08",
+            "checked": "2026-10-25",
+            "agrees": true,
+            "note": "Confirms the three-hour cycle; gives no start time."
+          }
+        ],
+        "since": "2026-09-17",
+        "flag": null
+      }
+    },
+    {
+      "id": "nexus-of-eternity",
+      "name": "Convergence: Nexus of Eternity",
+      "kind": "meta",
+      "region": "voe",
+      "map": "Leyspring Hollows (instance)",
+      "waypoint": {
+        "name": "Hall of Assemblage Waypoint",
+        "chat": "[&BDYQAAA=]",
+        "poi": 4150,
+        "map": "Leyspring Hollows"
+      },
+      "wiki": "Convergence: Nexus of Eternity",
+      "schedule": {
+        "type": "every",
+        "periodMin": 180,
+        "offsetMin": 60,
+        "windowMin": 10
+      },
+      "adjustable": true,
+      "note": "Squad instance with sign-up, not an open-world event.",
+      "verification": {
+        "status": "unverified",
+        "needsInGameCheck": true,
+        "lastReviewedPatch": "2026-10-13",
+        "lastVerifiedOn": "2026-10-25",
+        "method": "sources",
+        "evidence": [
+          {
+            "kind": "source",
+            "ref": "wiki-widget-v5.4",
+            "on": "2026-10-15",
+            "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-8e09f2b6",
+            "on": "2026-09-27",
+            "checked": "2026-10-25",
+            "agrees": true
+          }
+        ],
+        "since": "2026-09-17",
+        "flag": null
+      }
+    }
+  ],
+  "retired": []
+}
