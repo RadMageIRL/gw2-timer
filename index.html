@@ -6,25 +6,33 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://www.guildwars2.com; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="dark light">
-  <script src="js/theme-boot.js?v=0.2.0"></script>
+  <link rel="stylesheet" href="style.css?v=0.2.1">
+  <!-- The scripts download together and run in order once the page is parsed. app.js holds the
+       first paint until it has filled the page in, so the page does not jump as it loads. -->
+  <script defer src="events-data.js?r=1"></script>
+  <script defer src="js/schedule.js?v=0.2.1"></script>
+  <script defer src="js/store.js?v=0.2.1"></script>
+  <script defer src="js/news.js?v=0.2.1"></script>
+  <script defer src="js/clock.js?v=0.2.1"></script>
+  <script defer blocking="render" src="js/app.js?v=0.2.1"></script>
+  <script src="js/theme-boot.js?v=0.2.1"></script>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23101114'/%3E%3Ccircle cx='32' cy='34' r='19' fill='none' stroke='%23d9a441' stroke-width='5'/%3E%3Cpath d='M32 34V22M32 34l9 6' stroke='%23e9e4da' stroke-width='5' stroke-linecap='round'/%3E%3Crect x='26' y='6' width='12' height='7' rx='2' fill='%23d9a441'/%3E%3C/svg%3E">
-  <title>GW2 Timer v0.2.0 - World Bosses, Meta Events &amp; More | Unofficial fansite | RadMage Labs</title>
+  <title>GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers</title>
   <meta name="description" content="Guild Wars 2 world boss and meta-event timer: what is scheduled now and next in your local time, day and night cycles, resets and waypoints. Unofficial fansite.">
   <link rel="canonical" href="https://radmagelabs.com/gw2-timer/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="RadMage Labs">
   <meta property="og:url" content="https://radmagelabs.com/gw2-timer/">
-  <meta property="og:title" content="GW2 Timer: World Bosses, Meta Events &amp; More">
-  <meta property="og:description" content="Guild Wars 2 world boss and meta-event schedules in your local time. Unofficial fansite.">
+  <meta property="og:title" content="GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers">
+  <meta property="og:description" content="Guild Wars 2 world boss and meta-event timer: what is scheduled now and next in your local time, day and night cycles, resets and waypoints. Unofficial fansite.">
   <meta property="og:image" content="https://radmagelabs.com/assets/og/gw2-timer.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="GW2 Timer: the day and night strip and resets, the latest ArenaNet headlines, and events inside their scheduled window">
   <meta name="twitter:card" content="summary_large_image">
   <script type="application/ld+json">
-  {"@context":"https://schema.org","@type":"WebApplication","name":"GW2 Timer","url":"https://radmagelabs.com/gw2-timer/","applicationCategory":"GameApplication","operatingSystem":"Any","isAccessibleForFree":true,"description":"Guild Wars 2 world boss and meta-event timer. Unofficial fansite.","image":"https://radmagelabs.com/assets/og/gw2-timer.png","screenshot":"https://radmagelabs.com/assets/og/gw2-timer.png","author":{"@type":"Person","name":"RadMageIRL","url":"https://radmagelabs.com/"},"sameAs":"https://github.com/RadMageIRL/gw2-timer"}
+  {"@context":"https://schema.org","@type":"WebApplication","name":"GW2 Timer","url":"https://radmagelabs.com/gw2-timer/","description":"Guild Wars 2 world boss and meta-event timer: what is scheduled now and next in your local time, day and night cycles, resets and waypoints. Unofficial fansite.","applicationCategory":"UtilitiesApplication","operatingSystem":"Any (runs in a web browser)","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"screenshot":"https://radmagelabs.com/assets/og/gw2-timer.png","about":{"@type":"VideoGame","name":"Guild Wars 2"},"author":{"@type":"Person","name":"RadMageIRL","url":"https://github.com/RadMageIRL"},"sameAs":"https://github.com/RadMageIRL/gw2-timer"}
   </script>
-  <link rel="stylesheet" href="style.css?v=0.2.0">
 </head>
 <body>
   <a class="skip" href="#now-title">Skip to Scheduled now</a>
@@ -32,7 +40,7 @@
   <header class="topbar">
     <div class="brand">
       <h1>GW2 Timer</h1>
-      <span class="tag">v0.2.0 · World Bosses, Meta Events &amp; More · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
+      <span class="tag">v0.2.1 · Guild Wars 2 Boss &amp; Meta Timers · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
     </div>
     <div class="clock" role="group" aria-label="Current time">
       <div class="now" id="local-time">--:--</div>
@@ -130,17 +138,113 @@
         <p class="notes-help">If you see one of these start at another time, use Adjust on that event to set the time you saw. Your setting stays in this browser.</p>
       </div>
     </details>
+
+    <!-- build:event-index -->
+    <details class="notes panel index" id="event-index">
+      <summary><h2 id="index-title">Events this timer covers</h2> <span class="hint">15 world bosses and 20 meta events</span></summary>
+      <div class="notes-body">
+        <p class="index-intro">Every Guild Wars 2 world boss and meta event the timer follows, by region, with its map and how often it starts. Their next starts are in Coming up.</p>
+        <h3 id="index-world-boss">World bosses (15)</h3>
+        <div class="index-regions">
+          <div class="index-region">
+            <h4>Core Tyria</h4>
+            <ul>
+              <li><span class="index-name">Admiral Taidha Covington</span> <span class="index-where">Bloodtide Coast · every 3 hours</span></li>
+              <li><span class="index-name">Svanir Shaman Chief</span> <span class="index-where">Wayfarer Foothills · every 2 hours</span></li>
+              <li><span class="index-name">Megadestroyer</span> <span class="index-where">Mount Maelstrom · every 3 hours</span></li>
+              <li><span class="index-name">Fire Elemental</span> <span class="index-where">Metrica Province · every 2 hours</span></li>
+              <li><span class="index-name">The Shatterer</span> <span class="index-where">Blazeridge Steppes · every 3 hours</span></li>
+              <li><span class="index-name">Great Jungle Wurm</span> <span class="index-where">Caledon Forest · every 2 hours</span></li>
+              <li><span class="index-name">Modniir Ulgoth</span> <span class="index-where">Harathi Hinterlands · every 3 hours</span></li>
+              <li><span class="index-name">Shadow Behemoth</span> <span class="index-where">Queensdale · every 2 hours</span></li>
+              <li><span class="index-name">Inquest Golem Mark II</span> <span class="index-where">Mount Maelstrom · every 3 hours</span></li>
+              <li><span class="index-name">Claw of Jormag</span> <span class="index-where">Frostgorge Sound · every 3 hours</span></li>
+              <li><span class="index-name">Tequatl the Sunless</span> <span class="index-where">Sparkfly Fen · 6 times a day</span></li>
+              <li><span class="index-name">Triple Trouble</span> <span class="index-where">Bloodtide Coast · 6 times a day</span></li>
+              <li><span class="index-name">Karka Queen</span> <span class="index-where">Southsun Cove · 6 times a day</span></li>
+            </ul>
+          </div>
+          <div class="index-region">
+            <h4>The Icebrood Saga</h4>
+            <ul>
+              <li><span class="index-name">Drakkar</span> <span class="index-where">Bjora Marches · every 2 hours</span></li>
+            </ul>
+          </div>
+          <div class="index-region">
+            <h4>Janthir Wilds</h4>
+            <ul>
+              <li><span class="index-name">Of Mists and Monsters</span> <span class="index-where">Janthir Syntri · every 2 hours</span></li>
+            </ul>
+          </div>
+        </div>
+        <h3 id="index-meta">Meta events (20)</h3>
+        <div class="index-regions">
+          <div class="index-region">
+            <h4>Heart of Thorns</h4>
+            <ul>
+              <li><span class="index-name">Night and the Enemy</span> <span class="index-where">Verdant Brink · every 2 hours</span></li>
+              <li><span class="index-name">Battle in Tarir (Octovine)</span> <span class="index-where">Auric Basin · every 2 hours</span></li>
+              <li><span class="index-name">King of the Jungle (Chak Gerent)</span> <span class="index-where">Tangled Depths · every 2 hours</span></li>
+              <li><span class="index-name">Dragon's Stand</span> <span class="index-where">Dragon's Stand · every 2 hours</span></li>
+            </ul>
+          </div>
+          <div class="index-region">
+            <h4>Path of Fire</h4>
+            <ul>
+              <li><span class="index-name">Casino Blitz</span> <span class="index-where">Crystal Oasis · every 2 hours</span></li>
+              <li><span class="index-name">The Path to Ascension</span> <span class="index-where">Elon Riverlands · every 2 hours</span></li>
+              <li><span class="index-name">Maws of Torment</span> <span class="index-where">The Desolation · every 2 hours</span></li>
+              <li><span class="index-name">Serpents' Ire</span> <span class="index-where">Domain of Vabbi · every 2 hours</span></li>
+            </ul>
+          </div>
+          <div class="index-region">
+            <h4>End of Dragons</h4>
+            <ul>
+              <li><span class="index-name">Aetherblade Assault</span> <span class="index-where">Seitung Province · every 2 hours</span></li>
+              <li><span class="index-name">Kaineng Blackout</span> <span class="index-where">New Kaineng City · every 2 hours</span></li>
+              <li><span class="index-name">The Gang War of Echovald</span> <span class="index-where">The Echovald Wilds · every 2 hours</span></li>
+              <li><span class="index-name">Battle for the Jade Sea</span> <span class="index-where">Dragon's End · every 2 hours</span></li>
+            </ul>
+          </div>
+          <div class="index-region">
+            <h4>Secrets of the Obscure</h4>
+            <ul>
+              <li><span class="index-name">Unlocking the Wizard's Tower</span> <span class="index-where">Skywatch Archipelago · every 2 hours</span></li>
+              <li><span class="index-name">Defense of Amnytas</span> <span class="index-where">Amnytas · every 2 hours</span></li>
+            </ul>
+          </div>
+          <div class="index-region">
+            <h4>Janthir Wilds</h4>
+            <ul>
+              <li><span class="index-name">A Titanic Voyage</span> <span class="index-where">Bava Nisos · every 2 hours</span></li>
+            </ul>
+          </div>
+          <div class="index-region">
+            <h4>Visions of Eternity</h4>
+            <ul>
+              <li><span class="index-name">Hammerhart Rumble!</span> <span class="index-where">Shipwreck Strand · every 2 hours</span></li>
+              <li><span class="index-name">Secrets of the Weald</span> <span class="index-where">Starlit Weald · every 2 hours</span></li>
+              <li><span class="index-name">Shackles of the Ancients</span> <span class="index-where">Eternity's Garden · every 2 hours</span></li>
+              <li><span class="index-name">Depths of Cruelty</span> <span class="index-where">Leyspring Hollows · every 3 hours</span></li>
+              <li><span class="index-name">Convergence: Nexus of Eternity</span> <span class="index-where">Leyspring Hollows (instance) · every 3 hours</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </details>
+    <!-- /build:event-index -->
   </main>
 
   <footer class="site-footer">
     <p class="revision" id="revision"></p>
     <p>Unofficial fansite. Free, no ads, no tracking. Made by <a href="https://radmagelabs.com/">RadMage Labs</a>.</p>
+    <p>More from RadMage Labs: <a href="https://radmagelabs.com/ffxi/">FFXI Timer</a>, <a href="https://radmagelabs.com/ffxiv/">FFXIV Timer</a> and <a href="https://radmagelabs.com/d4/">D4 Tracker</a>.</p>
     <p class="legal">Guild Wars Games © ArenaNet LLC. All rights reserved. NCSOFT, ArenaNet, Guild Wars, Guild Wars 2, GW2, Heart of Thorns, Path of Fire, End of Dragons, Secrets of the Obscure, Janthir Wilds, Visions of Eternity, and all associated logos, designs, and composite marks are trademarks or registered trademarks of NCSOFT Corporation. All other trademarks are the property of their respective owners.</p>
   </footer>
 
   <dialog id="about" aria-labelledby="about-title">
     <div class="dialog-close"><button type="button" class="btn small" data-close>Close</button></div>
-    <h2 id="about-title">GW2 Timer v0.2.0</h2>
+    <h2 id="about-title">GW2 Timer v0.2.1</h2>
     <p>A Guild Wars 2 timer for world bosses and meta-events: what is in its scheduled window now, what starts next, in your local time. Unofficial fansite, not affiliated with ArenaNet or NCSOFT.</p>
     <h3>Scheduled, not live</h3>
     <p>Every time here is a scheduled start. The game publishes no live state for events, so a map can run early, late, fail, or close. "Scheduled now" means the scheduled window is open, not that the fight is on in your map.</p>
@@ -167,12 +271,5 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-  <script src="events-data.js?r=1"></script>
-  <script src="js/schedule.js?v=0.2.0"></script>
-  <script src="js/store.js?v=0.2.0"></script>
-  <script src="js/news.js?v=0.2.0"></script>
-  <script src="js/clock.js?v=0.2.0"></script>
-  <script src="js/app.js?v=0.2.0"></script>
 </body>
 </html>

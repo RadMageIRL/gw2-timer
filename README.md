@@ -1,6 +1,6 @@
-# GW2 Timer v0.2.0
+# GW2 Timer v0.2.1
 
-World Bosses, Meta Events & More. A Guild Wars 2 timer that shows what is inside its scheduled window right now, what starts next, and when, in your local time. It is an unofficial fansite, made by [RadMage Labs](https://radmagelabs.com/).
+Guild Wars 2 Boss & Meta Timers. A Guild Wars 2 timer that shows what is inside its scheduled window right now, what starts next, and when, in your local time. It is an unofficial fansite, made by [RadMage Labs](https://radmagelabs.com/).
 
 **Use it: [radmagelabs.com/gw2-timer](https://radmagelabs.com/gw2-timer/)** (also at [radmageirl.github.io/gw2-timer](https://radmageirl.github.io/gw2-timer/))
 
@@ -34,6 +34,9 @@ From the top of the page down:
 
 **Schedule notes**
 - A closed section at the bottom with the schedule revision, the review dates, how many times are documented, confirmed in game, disputed or unverified, and which events have uncertain times
+
+**Events this timer covers**
+- A closed section under Schedule notes that lists every world boss and meta-event the timer follows, by region, with its map and how often it starts. It is part of the page itself, so it reads without JavaScript
 
 ## Scheduled, not live
 
@@ -83,6 +86,8 @@ node tests/smoke.mjs         # browser tests on dist/ (needs Chrome)
 `data/schedule.source.json` is the schedule. `data/patches.json` records which game updates were reviewed. `node tools/build-events.mjs` turns them into `events-data.js`, the file the page loads.
 
 The build refuses a schedule change that has no supporting evidence. It also requires the schedule data revision to move when anything players see changes.
+
+The same command writes the Events this timer covers list in `index.html` from that data, so the list always matches what the timer tracks. `node tools/build-events.mjs --check` (run by the tests and the release build) fails when either file is out of date.
 
 ## Sources
 

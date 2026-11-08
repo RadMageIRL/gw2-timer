@@ -24,6 +24,7 @@ const { recordEvidence, deltaMinutes } = await import('../tools/verify.mjs');
 const { report } = await import('../tools/verification-report.mjs');
 const { checkWaypoints } = await import('../tools/check-waypoints.mjs');
 const { SITE_FILES } = await import('../tools/build.mjs');
+const { renderEventIndex, applyEventIndex, currentEventIndex, cadence, START: EVENT_INDEX_START } = await import('../tools/lib/event-index.mjs');
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -574,9 +575,17 @@ test('a wall clock that jumps or a long pause asks for a new clock check', () =>
 
 const html = file('index.html');
 const VERSION = /^## v(\d+\.\d+\.\d+) /m.exec(file('CHANGELOG.md'))[1];
-test(`the page, About, README and every asset say v${VERSION}, the newest version in the changelog`, () => {
-  assert.ok(html.includes(`<title>GW2 Timer v${VERSION} - World Bosses, Meta Events &amp; More | Unofficial fansite | RadMage Labs</title>`));
-  assert.ok(html.includes(`<span class="tag">v${VERSION} · World Bosses, Meta Events &amp; More · `));
+const CANONICAL = 'https://radmagelabs.com/gw2-timer/';
+const unescapeHtml = (s) => s.replace(/&(amp|lt|gt|quot|#39);/g, (m, n) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" })[n]);
+/** The content of the one <meta name|property="key">; fails when there is not exactly one. */
+function meta(key) {
+  const all = [...html.matchAll(new RegExp(`<meta (?:name|property)="${key.replace(/[.:]/g, '\\$&')}" content="([^"]*)">`, 'g'))];
+  assert.equal(all.length, 1, `one meta ${key}`);
+  return unescapeHtml(all[0][1]);
+}
+const pageTitle = () => unescapeHtml(/<title>([^<]*)<\/title>/.exec(html)[1]);
+test(`the tagline, About, README and every asset say v${VERSION}, the newest version in the changelog`, () => {
+  assert.ok(html.includes(`<span class="tag">v${VERSION} · Guild Wars 2 Boss &amp; Meta Timers · `));
   assert.ok(html.includes(`<h2 id="about-title">GW2 Timer v${VERSION}</h2>`));
   assert.match(file('README.md'), new RegExp(`^# GW2 Timer v${VERSION.replace(/\./g, '\\.')}\\n`));
   const assets = [...html.matchAll(/(?:src|href)="((?:js\/[^"]+\.js|style\.css)[^"]*)"/g)].map((m) => m[1]);
@@ -584,16 +593,18 @@ test(`the page, About, README and every asset say v${VERSION}, the newest versio
   for (const a of assets) assert.ok(a.endsWith(`?v=${VERSION}`), a);
 });
 test('the page loads the schedule data with ?r= set to the dataset revision', () => {
-  assert.ok(html.includes(`<script src="events-data.js?r=${DATA.meta.datasetRevision}"></script>`));
+  assert.ok(html.includes(`<script defer src="events-data.js?r=${DATA.meta.datasetRevision}"></script>`));
 });
 test('the changelog lists the current dataset revision with its kind', () => {
   const last = LOCK.history[LOCK.history.length - 1];
   const label = { initial: 'first dataset', schedule: 'schedule change', metadata: 'metadata only' }[last.kind];
   assert.match(file('CHANGELOG.md'), new RegExp(`^- r${last.revision} \\(${last.date}\\), ${label}:`, 'm'));
 });
-test('the title bar says Unofficial fansite and the ArenaNet notice appears verbatim in page, About, README and NOTICE', () => {
+test('the description, footer and About say Unofficial fansite, and the ArenaNet notice appears verbatim in page, About, README and NOTICE', () => {
   const notice = 'Guild Wars Games © ArenaNet LLC. All rights reserved. NCSOFT, ArenaNet, Guild Wars, Guild Wars 2, GW2, Heart of Thorns, Path of Fire, End of Dragons, Secrets of the Obscure, Janthir Wilds, Visions of Eternity, and all associated logos, designs, and composite marks are trademarks or registered trademarks of NCSOFT Corporation. All other trademarks are the property of their respective owners.';
-  assert.match(html, /<title>[^<]*Unofficial fansite[^<]*<\/title>/);
+  assert.ok(meta('description').endsWith(' Unofficial fansite.'), 'description');
+  assert.ok(html.includes('<p>Unofficial fansite. Free, no ads, no tracking.'), 'footer');
+  assert.ok(html.includes('Unofficial fansite, not affiliated with ArenaNet or NCSOFT.'), 'About');
   assert.equal(html.split(notice).length - 1, 2);
   assert.ok(file('README.md').includes(notice));
   assert.ok(file('NOTICE').includes(notice));
@@ -605,14 +616,149 @@ test('the CSP allows scripts and styles from this site only, and connections to 
   assert.deepEqual(inline, ['type="application/ld+json"']);
   assert.ok(!/\sstyle="/.test(html) && !/\son[a-z]+="/.test(html), 'no inline style or handler attributes');
 });
-test('the page is in the v0.2.0 order: clocks and strip, news, filters, Scheduled now, Coming up, Schedule notes, footer', () => {
-  const marks = ['<header class="topbar">', 'class="strip panel"', 'id="news"', 'class="controls panel"', 'id="now-title"', 'id="coming-title"', 'id="schedule-notes"', '<footer'];
+test('the page is in the v0.2.0 order, with the event index after Schedule notes: clocks and strip, news, filters, Scheduled now, Coming up, Schedule notes, events covered, footer', () => {
+  const marks = ['<header class="topbar">', 'class="strip panel"', 'id="news"', 'class="controls panel"', 'id="now-title"', 'id="coming-title"', 'id="schedule-notes"', 'id="event-index"', '<footer'];
   const at = marks.map((m) => html.indexOf(m));
   assert.ok(at.every((i) => i > 0), JSON.stringify(at));
   assert.deepEqual(at.slice().sort((a, b) => a - b), at);
   assert.match(html, /<h2 id="now-title" tabindex="-1">Scheduled now<\/h2>/);
   assert.match(html, /<details class="notes panel" id="schedule-notes">/, 'Schedule notes start closed');
+  assert.match(html, /<details class="notes panel index" id="event-index">/, 'the event index starts closed');
 });
+// ---- Search metadata, structured data, headings, links and loading ----
+
+test('the title says GW2 Timer and Guild Wars 2 and names world bosses and meta events, with no version, in 60 characters or less', () => {
+  const t = pageTitle();
+  assert.equal(t, 'GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers');
+  for (const w of ['GW2 Timer', 'Guild Wars 2', 'World Boss', 'Meta Event']) assert.ok(t.includes(w), w);
+  assert.ok(t.length <= 60, `${t.length} characters`);
+  assert.ok(!/\bv?\d+\.\d+/.test(t), 'no version number');
+  assert.equal(html.split('<title>').length - 1, 1, 'one title');
+});
+test('one canonical URL, and Open Graph and the JSON-LD point at the same address', () => {
+  const links = [...html.matchAll(/<link rel="canonical" href="([^"]+)">/g)].map((m) => m[1]);
+  assert.deepEqual(links, [CANONICAL]);
+  assert.equal(meta('og:url'), CANONICAL);
+  assert.equal(JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html)[1]).url, CANONICAL);
+  assert.ok(!/<meta name="robots"[^>]*noindex/.test(html), 'not noindex');
+});
+test('the description and the link preview metadata are complete and agree with each other', () => {
+  const d = meta('description');
+  assert.ok(d.length >= 70 && d.length <= 160, `description is ${d.length} characters`);
+  assert.ok(d.startsWith('Guild Wars 2 ') && d.includes('world boss') && d.includes('meta-event'), d);
+  assert.ok(!/\bv?\d+\.\d+/.test(d), 'no version number');
+  assert.equal(meta('og:type'), 'website');
+  assert.equal(meta('og:site_name'), 'RadMage Labs');
+  assert.equal(meta('og:title'), pageTitle());
+  assert.equal(meta('og:description'), d);
+  assert.equal(meta('og:image'), 'https://radmagelabs.com/assets/og/gw2-timer.png');
+  assert.equal(meta('og:image:width'), '1200');
+  assert.equal(meta('og:image:height'), '630');
+  assert.ok(meta('og:image:alt').length > 20, 'og:image:alt');
+  assert.equal(meta('twitter:card'), 'summary_large_image');
+});
+test('the JSON-LD has the same shape as the other RadMage Labs apps, matches the page, and claims no ratings or reviews', () => {
+  const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
+  assert.equal(blocks.length, 1);
+  const ld = JSON.parse(blocks[0][1]);
+  assert.deepEqual(ld, {
+    '@context': 'https://schema.org', '@type': 'WebApplication', name: 'GW2 Timer', url: CANONICAL, description: meta('description'),
+    applicationCategory: 'UtilitiesApplication', operatingSystem: 'Any (runs in a web browser)', isAccessibleForFree: true,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }, screenshot: meta('og:image'),
+    about: { '@type': 'VideoGame', name: 'Guild Wars 2' },
+    author: { '@type': 'Person', name: 'RadMageIRL', url: 'https://github.com/RadMageIRL' },
+    sameAs: 'https://github.com/RadMageIRL/gw2-timer',
+  });
+  const keys = (v) => (v && typeof v === 'object' ? Object.entries(v).flatMap(([k, x]) => [k, ...keys(x)]) : []);
+  assert.deepEqual(keys(ld).filter((k) => /^(aggregateRating|reviews?|reviewRating|reviewCount|ratingValue|ratingCount|bestRating|worstRating|interactionStatistic|userInteractionCount|awards?)$/.test(k)), [], 'no rating, review, download or award claims');
+  assert.ok(!('softwareVersion' in ld), 'no version to drift from the visible one');
+});
+test('headings: one h1 first, and no level is skipped anywhere in the page', () => {
+  const levels = [...html.matchAll(/<h([1-6])[\s>]/g)].map((m) => Number(m[1]));
+  assert.equal(levels[0], 1);
+  assert.equal(levels.filter((l) => l === 1).length, 1, 'one h1');
+  levels.forEach((l, i) => assert.ok(i === 0 || l <= levels[i - 1] + 1, `h${levels[i - 1]} then h${l} (heading ${i + 1})`));
+  assert.ok(html.includes('<summary><h2 id="index-title">Events this timer covers</h2>'));
+});
+test('links: local files exist, every #fragment has its target, and RadMage Labs links use canonical addresses, not GitHub Pages copies', () => {
+  const refs = [...html.matchAll(/\s(?:href|src)="([^"]+)"/g)].map((m) => m[1]);
+  for (const r of refs.filter((x) => !/^(?:https?:|data:|#)/.test(x))) assert.ok(existsSync(join(ROOT, r.replace(/[?#].*$/, ''))), r);
+  for (const r of refs.filter((x) => x.startsWith('#'))) assert.ok(html.includes(`id="${r.slice(1)}"`), r);
+  const labs = refs.filter((x) => x.startsWith('https://radmagelabs.com/') && !x.startsWith('https://radmagelabs.com/assets/'));
+  assert.ok(labs.length >= 4, labs.join(' '));
+  for (const r of labs) assert.ok([CANONICAL, 'https://radmagelabs.com/', 'https://radmagelabs.com/ffxi/', 'https://radmagelabs.com/ffxiv/', 'https://radmagelabs.com/d4/'].includes(r), r);
+  assert.ok(!refs.some((x) => /github\.io/.test(x)), 'no links to github.io copies');
+  assert.ok(refs.filter((x) => /^https?:/.test(x)).every((x) => x.startsWith('https://')), 'https only');
+});
+test('loading: the stylesheet, then the scripts deferred in the head in order, app.js holding the first paint, then the theme script; none in the body', () => {
+  const head = html.slice(0, html.indexOf('</head>')), body = html.slice(html.indexOf('<body'));
+  const scripts = [...head.matchAll(/<script ((?:[a-z]+(?:="[^"]*")? )*)src="([^"?]+)[^"]*"><\/script>/g)].map((m) => `${m[1].trim()} ${m[2]}`.trim());
+  assert.deepEqual(scripts, ['defer events-data.js', 'defer js/schedule.js', 'defer js/store.js', 'defer js/news.js', 'defer js/clock.js', 'defer blocking="render" js/app.js', 'js/theme-boot.js']);
+  assert.ok(head.indexOf('rel="stylesheet"') < head.indexOf('<script defer'), 'stylesheet first');
+  assert.ok(head.indexOf('http-equiv="Content-Security-Policy"') < head.indexOf('rel="stylesheet"'), 'the CSP comes before anything loads');
+  assert.ok(!/<script[^>]*\ssrc=/.test(body), 'no script in the body');
+  assert.ok(!/data-status=/.test(html), 'app.js sets the news status, so a page without scripts keeps no empty room for headlines');
+});
+
+// ---- The event index: generated from the page data ----
+
+test('the page holds exactly the event index made from events-data.js', () => {
+  assert.equal(currentEventIndex(html), renderEventIndex(DATA));
+  assert.equal(html.split(EVENT_INDEX_START).length - 1, 1);
+});
+test('the event index names every event once, under its kind and region, with its map and how often it starts', () => {
+  const block = currentEventIndex(html);
+  const items = [...block.matchAll(/<li><span class="index-name">([^<]*)<\/span> <span class="index-where">([^<]*)<\/span><\/li>/g)].map((m) => [unescapeHtml(m[1]), unescapeHtml(m[2])]);
+  assert.equal(items.length, DATA.events.length);
+  assert.equal(new Set(items.map((i) => i[0])).size, items.length, 'no name twice');
+  const expected = [];
+  for (const kind of ['world-boss', 'meta']) for (const r of DATA.regions) for (const e of DATA.events) if (e.kind === kind && e.region === r.id) expected.push([e.name, `${e.map} · ${cadence(e.schedule)}`]);
+  assert.deepEqual(items, expected);
+  for (const e of DATA.events) assert.equal(block.split(`>${e.name.replace(/&/g, '&amp;')}<`).length - 1, 1, e.name);
+  const n = (k) => DATA.events.filter((e) => e.kind === k).length;
+  assert.ok(block.includes(`<span class="hint">${n('world-boss')} world bosses and ${n('meta')} meta events</span>`));
+  assert.ok(block.includes(`World bosses (${n('world-boss')})</h3>`) && block.includes(`Meta events (${n('meta')})</h3>`));
+  assert.ok(!/<a\s/.test(block), 'plain text, no links');
+});
+test('how often an event starts reads from its schedule', () => {
+  assert.equal(cadence({ type: 'every', periodMin: 120, offsetMin: 5, windowMin: 15 }), 'every 2 hours');
+  assert.equal(cadence({ type: 'every', periodMin: 60, offsetMin: 0, windowMin: 15 }), 'every hour');
+  assert.equal(cadence({ type: 'every', periodMin: 90, offsetMin: 0, windowMin: 15 }), 'every 90 minutes');
+  assert.equal(cadence({ type: 'daily', startsUtc: [0, 180, 420, 690, 960, 1140], windowMin: 30 }), '6 times a day');
+  assert.equal(cadence({ type: 'daily', startsUtc: [60], windowMin: 30 }), 'once a day');
+  assert.throws(() => cadence({ type: 'weekly' }), /unknown schedule type/);
+});
+test('the event index follows the data: an event added or removed shows up or drops out, and its text is escaped', () => {
+  const d = copy(DATA);
+  d.events = d.events.filter((e) => e.id !== 'the-shatterer');
+  d.events.push({ ...copy(EV.get('drakkar')), id: 'test-boss', name: 'Test <Boss> & Co', map: 'Test Map', region: 'voe', schedule: { type: 'every', periodMin: 60, offsetMin: 0, windowMin: 10 } });
+  const out = renderEventIndex(d);
+  assert.ok(!out.includes('The Shatterer'), 'removed');
+  assert.ok(out.includes('<h4>Visions of Eternity</h4>\n            <ul>\n              <li><span class="index-name">Test &lt;Boss&gt; &amp; Co</span> <span class="index-where">Test Map · every hour</span></li>'), 'added under its kind and region');
+  assert.ok(out.includes('15 world bosses and 20 meta events'));
+  assert.throws(() => renderEventIndex({ ...d, events: [{ ...d.events[0], kind: 'raid' }] }), /unknown kind/);
+  assert.throws(() => renderEventIndex({ ...d, events: [{ ...d.events[0], region: 'nowhere' }] }), /unknown region/);
+  assert.equal(applyEventIndex(applyEventIndex(html, d), DATA), html, 'replacing it twice gets the page back');
+  assert.throws(() => applyEventIndex('<main></main>', DATA), /marker pair/);
+});
+test('build-events --check refuses a page whose event index is stale, and the build rewrites it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gw2-timer-index-'));
+  try {
+    const paths = { source: join(dir, 's.json'), patches: join(dir, 'p.json'), lock: join(dir, 'l.json'), output: join(dir, 'e.js'), page: join(dir, 'index.html') };
+    writeFileSync(paths.source, file('data/schedule.source.json')); writeFileSync(paths.patches, file('data/patches.json'));
+    writeFileSync(paths.lock, file('data/schedule.lock.json')); writeFileSync(paths.output, file('events-data.js'));
+    writeFileSync(paths.page, html.replace(/\n *<li><span class="index-name">The Shatterer<\/span>[^\n]*/, ''));
+    const r = buildEvents({ check: true, paths, log: () => {} });
+    assert.equal(r.ok, false);
+    assert.match(r.errors.join('\n'), /event index in index\.html is out of date/);
+    assert.equal(buildEvents({ paths, date: LOCK.history[LOCK.history.length - 1].date, log: () => {} }).ok, true);
+    assert.equal(readFileSync(paths.page, 'utf8'), html, 'rewritten to match');
+    assert.equal(buildEvents({ check: true, paths, log: () => {} }).ok, true);
+    writeFileSync(paths.page, html.replace(EVENT_INDEX_START, ''));
+    assert.match(buildEvents({ check: true, paths, log: () => {} }).errors.join('\n'), /marker pair/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('the only network calls in the code are the news feed and the same-origin clock check', () => {
   const calls = [];
   for (const f of readdirSync(join(ROOT, 'js'))) {

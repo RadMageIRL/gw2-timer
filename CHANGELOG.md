@@ -4,6 +4,23 @@ Every version of GW2 Timer and what changed in it, newest first. Dates are the d
 
 The schedule data has its own revision numbers (r1, r2, ...), listed under "Schedule data" below. A revision is either a **schedule change** (a start time, cycle or event added or removed) or **metadata only** (a label, note or verification status changed; no time moved).
 
+## v0.2.1 (2026-11-08)
+
+The page no longer jumps as it loads, its title says Guild Wars 2, and it lists every event it covers. Nothing about the schedule or your settings changes.
+
+Changed
+- The page title is "GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers", and the tagline reads "Guild Wars 2 Boss & Meta Timers".
+- The scripts load together and the page appears already filled in, instead of drawing an empty frame and then moving everything down. While the first headlines load, the news panel keeps their room.
+- The page's search and link-preview details now describe it the same way as the other RadMage Labs apps.
+
+Added
+- Events this timer covers: a closed section at the bottom that lists every world boss and meta-event by region, with its map and how often it starts. It is part of the page itself, so it reads without JavaScript, and the build makes it from the same data as the timer.
+- A line in the footer with links to FFXI Timer, FFXIV Timer and D4 Tracker.
+
+Accessibility
+- Region chips are named by what they show, then the full region name ("HoT (Heart of Thorns)").
+- The RadMage Labs link in the tagline is underlined.
+
 ## v0.2.0 (2026-11-08)
 
 Latest news moves to the top, a new Schedule notes section, and usability fixes across the event lists. Settings saved by v0.1.0 carry over unchanged.

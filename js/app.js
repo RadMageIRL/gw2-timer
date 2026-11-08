@@ -246,8 +246,9 @@
 
   function syncControls() {
     for (const b of document.querySelectorAll('[data-filter]')) b.setAttribute('aria-pressed', String(b.getAttribute('data-filter') === prefs.filter));
+    // A chip's name starts with its visible text (what a voice control user says), then the full region name.
     $('region-chips').replaceChildren(...REGIONS.map((r) => h('button', {
-      type: 'button', class: 'chip', 'data-region': r.id, 'aria-pressed': String(prefs.regions.includes(r.id)), title: r.name, 'aria-label': r.name, text: r.short,
+      type: 'button', class: 'chip', 'data-region': r.id, 'aria-pressed': String(prefs.regions.includes(r.id)), title: r.name, 'aria-label': `${r.short} (${r.name})`, text: r.short,
     })));
     $('ahead').value = String(prefs.aheadMin);
     $('compact-btn').setAttribute('aria-pressed', String(prefs.compact));
@@ -408,6 +409,8 @@
       const f = formats(), more = $('news-more');
       $('news-toggle').textContent = prefs.news ? 'Turn off news' : 'Turn on news';
       $('news').classList.toggle('is-off', !prefs.news);
+      // style.css keeps the headlines' room while the first ones load (status idle or loading).
+      $('news').setAttribute('data-status', prefs.news ? newsState.status : 'off');
       if (!prefs.news) {
         $('news-note').textContent = 'News is off. Turning it on loads headlines from guildwars2.com, so ArenaNet sees that request.';
         $('news-list').replaceChildren();

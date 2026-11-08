@@ -26,6 +26,10 @@ const HOSTILE = readFileSync(join(ROOT, 'tests', 'fixtures', 'news-feed-hostile.
 // Built here because no project file may hold an em dash: real ArenaNet titles do (November 2026).
 const DASH_FEED = `<rss><channel><item><title>Announcing Guild Wars Afterlife${String.fromCharCode(0x2014)}Prepurchase Available Now!</title><link>https://www.guildwars2.com/en/news/afterlife/</link><pubDate>Tue, 03 Nov 2026 16:00:00 +0000</pubDate></item>`
   + `<item><title>Festival Nov 3${String.fromCharCode(0x2013)}10</title><link>https://www.guildwars2.com/en/news/festival/</link></item></channel></rss>`;
+// Titles as long as ArenaNet's usually are (40 to 66 characters in November 2026), for the layout checks.
+const LONG_FEED = '<rss><channel>' + ['Announcing the Example Expansion: Prepurchase Available Today', 'Example Living World Seasons Now Come with Every Expansion Pack',
+  'The Example Autumn Festival 2026 Is Now Live', 'Support the Example Charity Team This November', 'Try the New Example Borderlands Map in a Weekend Beta on Nov 10']
+  .map((t, i) => `<item><title>${t}</title><link>https://www.guildwars2.com/en/news/example-${i}/</link><pubDate>Tue, 0${i + 1} Nov 2026 16:00:00 +0000</pubDate></item>`).join('') + '</channel></rss>';
 const VERSION = /^## v(\d+\.\d+\.\d+) /m.exec(readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8'))[1];
 const FEED_URL = 'https://www.guildwars2.com/en/feed/';
 const utc = (iso) => Date.parse(iso);
@@ -53,8 +57,9 @@ async function open({ at, tz = 'America/Chicago', width = 1280, height = 900, mo
   await page.send('Fetch.enable', { patterns: [{ urlPattern: 'https://www.guildwars2.com/*' }] });
   page.on('Fetch.requestPaused', async (p) => {
     page.newsRequests++;
+    if (news.mode === 'hold') { page.held = p.requestId; return; }
     // fixture and hostile answer with a feed; garbage with an HTML error page; http500 with a server error.
-    const answer = { fixture: [200, FEED], hostile: [200, HOSTILE], dashes: [200, DASH_FEED], garbage: [200, '<html><body>Bad gateway</body></html>'], http500: [500, 'error'] }[news.mode];
+    const answer = { fixture: [200, FEED], long: [200, LONG_FEED], hostile: [200, HOSTILE], dashes: [200, DASH_FEED], garbage: [200, '<html><body>Bad gateway</body></html>'], http500: [500, 'error'] }[news.mode];
     if (answer) {
       await page.send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: answer[0], body: Buffer.from(answer[1]).toString('base64'),
         responseHeaders: [{ name: 'Content-Type', value: 'text/xml; charset=utf-8' }, { name: 'Access-Control-Allow-Origin', value: '*' }] });
@@ -79,8 +84,8 @@ const unexpected = (page, allow = []) => page.problems.filter((p) => !allow.some
 check('desktop load at 23:50 UTC in Chicago: header, footer, Scheduled now and Coming up are right', async () => {
   const page = await open({ at: utc('2026-10-25T23:50:00Z') });
   try {
-    assert.equal(await page.eval('document.title'), `GW2 Timer v${VERSION} - World Bosses, Meta Events & More | Unofficial fansite | RadMage Labs`);
-    assert.equal(await text(page, '.brand .tag'), `v${VERSION} · World Bosses, Meta Events & More · RadMage Labs`);
+    assert.equal(await page.eval('document.title'), 'GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers');
+    assert.equal(await text(page, '.brand .tag'), `v${VERSION} · Guild Wars 2 Boss & Meta Timers · RadMage Labs`);
     assert.equal(await text(page, '#now-title'), 'Scheduled now');
     assert.equal(await text(page, '#revision'), 'Schedule r1 · reviewed Oct 25, 2026');
     const now = await cards(page);
@@ -462,10 +467,10 @@ check('the weekly reset rolls over at Monday 07:30 UTC, and the next one shows i
 
 // ---- v0.2.0 layout: news near the top, Schedule notes, highlights ----
 
-check('page order: clocks and resets, news, filters, Scheduled now, Coming up, Schedule notes, footer', async () => {
+check('page order: clocks and resets, news, filters, Scheduled now, Coming up, Schedule notes, events covered, footer', async () => {
   const page = await open({ at: utc('2026-10-25T23:50:00Z') });
   try {
-    const tops = await page.eval("['.topbar', '.strip', '#news', '.controls', '#now-title', '#coming-title', '#schedule-notes', '.site-footer'].map((s) => document.querySelector(s).getBoundingClientRect().top + scrollY)");
+    const tops = await page.eval("['.topbar', '.strip', '#news', '.controls', '#now-title', '#coming-title', '#schedule-notes', '#event-index', '.site-footer'].map((s) => document.querySelector(s).getBoundingClientRect().top + scrollY)");
     assert.ok(tops.every((t, i) => i === 0 || t > tops[i - 1]), JSON.stringify(tops));
   } finally { await page.close(); }
 });
@@ -570,7 +575,7 @@ check('on a 320 px phone, in normal and compact mode, nothing scrolls sideways',
   const page = await open({ at: utc('2026-10-25T23:50:00Z'), width: 320, height: 640, mobile: true });
   try {
     await click(page, '#next-list .row [data-adjust], #now-list [data-adjust]'); await settle();
-    await click(page, '#news-more'); await click(page, '#schedule-notes summary'); await settle();
+    await click(page, '#news-more'); await click(page, '#schedule-notes summary'); await click(page, '#event-index summary'); await settle();
     assert.equal((await sideways(page, 320))[0], 320, 'normal');
     await click(page, '#compact-btn'); await settle();
     assert.equal((await sideways(page, 320))[0], 320, 'compact');
@@ -637,6 +642,11 @@ check('every button and link has a name, and every event button names its event'
     await page.send('Accessibility.enable');
     const { nodes } = await page.send('Accessibility.getFullAXTree', {});
     const names = nodes.filter((n) => !n.ignored).map((n) => (n.name && n.name.value) || '');
+    const chips = await page.eval("[...document.querySelectorAll('#region-chips .chip')].map((c) => [c.textContent, c.getAttribute('aria-label')])");
+    assert.ok(chips.length === DATA.regions.length && chips.every(([t, l], i) => l === `${t} (${DATA.regions[i].name})`), JSON.stringify(chips));
+    assert.match(await page.eval("getComputedStyle(document.querySelector('.brand .tag a')).textDecorationLine"), /underline/, 'the tagline link is underlined');
+    const kinds = (k) => DATA.events.filter((e) => e.kind === k).length;
+    assert.ok(names.includes(`Events this timer covers ${kinds('world-boss')} world bosses and ${kinds('meta')} meta events`), 'the event index summary is named by its text alone');
     assert.ok(names.includes(`Schedule notes r${DATA.meta.datasetRevision} · reviewed ${fmtDay(DATA.meta.reviewedOn)} · ${DATA.events.filter((e) => e.status !== 'documented' && e.status !== 'confirmed').length} uncertain times`), 'the summary is named by its text alone');
     assert.ok(!names.some((n) => /[\u25B8\u25BE\u2713\u2605]/.test(n)), names.filter((n) => /[\u25B8\u25BE\u2713\u2605]/.test(n)).join(' | '));
   } finally { await page.close(); }
@@ -651,6 +661,90 @@ check('with reduced motion the active cards do not animate', async () => {
     await page.waitFor("document.querySelectorAll('#now-list .event').length > 0");
     assert.equal(await page.eval("getComputedStyle(document.querySelector('#now-list .event')).animationName"), 'none');
   } finally { await page.close(); }
+});
+
+// ---- Events this timer covers, and a page that does not move as it loads ----
+
+check('Events this timer covers: closed at first, opens with Enter, lists every event by kind and region, and reads the same with JavaScript off', async () => {
+  const names = DATA.events.map((e) => e.name).sort();
+  const expectHeads = [];
+  for (const [kind, title] of [['world-boss', 'World bosses'], ['meta', 'Meta events']]) {
+    expectHeads.push(`H3 ${title} (${DATA.events.filter((e) => e.kind === kind).length})`);
+    for (const r of DATA.regions) if (DATA.events.some((e) => e.kind === kind && e.region === r.id)) expectHeads.push(`H4 ${r.name}`);
+  }
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    assert.equal(await page.eval("document.getElementById('event-index').open"), false, 'closed at first');
+    await page.eval("document.querySelector('#event-index summary').focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.equal(await page.eval("document.getElementById('event-index').open"), true, 'Enter opens it');
+    const shown = await page.eval("[...document.querySelectorAll('#event-index .index-name')].filter((n) => n.getClientRects().length).map((n) => n.textContent)");
+    assert.deepEqual(shown.slice().sort(), names);
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('#event-index h3, #event-index h4')].map((h) => h.tagName + ' ' + h.textContent)"), expectHeads);
+    // With the lists rendered (event cards are h3 under Scheduled now), the page still has one h1 and skips no level.
+    const levels = await page.eval("[...document.querySelectorAll('h1, h2, h3, h4, h5, h6')].map((h) => Number(h.tagName[1]))");
+    assert.equal(levels[0], 1);
+    assert.ok(levels.every((l, i) => i === 0 || (l > 1 && l <= levels[i - 1] + 1)), levels.join(','));
+  } finally { await page.close(); }
+  const off = await chrome.newPage();
+  try {
+    await off.send('Emulation.setScriptExecutionDisabled', { value: true });
+    await off.goto(BASE);
+    await off.eval("document.querySelector('#event-index summary').click()");
+    const visible = await off.eval("document.getElementById('event-index').innerText");
+    for (const n of names) assert.ok(visible.includes(n), `without JavaScript: ${n}`);
+    assert.ok(visible.includes('Every Guild Wars 2 world boss and meta event the timer follows'));
+  } finally { await off.close(); }
+});
+
+check('while the first headlines load, the news panel keeps their room and Show all keeps its place; a failed feed gives the room back', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z'), news: { mode: 'hold' } });
+  try {
+    await page.waitFor('Boolean(document.getElementById("news-note").textContent)');
+    const before = await page.eval("[document.getElementById('news').dataset.status, document.getElementById('news-list').getBoundingClientRect().height, getComputedStyle(document.getElementById('news-more')).visibility, document.querySelector('.controls').getBoundingClientRect().top]");
+    assert.equal(before[0], 'loading');
+    assert.ok(before[1] >= 80, `the empty list keeps ${before[1]} px`);
+    assert.equal(before[2], 'hidden', 'Show all holds its place, unseen');
+    assert.ok(page.held, 'the news request is waiting');
+    await page.send('Fetch.fulfillRequest', { requestId: page.held, responseCode: 200, body: Buffer.from(LONG_FEED).toString('base64'),
+      responseHeaders: [{ name: 'Content-Type', value: 'text/xml; charset=utf-8' }, { name: 'Access-Control-Allow-Origin', value: '*' }] });
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
+    const after = await page.eval("[document.getElementById('news').dataset.status, document.querySelector('.controls').getBoundingClientRect().top, document.getElementById('news-more').hidden]");
+    assert.equal(after[0], 'ok');
+    assert.equal(after[2], false, 'Show all 5 shows');
+    assert.ok(Math.abs(after[1] - before[3]) <= 4, `the filters moved from ${before[3]} to ${after[1]} px`);
+  } finally { await page.close(); }
+  const failed = await open({ at: utc('2026-10-25T23:50:00Z'), news: { mode: 'http500' } });
+  try {
+    await failed.waitFor("document.getElementById('news').dataset.status === 'failed'");
+    assert.equal(await failed.eval("document.getElementById('news-list').getBoundingClientRect().height"), 0, 'no empty room after a failure');
+  } finally { await failed.close(); }
+});
+
+check('the page does not move as it loads: on a slow network with headlines arriving late, no layout shift on a desktop or a phone', async () => {
+  // Before v0.2.1 the first paint came before the scripts ran, and the filled-in page shifted by 0.87 to 0.9.
+  for (const [width, height, mobile, limit] of [[1280, 900, false, 0.02], [390, 844, true, 0.1]]) {
+    const page = await chrome.newPage();
+    try {
+      await page.send('Storage.clearDataForOrigin', { origin: BASE.slice(0, -1), storageTypes: 'all' });
+      await page.emulate({ timezone: 'America/Chicago', locale: 'en-US' });
+      await page.viewport(width, height, mobile);
+      await page.startClockAt(utc('2026-10-25T23:50:00Z'));
+      await page.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: 200000, uploadThroughput: 90000 });
+      await page.send('Fetch.enable', { patterns: [{ urlPattern: 'https://www.guildwars2.com/*' }] });
+      page.on('Fetch.requestPaused', async (p) => {
+        await sleep(400);
+        await page.send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: 200, body: Buffer.from(LONG_FEED).toString('base64'),
+          responseHeaders: [{ name: 'Content-Type', value: 'text/xml; charset=utf-8' }, { name: 'Access-Control-Allow-Origin', value: '*' }] });
+      });
+      await page.goto(BASE);
+      await page.waitFor("document.querySelectorAll('#news-list li').length === 3", 15000);
+      await sleep(300);
+      const shifts = await page.eval("new Promise((ok) => { const out = []; new PerformanceObserver((l) => { for (const e of l.getEntries()) out.push(e.value); }).observe({ type: 'layout-shift', buffered: true }); setTimeout(() => ok(out), 50); })");
+      const total = shifts.reduce((a, b) => a + b, 0);
+      assert.ok(total < limit, `${width} px: layout shift ${total.toFixed(4)} (${shifts.map((x) => x.toFixed(4)).join(', ') || 'none'})`);
+    } finally { await page.close(); }
+  }
 });
 
 check('desktop screenshot for visual review', async () => {

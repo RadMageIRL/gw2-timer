@@ -11,6 +11,7 @@ export const PATHS = {
   patches: join(ROOT, 'data', 'patches.json'),
   lock: join(ROOT, 'data', 'schedule.lock.json'),
   output: join(ROOT, 'events-data.js'),
+  page: join(ROOT, 'index.html'), // holds the event index made from the same data (tools/lib/event-index.mjs)
 };
 
 export const STATUSES = ['confirmed', 'documented', 'unverified', 'disputed', 'recheck'];
