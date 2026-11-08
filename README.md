@@ -1,19 +1,26 @@
-# GW2 Timer v0.1.0
+# GW2 Timer v0.2.0
 
 World Bosses, Meta Events & More. A Guild Wars 2 timer that shows what is inside its scheduled window right now, what starts next, and when, in your local time. It is an unofficial fansite, made by [RadMage Labs](https://radmagelabs.com/).
 
 **Use it: [radmagelabs.com/gw2-timer](https://radmagelabs.com/gw2-timer/)** (also at [radmageirl.github.io/gw2-timer](https://radmageirl.github.io/gw2-timer/))
 
-![GW2 Timer in the dark theme: the day and night strip for Tyria, Cantha and Castora with the daily and weekly reset countdowns, the filters, Happening now cards for the events inside their scheduled windows, and the start of the Coming up list in local time with UTC alongside](screenshots/gw2-timer.png)
+![GW2 Timer in the dark theme: the day and night strip for Tyria, Cantha and Castora with the daily and weekly reset countdowns, the three newest headlines from ArenaNet, the filters, Scheduled now cards for the events inside their scheduled windows, and the start of the Coming up list in local time with UTC alongside](screenshots/gw2-timer.png)
 
 It is a plain HTML page with no build step and no server. Every time is worked out in the browser from a schedule kept in this repository. Settings, stars and adjustments stay in that browser's local storage. Two requests leave the page: a clock check to its own address, and the news panel's headlines from guildwars2.com, which can be turned off.
 
 ## What it shows
 
+From the top of the page down:
+
+**Clocks and resets**
+- Your local time and UTC, day and night for Tyria, Cantha and Castora, and countdowns to the daily reset (00:00 UTC) and the weekly reset (Monday 07:30 UTC)
+
+**Latest news**
+- The three newest posts from ArenaNet's official feed, with their dates, and Show all 5 for the rest. They load straight from guildwars2.com; the page says so, and news can be turned off
+
 **Now and next**
-- Happening now: the world bosses and meta-events inside their scheduled window, with the time left in the window
-- Coming up: every start in the next 1, 2, 4 or 8 hours, in your time zone with UTC alongside, with Today and Tomorrow breaks
-- Day and night for Tyria, Cantha and Castora, and countdowns to the daily reset (00:00 UTC) and the weekly reset (Monday 07:30 UTC)
+- Scheduled now: the world bosses and meta-events inside their scheduled window, with the time left in the window
+- Coming up: every start in the next 1, 2, 4 or 8 hours, in your time zone with UTC alongside, with Today and Tomorrow breaks. Starts less than 10 minutes away are highlighted
 
 **Events**
 - **15 world bosses**: the game's daily world boss list, including Drakkar and Of Mists and Monsters
@@ -22,15 +29,15 @@ It is a plain HTML page with no build step and no server. Every time is worked o
 - A wiki link for each event
 
 **Your view**
-- Stars (starred events list first without hiding the rest), Hide with a list to bring events back
-- Filters for world bosses, meta events or starred, region chips, a compact mode, and dark, light or system themes
+- Stars (starred events are tinted and list first without hiding the rest), Hide with a list to bring events back
+- Filters for world bosses, meta events or starred, region chips, a compact mode with one line per start, and dark, light or system themes
 
-**Latest news**
-- The five newest posts from ArenaNet's official feed, loaded straight from guildwars2.com; the page says so, and news can be turned off
+**Schedule notes**
+- A closed section at the bottom with the schedule revision, the review dates, how many times are documented, confirmed in game, disputed or unverified, and which events have uncertain times
 
 ## Scheduled, not live
 
-Every time is a scheduled start. Guild Wars 2 has no public live event feed, so a map can run early, run late, fail or close. "Happening now" means the scheduled window is open, not that the fight is on in your map.
+Every time is a scheduled start. Guild Wars 2 has no public live event feed, so a map can run early, run late, fail or close. "Scheduled now" means the scheduled window is open, not that the fight is on in your map.
 
 ## Accuracy
 
@@ -45,7 +52,9 @@ A few times carry a label:
   - Convergence: Nexus of Eternity
 - **Recheck**: a game update may have changed the time.
 
-The footer shows the schedule data revision and the last review date.
+The footer shows the schedule data revision and the last review date. Schedule notes, at the bottom of the page, has the counts for each label and lists the events that carry one.
+
+"Documented" means at least two independent written sources agree. That is a documentation check, not an in-game check: an event is "confirmed in game" only when its start was seen in game.
 
 ## Changes
 

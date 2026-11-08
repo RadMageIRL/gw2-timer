@@ -20,7 +20,13 @@ const SHOTS = opt('shots', null);
 if (!existsSync(join(DIR, 'index.html'))) { console.error(`No site in ${DIR}: run node tools/build.mjs first.`); process.exit(1); }
 
 const DATA = createRequire(import.meta.url)(join(DIR, 'events-data.js'));
+const S = createRequire(import.meta.url)(join(DIR, 'js', 'schedule.js'));
 const FEED = readFileSync(join(ROOT, 'tests', 'fixtures', 'news-feed.xml'), 'utf8');
+const HOSTILE = readFileSync(join(ROOT, 'tests', 'fixtures', 'news-feed-hostile.xml'), 'utf8');
+// Built here because no project file may hold an em dash: real ArenaNet titles do (November 2026).
+const DASH_FEED = `<rss><channel><item><title>Announcing Guild Wars Afterlife${String.fromCharCode(0x2014)}Prepurchase Available Now!</title><link>https://www.guildwars2.com/en/news/afterlife/</link><pubDate>Tue, 03 Nov 2026 16:00:00 +0000</pubDate></item>`
+  + `<item><title>Festival Nov 3${String.fromCharCode(0x2013)}10</title><link>https://www.guildwars2.com/en/news/festival/</link></item></channel></rss>`;
+const VERSION = /^## v(\d+\.\d+\.\d+) /m.exec(readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8'))[1];
 const FEED_URL = 'https://www.guildwars2.com/en/feed/';
 const utc = (iso) => Date.parse(iso);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -47,8 +53,10 @@ async function open({ at, tz = 'America/Chicago', width = 1280, height = 900, mo
   await page.send('Fetch.enable', { patterns: [{ urlPattern: 'https://www.guildwars2.com/*' }] });
   page.on('Fetch.requestPaused', async (p) => {
     page.newsRequests++;
-    if (news.mode === 'fixture') {
-      await page.send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: 200, body: Buffer.from(FEED).toString('base64'),
+    // fixture and hostile answer with a feed; garbage with an HTML error page; http500 with a server error.
+    const answer = { fixture: [200, FEED], hostile: [200, HOSTILE], dashes: [200, DASH_FEED], garbage: [200, '<html><body>Bad gateway</body></html>'], http500: [500, 'error'] }[news.mode];
+    if (answer) {
+      await page.send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: answer[0], body: Buffer.from(answer[1]).toString('base64'),
         responseHeaders: [{ name: 'Content-Type', value: 'text/xml; charset=utf-8' }, { name: 'Access-Control-Allow-Origin', value: '*' }] });
     } else {
       await page.send('Fetch.failRequest', { requestId: p.requestId, errorReason: news.mode === 'offline' ? 'InternetDisconnected' : 'Failed' });
@@ -68,11 +76,12 @@ const unexpected = (page, allow = []) => page.problems.filter((p) => !allow.some
 
 // ---- Loading and what the page shows ----
 
-check('desktop load at 23:50 UTC in Chicago: header, footer, Happening now and Coming up are right', async () => {
+check('desktop load at 23:50 UTC in Chicago: header, footer, Scheduled now and Coming up are right', async () => {
   const page = await open({ at: utc('2026-10-25T23:50:00Z') });
   try {
-    assert.equal(await page.eval('document.title'), 'GW2 Timer v0.1.0 - World Bosses, Meta Events & More | Unofficial fansite | RadMage Labs');
-    assert.match(await text(page, '.brand .tag'), /^v0\.1\.0 · World Bosses, Meta Events & More · RadMage Labs$/);
+    assert.equal(await page.eval('document.title'), `GW2 Timer v${VERSION} - World Bosses, Meta Events & More | Unofficial fansite | RadMage Labs`);
+    assert.equal(await text(page, '.brand .tag'), `v${VERSION} · World Bosses, Meta Events & More · RadMage Labs`);
+    assert.equal(await text(page, '#now-title'), 'Scheduled now');
     assert.equal(await text(page, '#revision'), 'Schedule r1 · reviewed Oct 25, 2026');
     const now = await cards(page);
     for (const id of ['dragons-stand', 'shadow-behemoth', 'battle-for-the-jade-sea', 'secrets-of-the-weald']) assert.ok(now.includes(id), `${id} is in its window`);
@@ -84,8 +93,8 @@ check('desktop load at 23:50 UTC in Chicago: header, footer, Happening now and C
     assert.match(await text(page, '#strip'), /Daily reset7:00 PMin (10m 0\d|9m 5\d)s/);
     assert.match(await text(page, '#strip'), /Weekly resetMon 2:30 AM/);
     assert.match(await text(page, '.explain'), /no public live-event feed/);
-    assert.equal(await page.eval("[...document.querySelectorAll('.pill')].every((p) => p.textContent === 'Scheduled now')"), true);
-    assert.equal(await page.eval("/\\blive\\b/i.test([...document.querySelectorAll('.pill, .badge, h2')].map((e) => e.textContent).join(' '))"), false, 'nothing is labeled live');
+    assert.match(await text(page, '#now-list .event[data-id="dragons-stand"] .since'), /^Started 6:30 PM · 23:30 UTC$/);
+    assert.equal(await page.eval("/\\blive\\b/i.test([...document.querySelectorAll('main .badge, main h2, main h3, main .hint, main .countdown')].map((e) => e.textContent).join(' '))"), false, 'nothing is labeled live');
     assert.deepEqual(unexpected(page), []);
   } finally { await page.close(); }
 });
@@ -102,7 +111,7 @@ check('countdowns tick every second without rebuilding the lists', async () => {
   } finally { await page.close(); }
 });
 
-check('at midnight UTC the daily reset rolls over and the 00:00 events move into Happening now', async () => {
+check('at midnight UTC the daily reset rolls over and the 00:00 events move into Scheduled now', async () => {
   const page = await open({ at: utc('2026-10-25T23:59:55Z') });
   try {
     assert.ok(!(await cards(page)).includes('tequatl-the-sunless'));
@@ -113,7 +122,7 @@ check('at midnight UTC the daily reset rolls over and the 00:00 events move into
   } finally { await page.close(); }
 });
 
-check('an event that starts moves from Coming up into Happening now on its own (00:15, not midnight)', async () => {
+check('an event that starts moves from Coming up into Scheduled now on its own (00:15, not midnight)', async () => {
   const page = await open({ at: utc('2026-10-25T00:14:57Z') });
   try {
     assert.ok((await rows(page)).some((r) => r.id === 'svanir-shaman-chief' && r.start === utc('2026-10-25T00:15:00Z')));
@@ -151,6 +160,9 @@ check('starts after local midnight sit under a Tomorrow heading', async () => {
     const sep = order.indexOf('SEP:Tomorrow');
     assert.ok(sep > 0, JSON.stringify(order.slice(0, 5)));
     assert.ok(order.slice(0, sep).every((s) => s < utc('2026-10-26T05:00:00Z')) && order.slice(sep + 1).every((s) => s >= utc('2026-10-26T05:00:00Z')));
+    // The break is hidden from screen readers, so each later row says its day.
+    assert.equal(await page.eval("[...document.querySelectorAll('#next-list .row')].filter((r) => Number(r.dataset.start) >= " + utc('2026-10-26T05:00:00Z') + ").every((r) => r.querySelector('.when .sr-only').textContent === 'Tomorrow, ')"), true);
+    assert.equal(await page.eval("[...document.querySelectorAll('#next-list .row')].filter((r) => Number(r.dataset.start) < " + utc('2026-10-26T05:00:00Z') + ").some((r) => r.querySelector('.when .sr-only'))"), false);
   } finally { await page.close(); }
 });
 
@@ -263,24 +275,94 @@ check('the Unverified label shows on the four unverified events only', async () 
 
 // ---- News ----
 
-check('news shows five headlines as plain text, says it contacts guildwars2.com, and can be turned off', async () => {
+const newsCount = (page) => page.eval("document.querySelectorAll('#news-list li').length");
+const moreState = (page) => page.eval("(() => { const b = document.getElementById('news-more'); return [b.hidden, b.textContent, b.getAttribute('aria-expanded')]; })()");
+
+check('news shows headlines as plain text with dates, names ArenaNet, says it contacts guildwars2.com, and can be turned off', async () => {
   const page = await open({ at: utc('2026-10-25T23:50:00Z') });
   try {
-    await page.waitFor("document.querySelectorAll('#news-list li').length === 5");
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
     assert.match(await text(page, '#news-note'), /guildwars2\.com \(ArenaNet\), so ArenaNet sees this request/);
+    assert.equal(await text(page, '.news-source'), 'from ArenaNet');
     assert.equal(await page.eval("document.querySelector('#news-list script, #news-list b')"), null);
     assert.match(await text(page, '#news-list li:nth-child(2) a'), /alert\(1\)/);
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('#news-list li')].map((li) => [(li.querySelector('time') || {}).textContent || '', (li.querySelector('time') || {}).dateTime || ''])"),
+      [['Oct 13', '2026-10-13T16:06:21.000Z'], ['Oct 6', '2026-10-06T16:00:22.000Z'], ['', '']]);
     assert.deepEqual(await page.eval("[...document.querySelectorAll('#news-list a')].map((a) => a.getAttribute('href'))").then((h) => h.slice(0, 2)),
       ['https://www.guildwars2.com/en/news/first-test-post/', 'https://www.guildwars2.com/en/news/second-post/?keep=1']);
     await click(page, '#news-toggle'); await settle();
     assert.match(await text(page, '#news-note'), /News is off/);
+    assert.deepEqual(await moreState(page), [true, 'Show all 5', 'false'], 'no Show all while news is off');
     const before = page.newsRequests;
     await page.reload();
     await page.waitFor("document.querySelectorAll('#next-list .row').length > 0");
     await sleep(500);
     assert.equal(page.newsRequests, before, 'no request to guildwars2.com while news is off');
-    assert.equal(await page.eval("document.querySelectorAll('#news-list li').length"), 0);
+    assert.equal(await newsCount(page), 0);
   } finally { await page.close(); }
+});
+
+check('news shows the three newest, expands to all five, and remembers the choice', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('#news-list a')].map((a) => a.firstChild.textContent)"), ['First Test Post - Plain & Simple', 'Second Post with “Quotes”alert(1)', 'No date still shows']);
+    assert.deepEqual(await moreState(page), [false, 'Show all 5', 'false']);
+    await page.eval("document.getElementById('news-more').focus()");
+    await click(page, '#news-more'); await settle();
+    assert.equal(await newsCount(page), 5);
+    assert.deepEqual(await moreState(page), [false, 'Show fewer', 'true']);
+    assert.equal(await page.eval("document.activeElement.id"), 'news-more', 'focus stays on the button');
+    assert.equal(JSON.parse(await page.eval("localStorage.getItem('gw2-timer:v1:prefs')")).newsExpanded, true);
+    await page.reload();
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 5");
+    assert.deepEqual(await moreState(page), [false, 'Show fewer', 'true']);
+    await click(page, '#news-more'); await settle();
+    assert.equal(await newsCount(page), 3);
+    await page.reload();
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
+    await sleep(300);
+    assert.equal(await newsCount(page), 3, 'collapsed stays collapsed');
+  } finally { await page.close(); }
+});
+
+check('a hostile feed shows only plain text and guildwars2.com links, and runs nothing', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z'), news: { mode: 'hostile' } });
+  try {
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
+    await click(page, '#news-more'); await settle();
+    assert.equal(await newsCount(page), 5);
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('#news-list a')].map((a) => a.firstChild.textContent)"),
+      ['Image tag as text', '<script>window.__pwned=2</script> Double encoded', 'gnp.exe Direction override', 'Null and bell characters', 'Uppercase host is kept']);
+    assert.ok((await page.eval("[...document.querySelectorAll('#news-list a')].map((a) => a.href)")).every((h) => h.startsWith('https://www.guildwars2.com/en/news/')));
+    assert.equal(await page.eval("document.querySelectorAll('#news-list *:not(li):not(a):not(time):not(span)').length"), 0, 'no element other than the list, links, dates and spans');
+    await sleep(300);
+    assert.equal(await page.eval('typeof window.__pwned'), 'undefined', 'nothing from the feed ran');
+    assert.deepEqual(unexpected(page), []);
+  } finally { await page.close(); }
+});
+
+check('dashes typed into feed titles show as hyphens: no em dash reaches the page', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z'), news: { mode: 'dashes' } });
+  try {
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 2");
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('#news-list a')].map((a) => a.firstChild.textContent)"), ['Announcing Guild Wars Afterlife - Prepurchase Available Now!', 'Festival Nov 3-10']);
+    assert.equal(await page.eval('document.body.innerText.includes(String.fromCharCode(0x2014))'), false);
+    assert.equal(await page.eval("document.getElementById('news-more').hidden"), true, 'no Show all with only two headlines');
+  } finally { await page.close(); }
+});
+
+check('a feed that answers with an error page or a server error shows the failure note, and the timer carries on', async () => {
+  for (const mode of ['garbage', 'http500']) {
+    const page = await open({ at: utc('2026-10-25T23:50:00Z'), news: { mode } });
+    try {
+      await page.waitFor("/could not load/.test(document.getElementById('news-note').textContent)");
+      assert.equal(await newsCount(page), 0, mode);
+      assert.equal(await page.eval("document.getElementById('news-more').hidden"), true, mode);
+      assert.ok((await rows(page)).length > 10, mode);
+      assert.deepEqual(unexpected(page, [/^HTTP 500 https:\/\/www\.guildwars2\.com/, /^log: Failed to load resource: the server responded with a status of 500/]), [], mode);
+    } finally { await page.close(); }
+  }
 });
 
 check('a failed news feed shows a short message and the timer carries on', async () => {
@@ -297,14 +379,14 @@ check('a failed news feed shows a short message and the timer carries on', async
 check('offline after loading: saved headlines stay with a note, the schedule keeps working', async () => {
   const news = { mode: 'fixture' };
   const first = await open({ at: utc('2026-10-25T23:00:00Z'), news });
-  await first.waitFor("document.querySelectorAll('#news-list li').length === 5");
+  await first.waitFor("document.querySelectorAll('#news-list li').length === 3");
   await first.close();
   news.mode = 'offline';
   const page = await open({ at: utc('2026-10-25T23:50:00Z'), news, keepStorage: true });
   try {
     await page.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
     await page.waitFor("/did not answer; these are the headlines saved/.test(document.getElementById('news-note').textContent)");
-    assert.equal(await page.eval("document.querySelectorAll('#news-list li').length"), 5);
+    assert.equal(await newsCount(page), 3);
     const t1 = await text(page, '#local-time'); await sleep(1200);
     assert.notEqual(await text(page, '#local-time'), t1);
     assert.ok((await rows(page)).length > 10);
@@ -328,7 +410,7 @@ check('the CSP blocks a request to any other site', async () => {
 check('no request leaves the site except the news feed', async () => {
   const page = await open({ at: utc('2026-10-25T23:50:00Z') });
   try {
-    await page.waitFor("document.querySelectorAll('#news-list li').length === 5");
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
     const outside = page.requests.filter((u) => !u.startsWith(BASE) && u !== FEED_URL);
     assert.deepEqual(outside, []);
     assert.ok(page.requests.includes(FEED_URL));
@@ -339,7 +421,7 @@ check('opened from a file: the page works with no errors', async () => {
   const page = await open({ at: utc('2026-10-25T23:50:00Z'), url: pathToFileURL(join(DIR, 'index.html')).href });
   try {
     assert.ok((await rows(page)).length > 10);
-    await page.waitFor("document.querySelectorAll('#news-list li').length === 5");
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
     assert.deepEqual(unexpected(page), []);
   } finally { await page.close(); }
 });
@@ -356,37 +438,204 @@ check('the clock check corrects a device clock that is three minutes slow', asyn
   } finally { await page.close(); }
 });
 
+check('the clock check corrects a device clock that is three minutes fast, and countdowns then match real time', async () => {
+  const page = await open({ at: Date.now() + 180000, url: `http://127.0.0.1:${datedPort}/` });
+  try {
+    await page.waitFor("!document.getElementById('clock-notice').hidden", 15000);
+    assert.match(await text(page, '#clock-notice'), /Your device clock is (2m 5\d|3m 0\d)s fast/);
+    await sleep(1100); // one tick repaints every countdown
+    const r = await page.eval("(() => { const el = document.querySelector('#next-list .row'); return { start: Number(el.dataset.start), text: el.querySelector('.in').textContent }; })()");
+    const left = r.start - Date.now();
+    const ok = [-1500, -1000, -500, 0, 500, 1000].map((d) => `in ${S.duration(left + d)}`);
+    assert.ok(ok.includes(r.text), `${r.text} vs ${ok.join(' | ')}`);
+  } finally { await page.close(); }
+});
+
+check('the weekly reset rolls over at Monday 07:30 UTC, and the next one shows in the new local time after DST ends', async () => {
+  const page = await open({ at: utc('2026-10-26T07:29:56Z') });
+  try {
+    assert.match(await text(page, '#strip'), /Weekly resetMon 2:30 AMin \ds/);
+    // The next Monday is November 2, after US daylight saving ends: 07:30 UTC is then 1:30 AM CST.
+    await page.waitFor("/Weekly resetMon 1:30 AMin 6d 23h/.test(document.getElementById('strip').textContent)", 10000);
+  } finally { await page.close(); }
+});
+
+// ---- v0.2.0 layout: news near the top, Schedule notes, highlights ----
+
+check('page order: clocks and resets, news, filters, Scheduled now, Coming up, Schedule notes, footer', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    const tops = await page.eval("['.topbar', '.strip', '#news', '.controls', '#now-title', '#coming-title', '#schedule-notes', '.site-footer'].map((s) => document.querySelector(s).getBoundingClientRect().top + scrollY)");
+    assert.ok(tops.every((t, i) => i === 0 || t > tops[i - 1]), JSON.stringify(tops));
+  } finally { await page.close(); }
+});
+
+check('the news headlines are on screen without scrolling, on a desktop and on a phone', async () => {
+  for (const [width, height, mobile] of [[1280, 900, false], [1366, 768, false], [390, 844, true], [360, 640, true]]) {
+    const page = await open({ at: utc('2026-10-25T23:50:00Z'), width, height, mobile });
+    try {
+      await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
+      const b = await page.eval("[document.querySelector('#news-list li:last-child').getBoundingClientRect().bottom, innerHeight, scrollY]");
+      assert.ok(b[0] <= b[1] && b[2] === 0, `${width}x${height}: last headline ends at ${b[0]} of ${b[1]}`);
+    } finally { await page.close(); }
+  }
+});
+
+const fmtDay = (iso) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(iso + 'T12:00:00Z'));
+check('Schedule notes: closed at first; then the revision, review dates, counts per status, what they mean, and the uncertain events', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    const m = DATA.meta, count = (s) => DATA.events.filter((e) => e.status === s).length;
+    const uncertain = DATA.events.filter((e) => e.status !== 'documented' && e.status !== 'confirmed');
+    assert.equal(await page.eval("document.getElementById('schedule-notes').open"), false);
+    assert.equal(await text(page, '#notes-hint'), `r${m.datasetRevision} · reviewed ${fmtDay(m.reviewedOn)} · ${uncertain.length} uncertain times`);
+    await click(page, '#schedule-notes summary'); await settle();
+    assert.equal(await page.eval("document.getElementById('schedule-notes').open"), true);
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('#notes-facts dt')].map((dt) => [dt.textContent, dt.nextElementSibling.textContent])"), [
+      ['Schedule revision', `r${m.datasetRevision}`],
+      ['Last reviewed', `${fmtDay(m.reviewedOn)}, against ArenaNet's game update notes through ${fmtDay(m.reviewedThroughPatch)}`],
+      ['Last checked against sources', fmtDay(m.verifiedOn)]]);
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('#notes-counts li')].map((li) => [li.dataset.status, Number(li.querySelector('.count').textContent), li.textContent.replace(/^\\d+ /, '')])"), [
+      ['documented', count('documented'), 'Documented'], ['confirmed', count('confirmed'), 'Confirmed in game'],
+      ['disputed', count('disputed'), 'Disputed'], ['unverified', count('unverified'), 'Unverified']]);
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('#notes-uncertain li')].map((li) => li.dataset.id)").then((a) => a.slice().sort()), uncertain.map((e) => e.id).sort());
+    assert.equal(await text(page, '#notes-uncertain li[data-id="shackles-of-the-ancients"] .rule'), "Eternity's Garden: every 2 h from 01:15 UTC, runs about 25 min.");
+    assert.equal(await text(page, '#notes-uncertain li[data-id="shackles-of-the-ancients"] .badge'), 'Disputed');
+    assert.match(await text(page, '.notes-key'), /documentation check, not an in-game check/);
+    // An adjusted time shows beside the default.
+    await click(page, '#next-list .row[data-id="shackles-of-the-ancients"] [data-adjust]'); await settle();
+    await click(page, '[data-adj-nudge="shackles-of-the-ancients:-5"]'); await settle();
+    assert.equal(await text(page, '#notes-uncertain li[data-id="shackles-of-the-ancients"] .mine'), 'Yours (Adjust): every 2 h from 01:10 UTC.');
+    assert.equal(await page.eval("document.getElementById('schedule-notes').open"), true, 'stays open across a rebuild');
+  } finally { await page.close(); }
+});
+
+check('starts less than 10 minutes away are highlighted, and starred events are tinted and list first in both lists', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    const marks = await page.eval("[...document.querySelectorAll('#next-list .row')].map((r) => [Number(r.dataset.start), r.querySelector('.in').classList.contains('soon')])");
+    for (const [start, on] of marks) assert.equal(on, start <= utc('2026-10-26T00:00:00Z'), new Date(start).toISOString());
+    assert.ok(marks.some((x) => x[1]) && marks.some((x) => !x[1]));
+    assert.equal(await page.eval("getComputedStyle(document.querySelector('.in.soon')).color !== getComputedStyle(document.querySelector('.in:not(.soon)')).color"), true);
+    await click(page, '#now-list .event[data-id="dragons-stand"] [data-star]'); await settle();
+    await click(page, '#next-list .row[data-id="kaineng-blackout"] [data-star]'); await settle();
+    assert.deepEqual(await cards(page).then((c) => c[0]), 'dragons-stand', 'a starred event leads Scheduled now');
+    assert.equal(await page.eval("document.querySelector('#next-list .row').dataset.id"), 'kaineng-blackout');
+    const bg = await page.eval("[...['#next-list .row.is-starred', '#next-list .row:not(.is-starred)', '#now-list .event.is-starred', '#now-list .event:not(.is-starred)']].map((s) => getComputedStyle(document.querySelector(s)).backgroundImage)");
+    assert.ok(bg[0] !== bg[1] && bg[2] !== bg[3], JSON.stringify(bg));
+    assert.equal(await page.eval("document.querySelector('#now-list .event[data-id=\"dragons-stand\"] [data-star]').getAttribute('aria-pressed')"), 'true');
+  } finally { await page.close(); }
+});
+
+check('settings saved by v0.1.0 come back unchanged after the update, and only gain the news choice', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    const v010 = { filter: 'meta', regions: ['core', 'hot', 'pof', 'eod', 'soto', 'jw', 'voe'], starred: ['octovine'], hidden: ['kaineng-blackout'], aheadMin: 240, compact: true, showUtc: false, theme: 'light', news: true };
+    await page.eval(`localStorage.setItem('gw2-timer:v1:prefs', ${JSON.stringify(JSON.stringify(v010))}); localStorage.setItem('gw2-timer:v1:overrides', ${JSON.stringify(JSON.stringify({ 'secrets-of-the-weald': { offsetMin: 105, setAt: 1761400000000 } }))})`);
+    await page.reload();
+    await page.waitFor("document.querySelectorAll('#next-list .row').length > 0");
+    assert.deepEqual(await page.eval("[document.querySelector('[data-filter=\"meta\"]').getAttribute('aria-pressed'), document.querySelector('[data-region=\"ibs\"]').getAttribute('aria-pressed'), document.body.classList.contains('compact'), document.documentElement.dataset.theme, document.getElementById('ahead').value, document.getElementById('hidden-btn').textContent, document.querySelectorAll('#next-list .utc').length]"),
+      ['true', 'false', true, 'light', '240', 'Hidden (1)', 0]);
+    const r = await rows(page);
+    assert.equal(r[0].id, 'octovine', 'the starred event lists first');
+    assert.ok(r.every((x) => EV.get(x.id).kind === 'meta' && x.id !== 'kaineng-blackout'));
+    assert.ok(r.some((x) => x.id === 'secrets-of-the-weald' && new Date(x.start).getUTCMinutes() === 45), 'the saved Adjust time is kept');
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
+    await click(page, '#news-more'); await settle();
+    assert.deepEqual(JSON.parse(await page.eval("localStorage.getItem('gw2-timer:v1:prefs')")), { ...v010, newsExpanded: true });
+  } finally { await page.close(); }
+});
+
 // ---- Layout, keyboard, motion ----
 
-check('on a 390 px phone nothing scrolls sideways and every control is reachable', async () => {
+const sideways = (page, w) => page.eval(`[document.documentElement.scrollWidth, ${w}]`);
+check('on a 390 px phone nothing scrolls sideways and every control is at least 36 px tall', async () => {
   const page = await open({ at: utc('2026-10-25T23:50:00Z'), width: 390, height: 844, mobile: true });
   try {
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
     await click(page, '#next-list .row [data-adjust], #now-list [data-adjust]'); await settle();
+    await click(page, '#schedule-notes summary'); await settle();
     // Mobile emulation widens the layout to fit overflowing content, so compare with the device width itself.
-    assert.deepEqual(await page.eval('[document.documentElement.scrollWidth, innerWidth]'), [390, 390], 'no sideways scroll');
-    const small = await page.eval("[...document.querySelectorAll('button, a.btn, select')].filter((b) => b.offsetParent && b.getBoundingClientRect().height < 26).map((b) => b.textContent)");
+    const [sw] = await sideways(page, 390);
+    assert.equal(sw, 390, 'no sideways scroll');
+    const small = await page.eval("[...document.querySelectorAll('button, a.btn, select, input, summary')].filter((b) => b.offsetParent && (b.getBoundingClientRect().height < 36 || b.getBoundingClientRect().width < 24)).map((b) => b.className + ':' + b.textContent)");
     assert.deepEqual(small, []);
+    const news = await page.eval("[...document.querySelectorAll('#news-list a')].map((a) => a.getBoundingClientRect().height)");
+    assert.ok(news.every((h) => h >= 32), JSON.stringify(news));
     if (SHOTS) await page.screenshot(join(SHOTS, 'mobile.png'), { height: 2200 });
   } finally { await page.close(); }
 });
 
-check('keyboard: Tab reaches the skip link, the filters and the event buttons, and Escape closes About', async () => {
+check('on a 320 px phone, in normal and compact mode, nothing scrolls sideways', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z'), width: 320, height: 640, mobile: true });
+  try {
+    await click(page, '#next-list .row [data-adjust], #now-list [data-adjust]'); await settle();
+    await click(page, '#news-more'); await click(page, '#schedule-notes summary'); await settle();
+    assert.equal((await sideways(page, 320))[0], 320, 'normal');
+    await click(page, '#compact-btn'); await settle();
+    assert.equal((await sideways(page, 320))[0], 320, 'compact');
+  } finally { await page.close(); }
+});
+
+check('compact mode puts each Coming up start on one line', async () => {
   const page = await open({ at: utc('2026-10-25T23:50:00Z') });
   try {
+    const before = await page.eval("Math.max(...[...document.querySelectorAll('#next-list .row')].map((r) => r.getBoundingClientRect().height))");
+    await click(page, '#compact-btn'); await settle();
+    const after = await page.eval("[...document.querySelectorAll('#next-list .row')].map((r) => r.getBoundingClientRect().height)");
+    assert.ok(Math.max(...after) <= 46 && Math.max(...after) < before, `${before} -> ${Math.max(...after)}`);
+    assert.equal(await page.eval("[...document.querySelectorAll('#next-list .row .when')].every((w) => { const t = w.querySelector('.t').getBoundingClientRect(), i = w.querySelector('.in').getBoundingClientRect(); return i.left > t.right && i.top < t.bottom && i.bottom > t.top; })"), true, 'time and countdown side by side');
+    if (SHOTS) await page.screenshot(join(SHOTS, 'desktop-compact.png'), { height: 1100 });
+  } finally { await page.close(); }
+});
+
+const key = (page, k, code, vk) => page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, text: k === 'Enter' ? '\r' : k === ' ' ? ' ' : undefined })
+  .then(() => page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk }));
+check('keyboard: skip links, news, filters and event buttons in order; Enter opens Schedule notes, Space stars, Escape closes About', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
     const seen = [];
-    for (let i = 0; i < 40; i++) {
-      await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
-      await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
-      seen.push(await page.eval("(document.activeElement.className || document.activeElement.tagName) + ''"));
+    for (let i = 0; i < 60; i++) {
+      await key(page, 'Tab', 'Tab', 9);
+      seen.push(await page.eval("(document.activeElement.closest('#news-list') ? 'news-link' : '') || document.activeElement.id || document.activeElement.className || document.activeElement.tagName"));
     }
-    assert.equal(seen[0], 'skip');
-    assert.ok(seen.includes('seg-btn') && seen.includes('chip') && seen.some((c) => c.includes('star-btn')) && seen.some((c) => c.includes('copy')), seen.join(','));
+    assert.deepEqual(seen.slice(0, 2), ['skip', 'skip']);
+    const at = (x) => seen.findIndex((c) => (typeof x === 'string' ? c === x : x.test(c)));
+    const order = [at('news-toggle'), at('news-link'), at('news-more'), at('seg-btn'), at('chip'), at('ahead'), at(/star-btn/), at(/copy/)];
+    assert.ok(order.every((i, n) => i >= 0 && (n === 0 || i > order[n - 1])), seen.join(','));
+    // The first skip link moves focus to Scheduled now.
+    await page.eval("document.querySelector('.skip').focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.equal(await page.eval('document.activeElement.id'), 'now-title');
+    await page.eval("document.querySelector('#schedule-notes summary').focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.equal(await page.eval("document.getElementById('schedule-notes').open"), true);
+    await page.eval("document.querySelector('#next-list .row [data-star]').focus()");
+    await key(page, ' ', 'Space', 32); await settle();
+    assert.equal(await page.eval("document.activeElement.getAttribute('aria-pressed')"), 'true', 'focus follows the starred event to its new place');
     await click(page, '#about-btn'); await settle();
     assert.equal(await page.eval("document.getElementById('about').open"), true);
-    await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
-    await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
-    await settle();
+    await key(page, 'Escape', 'Escape', 27); await settle();
     assert.equal(await page.eval("document.getElementById('about').open"), false);
+  } finally { await page.close(); }
+});
+
+check('every button and link has a name, and every event button names its event', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    const unnamed = await page.eval("[...document.querySelectorAll('button, a[href], select, summary')].filter((el) => !(el.getAttribute('aria-label') || el.textContent.trim() || (el.labels && el.labels.length))).map((el) => el.outerHTML.slice(0, 80))");
+    assert.deepEqual(unnamed, []);
+    const generic = await page.eval("[...document.querySelectorAll('[data-copy], [data-hide], [data-adjust], [data-star]')].filter((b) => !b.getAttribute('aria-label') || !b.getAttribute('aria-label').includes(document.querySelector('#next-list [data-id=\"' + b.closest('[data-id]').dataset.id + '\"] .name, #now-list [data-id=\"' + b.closest('[data-id]').dataset.id + '\"] h3').textContent)).length");
+    assert.equal(generic, 0);
+    assert.equal(await page.eval("document.querySelector('[data-adjust]').getAttribute('aria-controls')"), `adjust-${await page.eval("document.querySelector('[data-adjust]').dataset.adjust")}`);
+    assert.match(await text(page, '#news-list a'), /\(opens a new tab\)$/);
+    // Decorative CSS markers (the disclosure triangle, check marks, the star) stay out of accessible names.
+    await page.send('Accessibility.enable');
+    const { nodes } = await page.send('Accessibility.getFullAXTree', {});
+    const names = nodes.filter((n) => !n.ignored).map((n) => (n.name && n.name.value) || '');
+    assert.ok(names.includes(`Schedule notes r${DATA.meta.datasetRevision} · reviewed ${fmtDay(DATA.meta.reviewedOn)} · ${DATA.events.filter((e) => e.status !== 'documented' && e.status !== 'confirmed').length} uncertain times`), 'the summary is named by its text alone');
+    assert.ok(!names.some((n) => /[\u25B8\u25BE\u2713\u2605]/.test(n)), names.filter((n) => /[\u25B8\u25BE\u2713\u2605]/.test(n)).join(' | '));
   } finally { await page.close(); }
 });
 
@@ -405,7 +654,7 @@ check('desktop screenshot for visual review', async () => {
   if (!SHOTS) return;
   const page = await open({ at: utc('2026-10-25T23:50:00Z') });
   try {
-    await page.waitFor("document.querySelectorAll('#news-list li').length === 5");
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
     await page.screenshot(join(SHOTS, 'desktop.png'), true);
     await click(page, '#theme-btn'); await settle();
     await page.screenshot(join(SHOTS, 'desktop-light.png'), { height: 1400 });

@@ -4,6 +4,33 @@ Every version of GW2 Timer and what changed in it, newest first. Dates are the d
 
 The schedule data has its own revision numbers (r1, r2, ...), listed under "Schedule data" below. A revision is either a **schedule change** (a start time, cycle or event added or removed) or **metadata only** (a label, note or verification status changed; no time moved).
 
+## v0.2.0 (2026-11-08)
+
+Latest news moves to the top, a new Schedule notes section, and usability fixes across the event lists. Settings saved by v0.1.0 carry over unchanged.
+
+Changed
+- Latest news now sits under the clocks and resets, above the filters and the event lists. It shows the three newest headlines with their dates, and Show all 5 lists the rest; the page remembers which you chose. The panel names ArenaNet as the source, and news can still be turned off.
+- "Happening now" is renamed "Scheduled now", to match what it shows: events inside their scheduled window. The "Scheduled now" pill on each card is gone, since the heading says it.
+- Coming up shows the countdown right under each start time, in bold, and a start less than 10 minutes away turns green. UTC moves below the countdown.
+- Starred events are tinted, and they list first in Scheduled now as well as in Coming up.
+- The filters have visible Show and Regions labels. Region chips show a check mark when on and a dashed outline when off, instead of strike-through text.
+- The buttons in Coming up line up in columns whether or not a row has Adjust.
+- Compact mode fits each Coming up row on one line and tightens the cards.
+- On phones and touch screens every button is at least 36 px tall.
+
+Added
+- Schedule notes, a closed section at the bottom: the schedule revision, the review and source-check dates, how many events are documented, confirmed in game, disputed and unverified, what each of those means, and the events whose times are uncertain, with your own time when you have used Adjust.
+
+Fixed
+- A headline with a dash typed straight into ArenaNet's feed (rather than written as an entity) showed that dash as is. Every dash in a headline now shows as a plain hyphen, including headlines saved in the browser by v0.1.0.
+
+Accessibility
+- Adjust, Show (in Hidden) and the news links name their event or say they open a new tab. A start after midnight says its day ("Tomorrow") to screen readers. The clock has a name, and a second skip link goes to Scheduled now.
+
+Security
+- News titles drop direction-override and control characters, and the feed reader ignores items inside comments.
+- The build refuses a daily schedule whose windows overlap.
+
 ## v0.1.0 (2026-10-25)
 
 First public release.

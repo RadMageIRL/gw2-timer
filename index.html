@@ -6,9 +6,9 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://www.guildwars2.com; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="dark light">
-  <script src="js/theme-boot.js?v=0.1.0"></script>
+  <script src="js/theme-boot.js?v=0.2.0"></script>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23101114'/%3E%3Ccircle cx='32' cy='34' r='19' fill='none' stroke='%23d9a441' stroke-width='5'/%3E%3Cpath d='M32 34V22M32 34l9 6' stroke='%23e9e4da' stroke-width='5' stroke-linecap='round'/%3E%3Crect x='26' y='6' width='12' height='7' rx='2' fill='%23d9a441'/%3E%3C/svg%3E">
-  <title>GW2 Timer v0.1.0 - World Bosses, Meta Events &amp; More | Unofficial fansite | RadMage Labs</title>
+  <title>GW2 Timer v0.2.0 - World Bosses, Meta Events &amp; More | Unofficial fansite | RadMage Labs</title>
   <meta name="description" content="Guild Wars 2 world boss and meta-event timer: what is scheduled now and next in your local time, day and night cycles, resets and waypoints. Unofficial fansite.">
   <link rel="canonical" href="https://radmagelabs.com/gw2-timer/">
   <meta property="og:type" content="website">
@@ -19,21 +19,22 @@
   <meta property="og:image" content="https://radmagelabs.com/assets/og/gw2-timer.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="GW2 Timer: the day and night strip, events inside their scheduled window, and the Coming up list in local time">
+  <meta property="og:image:alt" content="GW2 Timer: the day and night strip and resets, the latest ArenaNet headlines, and events inside their scheduled window">
   <meta name="twitter:card" content="summary_large_image">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"WebApplication","name":"GW2 Timer","url":"https://radmagelabs.com/gw2-timer/","applicationCategory":"GameApplication","operatingSystem":"Any","isAccessibleForFree":true,"description":"Guild Wars 2 world boss and meta-event timer. Unofficial fansite.","image":"https://radmagelabs.com/assets/og/gw2-timer.png","screenshot":"https://radmagelabs.com/assets/og/gw2-timer.png","author":{"@type":"Person","name":"RadMageIRL","url":"https://radmagelabs.com/"},"sameAs":"https://github.com/RadMageIRL/gw2-timer"}
   </script>
-  <link rel="stylesheet" href="style.css?v=0.1.0">
+  <link rel="stylesheet" href="style.css?v=0.2.0">
 </head>
 <body>
+  <a class="skip" href="#now-title">Skip to Scheduled now</a>
   <a class="skip" href="#coming-title">Skip to Coming up</a>
   <header class="topbar">
     <div class="brand">
       <h1>GW2 Timer</h1>
-      <span class="tag">v0.1.0 · World Bosses, Meta Events &amp; More · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
+      <span class="tag">v0.2.0 · World Bosses, Meta Events &amp; More · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
     </div>
-    <div class="clock" aria-label="Current time">
+    <div class="clock" role="group" aria-label="Current time">
       <div class="now" id="local-time">--:--</div>
       <div class="sub" id="utc-time"></div>
     </div>
@@ -50,14 +51,33 @@
       <ul class="strip-list" id="strip"></ul>
     </section>
 
-    <section class="controls panel" aria-label="Filters">
-      <div class="seg" role="group" aria-label="Show">
-        <button type="button" class="seg-btn" data-filter="all" aria-pressed="true">All</button>
-        <button type="button" class="seg-btn" data-filter="world-boss" aria-pressed="false">World bosses</button>
-        <button type="button" class="seg-btn" data-filter="meta" aria-pressed="false">Meta events</button>
-        <button type="button" class="seg-btn" data-filter="starred" aria-pressed="false">Starred</button>
+    <section class="news panel" id="news" aria-labelledby="news-title">
+      <div class="news-head">
+        <h2 id="news-title">Latest news</h2>
+        <span class="news-source">from ArenaNet</span>
+        <button type="button" class="link-btn" id="news-toggle"></button>
       </div>
-      <div class="chips" id="region-chips" role="group" aria-label="Regions"></div>
+      <ul class="news-list" id="news-list"></ul>
+      <div class="news-foot">
+        <button type="button" class="link-btn" id="news-more" aria-controls="news-list" aria-expanded="false" hidden></button>
+        <p class="news-note" id="news-note"></p>
+      </div>
+    </section>
+
+    <section class="controls panel" aria-label="Filters">
+      <div class="ctl-line">
+        <span class="ctl-label" id="show-label">Show</span>
+        <div class="seg" role="group" aria-labelledby="show-label">
+          <button type="button" class="seg-btn" data-filter="all" aria-pressed="true">All</button>
+          <button type="button" class="seg-btn" data-filter="world-boss" aria-pressed="false">World bosses</button>
+          <button type="button" class="seg-btn" data-filter="meta" aria-pressed="false">Meta events</button>
+          <button type="button" class="seg-btn" data-filter="starred" aria-pressed="false">Starred</button>
+        </div>
+      </div>
+      <div class="ctl-line">
+        <span class="ctl-label" id="regions-label">Regions</span>
+        <div class="chips" id="region-chips" role="group" aria-labelledby="regions-label"></div>
+      </div>
       <div class="control-row">
         <label class="field">Coming up for
           <select id="ahead">
@@ -75,10 +95,10 @@
 
     <section aria-labelledby="now-title">
       <div class="section-head">
-        <h2 id="now-title">Happening now</h2>
-        <span class="hint">scheduled windows</span>
+        <h2 id="now-title" tabindex="-1">Scheduled now</h2>
+        <span class="hint">inside their scheduled window</span>
       </div>
-      <p class="explain">These events are inside their scheduled window. The game has no public live-event feed, so your map may be early, late, mid-fight, finished or failed.</p>
+      <p class="explain">The game has no public live-event feed, so your map may be early, late, mid-fight, finished or failed.</p>
       <div class="cards" id="now-list"></div>
       <p class="empty" id="now-empty" hidden>Nothing you follow is in its scheduled window right now.</p>
     </section>
@@ -92,14 +112,24 @@
       <p class="empty" id="next-empty" hidden>Nothing you follow starts in this time span.</p>
     </section>
 
-    <section class="news panel" aria-labelledby="news-title">
-      <div class="section-head">
-        <h2 id="news-title">Latest news</h2>
-        <button type="button" class="link-btn" id="news-toggle"></button>
+    <details class="notes panel" id="schedule-notes">
+      <summary><h2 id="notes-title">Schedule notes</h2> <span class="hint" id="notes-hint"></span></summary>
+      <div class="notes-body">
+        <dl class="notes-facts" id="notes-facts"></dl>
+        <h3>How sure each time is</h3>
+        <ul class="notes-counts" id="notes-counts"></ul>
+        <dl class="notes-key">
+          <dt>Documented</dt><dd>At least two independent written sources agree on the time. This is a documentation check, not an in-game check.</dd>
+          <dt>Confirmed in game</dt><dd>The start was seen in game and matched the schedule within two minutes.</dd>
+          <dt>Disputed</dt><dd>Sources disagree on the time. Labeled Unverified on the event, with Adjust.</dd>
+          <dt>Unverified</dt><dd>New or thinly sourced, and not yet checked in game. Labeled Unverified, with Adjust.</dd>
+          <dt>Recheck</dt><dd>A game update may have changed the time. The previous schedule shows until it is checked.</dd>
+        </dl>
+        <h3>Uncertain times</h3>
+        <ul class="notes-uncertain" id="notes-uncertain"></ul>
+        <p class="notes-help">If you see one of these start at another time, use Adjust on that event to set the time you saw. Your setting stays in this browser.</p>
       </div>
-      <p class="news-note" id="news-note"></p>
-      <ul class="news-list" id="news-list"></ul>
-    </section>
+    </details>
   </main>
 
   <footer class="site-footer">
@@ -110,13 +140,13 @@
 
   <dialog id="about" aria-labelledby="about-title">
     <div class="dialog-close"><button type="button" class="btn small" data-close>Close</button></div>
-    <h2 id="about-title">GW2 Timer v0.1.0</h2>
+    <h2 id="about-title">GW2 Timer v0.2.0</h2>
     <p>A Guild Wars 2 timer for world bosses and meta-events: what is in its scheduled window now, what starts next, in your local time. Unofficial fansite, not affiliated with ArenaNet or NCSOFT.</p>
     <h3>Scheduled, not live</h3>
-    <p>Every time here is a scheduled start. The game publishes no live state for events, so a map can run early, late, fail, or close. "Happening now" means the scheduled window is open, not that the fight is on in your map.</p>
+    <p>Every time here is a scheduled start. The game publishes no live state for events, so a map can run early, late, fail, or close. "Scheduled now" means the scheduled window is open, not that the fight is on in your map.</p>
     <h3>Schedule data</h3>
     <p id="about-data"></p>
-    <p>Most times agree across at least two independent sources. A few carry a label:</p>
+    <p>Most times agree across at least two independent sources. A few carry a label (Schedule notes, at the bottom of the page, lists them):</p>
     <ul>
       <li><strong>Unverified</strong>: new, or the sources disagree. If you see it start at another time, use <strong>Adjust</strong> on that event to set the time you saw. Your setting stays in this browser.</li>
       <li><strong>Recheck</strong>: a game update may have changed it; the time shown is the previous schedule until it is checked.</li>
@@ -139,10 +169,10 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="events-data.js?r=1"></script>
-  <script src="js/schedule.js?v=0.1.0"></script>
-  <script src="js/store.js?v=0.1.0"></script>
-  <script src="js/news.js?v=0.1.0"></script>
-  <script src="js/clock.js?v=0.1.0"></script>
-  <script src="js/app.js?v=0.1.0"></script>
+  <script src="js/schedule.js?v=0.2.0"></script>
+  <script src="js/store.js?v=0.2.0"></script>
+  <script src="js/news.js?v=0.2.0"></script>
+  <script src="js/clock.js?v=0.2.0"></script>
+  <script src="js/app.js?v=0.2.0"></script>
 </body>
 </html>

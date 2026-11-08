@@ -108,6 +108,10 @@ function checkSchedule(where, s, errors) {
     else {
       if (!a.every((m) => int(m) && m >= 0 && m <= 1439)) errors.push(`${where}: startsUtc values must be 0 to 1439`);
       if (!a.every((m, i) => i === 0 || m > a[i - 1])) errors.push(`${where}: startsUtc must be sorted with no repeats`);
+      // One window must close before the next opens, across midnight too, as for "every" schedules:
+      // the engine shows one window per event at a time.
+      const gaps = a.map((m, i) => (i + 1 < a.length ? a[i + 1] : a[0] + 1440) - m);
+      if (int(s.windowMin) && gaps.some((g) => g < s.windowMin)) errors.push(`${where}: windows overlap (a window is longer than the gap to the next start)`);
     }
   }
 }

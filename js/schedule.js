@@ -125,6 +125,26 @@
 
   const nudge = (offsetMin, delta, periodMin) => mod(offsetMin + delta, periodMin);
 
+  // ---- Verification status, for the Schedule notes ----
+
+  const STATUSES = ['documented', 'confirmed', 'disputed', 'unverified', 'recheck'];
+  const UNCERTAIN = ['disputed', 'unverified', 'recheck'];
+
+  /**
+   * How many events carry each verification status, and the events whose time is uncertain, in the
+   * order disputed, unverified, recheck, then by name. A status the page does not know is counted
+   * as uncertain under its own name rather than silently as documented.
+   */
+  function statusSummary(events) {
+    const counts = {};
+    for (const s of STATUSES) counts[s] = 0;
+    for (const e of events) counts[e.status] = (counts[e.status] || 0) + 1;
+    const rank = (s) => (UNCERTAIN.includes(s) ? UNCERTAIN.indexOf(s) : UNCERTAIN.length);
+    const uncertain = events.filter((e) => e.status !== 'documented' && e.status !== 'confirmed')
+      .sort((a, b) => rank(a.status) - rank(b.status) || a.name.localeCompare(b.name));
+    return { counts, uncertain, total: events.length };
+  }
+
   // ---- Display helpers (the only code that depends on the local time zone) ----
 
   const pad = (n) => String(n).padStart(2, '0');
@@ -167,7 +187,7 @@
 
   const Schedule = {
     MIN, HOUR, DAY, WEEK, occurrences, currentWindow, nextStart, happening, upcoming, cyclePhase, nextReset,
-    applyOverride, offsetFromSeen, nudge, ruleText, duration, localDayKey, dayLabel,
+    applyOverride, offsetFromSeen, nudge, ruleText, duration, localDayKey, dayLabel, statusSummary,
   };
   if (typeof module === 'object' && module.exports) module.exports = Schedule;
   else root.GW2Schedule = Schedule;

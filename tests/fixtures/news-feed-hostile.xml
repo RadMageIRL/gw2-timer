@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE rss [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+<!-- Hostile items for the news parser and the page. Each must come out as plain text with an https link to www.guildwars2.com, or not at all. -->
+<rss version="2.0">
+<channel>
+  <title>Hostile test feed</title>
+  <!-- <item><title>Commented-out item</title><link>https://www.guildwars2.com/en/news/commented/</link></item> -->
+  <item>
+    <title>&lt;img src=x onerror=&quot;window.__pwned=1&quot;&gt;Image tag as text</title>
+    <link>https://www.guildwars2.com/en/news/img/</link>
+    <pubDate>Tue, 03 Nov 2026 16:00:00 +0000</pubDate>
+  </item>
+  <item>
+    <title>Userinfo trick is dropped</title>
+    <link>https://www.guildwars2.com@evil.example/en/news/x/</link>
+  </item>
+  <item>
+    <title>&amp;lt;script&amp;gt;window.__pwned=2&amp;lt;/script&amp;gt; Double encoded</title>
+    <link>https://www.guildwars2.com/en/news/double/</link>
+    <pubDate>Mon, 02 Nov 2026 16:00:00 +0000</pubDate>
+  </item>
+  <item>
+    <title>Data URL is dropped</title>
+    <link>data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;</link>
+  </item>
+  <item>
+    <title>Protocol-relative link is dropped</title>
+    <link>//www.guildwars2.com/en/news/relative/</link>
+  </item>
+  <item>
+    <title>Script link in CDATA is dropped</title>
+    <link><![CDATA[javascript:alert(1)]]></link>
+  </item>
+  <item>
+    <title>Tab inside the scheme is dropped</title>
+    <link>java&#9;script:alert(1)</link>
+  </item>
+  <item>
+    <title>&#8238;gnp.exe Direction override</title>
+    <link>https://www.guildwars2.com/en/news/rlo/</link>
+    <pubDate>Sun, 01 Nov 2026 16:00:00 +0000</pubDate>
+  </item>
+  <item>
+    <title>   </title>
+    <link>https://www.guildwars2.com/en/news/empty-title/</link>
+  </item>
+  <item>
+    <title>Null &#0; and bell &#7; characters</title>
+    <link>https://www.guildwars2.com/en/news/controls/</link>
+    <pubDate>Sat, 31 Oct 2026 16:00:00 +0000</pubDate>
+  </item>
+  <item>
+    <title>Uppercase host is kept</title>
+    <link>HTTPS://WWW.GUILDWARS2.COM/en/news/upper/?utm_source=x#frag</link>
+    <pubDate>Fri, 30 Oct 2026 16:00:00 +0000</pubDate>
+  </item>
+  <item>
+    <title>Long title xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx &xxe;</title>
+    <link>https://www.guildwars2.com/en/news/long/</link>
+    <pubDate>Thu, 29 Oct 2026 16:00:00 +0000</pubDate>
+  </item>
+</channel>
+</rss>

@@ -13,6 +13,7 @@
   const REGIONS = DATA.regions;
   const REGION = new Map(REGIONS.map((r) => [r.id, r]));
   const KIND_LABEL = { 'world-boss': 'World boss', meta: 'Meta event' };
+  const SOON_MS = 10 * S.MIN; // a start this close is highlighted in Coming up
 
   let prefs = Store.sanitizePrefs(Store.read(storage, 'prefs'), EVENTS.map((e) => e.id), REGIONS.map((r) => r.id));
   let overrides = Store.sanitizeOverrides(Store.read(storage, 'overrides'), EVENTS);
@@ -94,9 +95,10 @@
       h('a', { class: 'btn small', href: wikiUrl(e), target: '_blank', rel: 'noopener noreferrer', 'aria-label': `${e.name} on the Guild Wars 2 Wiki (opens a new tab)`, text: 'Wiki' }),
       h('button', { type: 'button', class: 'btn small', 'data-hide': e.id, 'data-fkey': `${key}:hide`, 'aria-label': `Hide ${e.name}`, text: 'Hide' }),
     ];
-    if (e.adjustable) out.push(h('button', { type: 'button', class: 'btn small', 'data-adjust': e.id, 'data-fkey': `${key}:adjust`, 'aria-expanded': openAdjust.has(e.id) ? 'true' : 'false', text: 'Adjust' }));
+    if (e.adjustable) out.push(h('button', { type: 'button', class: 'btn small adjust', 'data-adjust': e.id, 'data-fkey': `${key}:adjust`, 'aria-expanded': openAdjust.has(e.id) ? 'true' : 'false', 'aria-controls': `adjust-${e.id}`, 'aria-label': `Adjust the start time of ${e.name}`, text: 'Adjust' }));
     return h('div', { class: 'actions' }, out);
   }
+  const isStarred = (e) => prefs.starred.includes(e.id);
 
   function star(e, key) {
     const on = prefs.starred.includes(e.id);
@@ -110,7 +112,7 @@
     panelShown.add(e.id);
     const base = BY_ID.get(e.id);
     const o = overrides[e.id];
-    return h('div', { class: 'adjust-panel', 'data-panel': e.id },
+    return h('div', { class: 'adjust-panel', id: `adjust-${e.id}`, 'data-panel': e.id },
       h('p', { class: 'adj-rule' }, `Default: ${S.ruleText(base.schedule)}.`, o ? h('span', { class: 'adj-now' }, ` Yours: ${S.ruleText(Object.assign({}, base.schedule, { offsetMin: o.offsetMin }))}.`) : null),
       h('div', { class: 'adj-controls' },
         h('label', { class: 'field' }, 'I saw it start at ', h('input', { type: 'time', class: 'adj-time', 'data-adj-input': e.id, 'data-fkey': `adj:${e.id}:input` })),
@@ -124,17 +126,16 @@
   const regionShort = (e) => REGION.get(e.region).short;
   const utcText = (ms) => (prefs.showUtc ? `${formats().utc.format(ms)} UTC` : null);
 
-  // ---- Happening now (cards) ----
+  // ---- Scheduled now (cards) ----
 
   function card(item) {
     const e = item.event, f = formats(), key = `now:${e.id}`;
-    return h('article', { class: 'event is-active', 'data-kind': e.kind, 'data-id': e.id },
-      h('div', { class: 'event-head' }, star(e, key), h('h3', { text: e.name }), h('span', { class: 'pill live', text: 'Scheduled now' })),
-      h('div', { class: 'badges' }, badges(e)),
-      h('p', { class: 'where' }, `${e.map} · ${regionShort(e)}`),
+    return h('article', { class: 'event is-active' + (isStarred(e) ? ' is-starred' : ''), 'data-kind': e.kind, 'data-id': e.id },
+      h('div', { class: 'event-head' }, star(e, key), h('h3', { text: e.name })),
+      h('div', { class: 'badges' }, badges(e), h('span', { class: 'where', text: `${e.map} · ${regionShort(e)}` })),
       h('p', { class: 'countdown' },
-        h('span', { class: 'big', 'data-until': item.end, 'data-prefix': 'Window closes in ' }, 'Window closes in ' + S.duration(item.end - nowMs())),
-        h('span', { class: 'since' }, ` · started ${f.time.format(item.start)}`, utcText(item.start) ? ` (${utcText(item.start)})` : '')),
+        h('span', { class: 'big', 'data-until': item.end, 'data-prefix': 'Window closes in ' }, 'Window closes in ' + S.duration(item.end - nowMs()))),
+      h('p', { class: 'since' }, `Started ${f.time.format(item.start)}`, utcText(item.start) ? ` · ${utcText(item.start)}` : ''),
       e.note ? h('p', { class: 'note', text: e.note }) : null,
       actions(e, key),
       adjustPanel(e));
@@ -144,11 +145,14 @@
 
   function row(item, now) {
     const e = item.event, f = formats(), key = `next:${e.id}:${item.start}`;
-    return h('li', { class: 'row', 'data-kind': e.kind, 'data-id': e.id, 'data-start': item.start },
+    // The visual Today/Tomorrow breaks are hidden from screen readers, so a later day is said in the row.
+    const day = S.localDayKey(item.start) !== S.localDayKey(now) ? S.dayLabel(item.start, now) : null;
+    return h('li', { class: 'row' + (isStarred(e) ? ' is-starred' : ''), 'data-kind': e.kind, 'data-id': e.id, 'data-start': item.start },
       h('div', { class: 'when' },
+        day ? h('span', { class: 'sr-only', text: `${day}, ` }) : null,
         h('span', { class: 't', text: f.time.format(item.start) }),
-        utcText(item.start) ? h('span', { class: 'utc', text: utcText(item.start) }) : null,
-        h('span', { class: 'in', 'data-until': item.start, 'data-prefix': 'in ' }, 'in ' + S.duration(item.start - now))),
+        h('span', { class: 'in' + (item.start - now <= SOON_MS ? ' soon' : ''), 'data-until': item.start, 'data-prefix': 'in ' }, 'in ' + S.duration(item.start - now)),
+        utcText(item.start) ? h('span', { class: 'utc', text: utcText(item.start) }) : null),
       h('div', { class: 'what' },
         h('div', { class: 'line1' }, star(e, key), h('span', { class: 'name', text: e.name }), badges(e)),
         h('div', { class: 'line2', text: `${e.map} · ${regionShort(e)} · runs about ${e.schedule.windowMin} min` }),
@@ -213,9 +217,11 @@
       const typed = new Map([...document.querySelectorAll('[data-adj-input]')].map((i) => [i.getAttribute('data-fkey'), i.value]));
       panelShown.clear();
       $('strip').replaceChildren(...stripItems(now));
-      $('now-list').replaceChildren(...nowItems.map(card));
-      $('now-empty').hidden = nowItems.length > 0;
       const starred = new Set(prefs.starred);
+      // Starred events come first in both lists; otherwise the order is unchanged.
+      const nowSorted = nowItems.filter((i) => starred.has(i.event.id)).concat(nowItems.filter((i) => !starred.has(i.event.id)));
+      $('now-list').replaceChildren(...nowSorted.map(card));
+      $('now-empty').hidden = nowItems.length > 0;
       const top = prefs.filter === 'starred' ? [] : nextItems.filter((i) => starred.has(i.event.id));
       const rest = prefs.filter === 'starred' ? nextItems : nextItems.filter((i) => !starred.has(i.event.id));
       const rows = [];
@@ -226,10 +232,13 @@
       $('coming-hint').textContent = `next ${prefs.aheadMin / 60} ${prefs.aheadMin === 60 ? 'hour' : 'hours'}, your time (${f.zone})`;
       for (const i of document.querySelectorAll('[data-adj-input]')) { const v = typed.get(i.getAttribute('data-fkey')); if (v) i.value = v; }
       if (focusKey) { const el = document.querySelector(`[data-fkey="${CSS.escape(focusKey)}"]`); if (el) el.focus(); }
+      renderNotes();
     }
     for (const el of document.querySelectorAll('[data-until]')) {
-      const t = el.getAttribute('data-prefix') + S.duration(Number(el.getAttribute('data-until')) - now);
+      const left = Number(el.getAttribute('data-until')) - now;
+      const t = el.getAttribute('data-prefix') + S.duration(left);
       if (el.textContent !== t) el.textContent = t;
+      if (el.classList.contains('in')) el.classList.toggle('soon', left <= SOON_MS);
     }
   }
 
@@ -331,6 +340,7 @@
     else if (t.id === 'about-btn') $('about').showModal();
     else if (t.id === 'hidden-btn') { renderHidden(); $('hidden-dialog').showModal(); }
     else if (t.id === 'news-toggle') { prefs.news = !prefs.news; savePrefs(); renderNews(); if (prefs.news) loadNews(); }
+    else if (t.id === 'news-more') { prefs.newsExpanded = !prefs.newsExpanded; savePrefs(); renderNews(); }
     else if (a('data-close') !== null) t.closest('dialog').close();
   });
 
@@ -343,7 +353,7 @@
     const items = prefs.hidden.map((id) => BY_ID.get(id)).filter(Boolean);
     $('hidden-list').replaceChildren(...items.map((e) => h('li', {},
       h('span', { text: `${e.name} (${e.map})` }),
-      h('button', { type: 'button', class: 'btn small', 'data-unhide': e.id, text: 'Show' }))));
+      h('button', { type: 'button', class: 'btn small', 'data-unhide': e.id, 'aria-label': `Show ${e.name} again`, text: 'Show' }))));
     $('hidden-empty').hidden = items.length > 0;
   }
 
@@ -356,16 +366,52 @@
     $('about-data').textContent = `Schedule data r${m.datasetRevision}. Checked against ArenaNet's game update notes through ${isoDay(m.reviewedThroughPatch)}, reviewed ${isoDay(m.reviewedOn)}. Times last checked against sources on ${isoDay(m.verifiedOn)}. ${EVENTS.length} events; ${EVENTS.length - marked} agree across sources and ${marked} are marked Unverified.`;
   }
 
+  // ---- Schedule notes: revision, review dates, status counts and the uncertain times ----
+
+  const STATUS_LABEL = { documented: 'Documented', confirmed: 'Confirmed in game', disputed: 'Disputed', unverified: 'Unverified', recheck: 'Recheck' };
+  let notesKey = '';
+  function renderNotes() {
+    // The notes change only with Adjust times or the time zone, not every time the lists do.
+    const k = JSON.stringify(overrides) + formats().zone;
+    if (k === notesKey) return;
+    notesKey = k;
+    try {
+      const m = DATA.meta, sum = S.statusSummary(EVENTS), n = sum.uncertain.length;
+      $('notes-hint').textContent = `r${m.datasetRevision} · reviewed ${isoDay(m.reviewedOn)} · ${n} uncertain ${n === 1 ? 'time' : 'times'}`;
+      const fact = (k, v) => [h('dt', { text: k }), h('dd', { text: v })];
+      $('notes-facts').replaceChildren(
+        ...fact('Schedule revision', `r${m.datasetRevision}`),
+        ...fact('Last reviewed', `${isoDay(m.reviewedOn)}, against ArenaNet's game update notes through ${isoDay(m.reviewedThroughPatch)}`),
+        ...fact('Last checked against sources', isoDay(m.verifiedOn)));
+      const order = ['documented', 'confirmed', 'disputed', 'unverified'];
+      for (const s of Object.keys(sum.counts)) if (!order.includes(s) && (s !== 'recheck' || sum.counts[s] > 0)) order.push(s);
+      $('notes-counts').replaceChildren(...order.map((s) => h('li', { 'data-status': s },
+        h('span', { class: 'count', text: String(sum.counts[s] || 0) }), ' ', STATUS_LABEL[s] || s)));
+      $('notes-uncertain').replaceChildren(...sum.uncertain.map((e) => {
+        const o = overrides[e.id];
+        const why = e.status === 'recheck' && e.flag ? ` after the ${isoDay(e.flag.patch)} game update` : '';
+        return h('li', { 'data-id': e.id },
+          h('span', { class: 'name', text: e.name }), ' ',
+          h('span', { class: 'badge warn', text: (STATUS_LABEL[e.status] || e.status) + why }),
+          h('span', { class: 'rule', text: `${e.map}: ${S.ruleText(e.schedule)}, runs about ${e.schedule.windowMin} min.` }),
+          o ? h('span', { class: 'rule mine', text: `Yours (Adjust): ${S.ruleText(Object.assign({}, e.schedule, { offsetMin: o.offsetMin }))}.` }) : null);
+      }));
+      if (!n) $('notes-uncertain').replaceChildren(h('li', { text: 'None right now.' }));
+    } catch (e) { /* the notes never break the page */ }
+  }
+
   // ---- News (isolated: nothing here can stop the timer) ----
 
   let newsState = { items: [], fetchedAt: null, status: 'idle' };
   function renderNews() {
     try {
-      const f = formats();
+      const f = formats(), more = $('news-more');
       $('news-toggle').textContent = prefs.news ? 'Turn off news' : 'Turn on news';
+      $('news').classList.toggle('is-off', !prefs.news);
       if (!prefs.news) {
         $('news-note').textContent = 'News is off. Turning it on loads headlines from guildwars2.com, so ArenaNet sees that request.';
         $('news-list').replaceChildren();
+        more.hidden = true;
         return;
       }
       const when = newsState.fetchedAt ? f.stamp.format(newsState.fetchedAt) : '';
@@ -375,10 +421,14 @@
         stale: `guildwars2.com did not answer; these are the headlines saved ${when}.`,
         failed: 'News could not load right now. The timer is not affected.',
       }[newsState.status];
-      $('news-note').textContent = `Headlines load from guildwars2.com (ArenaNet), so ArenaNet sees this request. ${status}`.trim();
-      $('news-list').replaceChildren(...newsState.items.map((i) => h('li', {},
-        h('a', { href: i.link, target: '_blank', rel: 'noopener noreferrer', text: i.title }),
-        i.dateMs ? h('time', { datetime: new Date(i.dateMs).toISOString(), text: f.newsDay.format(i.dateMs) }) : null)));
+      $('news-note').textContent = `${status} Headlines load from guildwars2.com (ArenaNet), so ArenaNet sees this request.`.trim();
+      const all = newsState.items, list = prefs.newsExpanded ? all : all.slice(0, News.SHOWN);
+      $('news-list').replaceChildren(...list.map((i) => h('li', {},
+        i.dateMs ? h('time', { datetime: new Date(i.dateMs).toISOString(), text: f.newsDay.format(i.dateMs) }) : h('span', { class: 'no-date' }),
+        h('a', { href: i.link, target: '_blank', rel: 'noopener noreferrer', text: i.title }, h('span', { class: 'sr-only', text: ' (opens a new tab)' })))));
+      more.hidden = all.length <= News.SHOWN;
+      more.textContent = prefs.newsExpanded ? 'Show fewer' : `Show all ${all.length}`;
+      more.setAttribute('aria-expanded', String(prefs.newsExpanded));
     } catch (e) { /* the news panel never breaks the page */ }
   }
 

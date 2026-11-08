@@ -11,14 +11,18 @@
   const THEMES = ['dark', 'light', 'system'];
 
   function defaults(regionIds) {
-    return { filter: 'all', regions: regionIds.slice(), starred: [], hidden: [], aheadMin: 120, compact: false, showUtc: true, theme: 'dark', news: true };
+    return { filter: 'all', regions: regionIds.slice(), starred: [], hidden: [], aheadMin: 120, compact: false, showUtc: true, theme: 'dark', news: true, newsExpanded: false };
   }
 
   const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
   const pick = (v, allowed, fallback) => (allowed.includes(v) ? v : fallback);
   const idList = (v, known) => (Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === 'string' && known.has(x)))] : []);
 
-  /** Saved preferences, cleaned against the dataset's event and region ids. */
+  /**
+   * Saved preferences, cleaned against the dataset's event and region ids. Settings saved by an
+   * earlier version simply lack the newer keys, which take their defaults; nothing is renamed, so
+   * the storage prefix stays v1.
+   */
   function sanitizePrefs(raw, eventIds, regionIds) {
     const d = defaults(regionIds);
     if (!isObj(raw)) return d;
@@ -33,6 +37,7 @@
       showUtc: raw.showUtc !== false,
       theme: pick(raw.theme, THEMES, d.theme),
       news: raw.news !== false,
+      newsExpanded: raw.newsExpanded === true,
     };
   }
 

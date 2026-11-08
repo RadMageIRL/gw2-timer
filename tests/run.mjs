@@ -186,6 +186,29 @@ test('rule text names the period, the first start and UTC', () => {
   assert.equal(S.ruleText(EV.get('tequatl-the-sunless').schedule), 'daily at 00:00, 03:00, 07:00, 11:30, 16:00, 19:00 UTC');
 });
 
+test('with overlapping windows (a schedule the build refuses), the open window is the most recent one', () => {
+  // Pins the engine's contract for the one case the data rules keep out, so it cannot drift unseen.
+  const daily = { type: 'daily', startsUtc: [0, 10], windowMin: 30 };
+  assert.deepEqual(S.currentWindow(daily, utc('2026-10-25T00:15:00Z')), { start: utc('2026-10-25T00:10:00Z'), end: utc('2026-10-25T00:40:00Z') });
+  const every = { type: 'every', periodMin: 60, offsetMin: 0, windowMin: 90 };
+  assert.equal(S.currentWindow(every, utc('2026-10-25T01:20:00Z')).start, utc('2026-10-25T01:00:00Z'));
+});
+
+test('the status summary counts every status and lists the uncertain events, disputed first', () => {
+  const sum = S.statusSummary(DATA.events);
+  assert.deepEqual(sum.counts, { documented: 31, confirmed: 0, disputed: 2, unverified: 2, recheck: 0 });
+  assert.equal(sum.total, 35);
+  // By status, then by name: "Convergence: Nexus of Eternity" sorts before "Depths of Cruelty".
+  assert.deepEqual(sum.uncertain.map((e) => e.id), ['secrets-of-the-weald', 'shackles-of-the-ancients', 'nexus-of-eternity', 'depths-of-cruelty']);
+  const flagged = DATA.events.map((e) => (e.id === 'octovine' ? { ...e, status: 'recheck' } : e.id === 'tequatl-the-sunless' ? { ...e, status: 'confirmed' } : e));
+  const f = S.statusSummary(flagged);
+  assert.deepEqual([f.counts.documented, f.counts.confirmed, f.counts.recheck], [29, 1, 1]);
+  assert.equal(f.uncertain[f.uncertain.length - 1].id, 'octovine');
+  // A status the page does not know is uncertain, never quietly documented.
+  const odd = S.statusSummary([{ ...DATA.events[0], status: 'mystery' }]);
+  assert.deepEqual([odd.counts.mystery, odd.counts.documented, odd.uncertain.length], [1, 0, 1]);
+});
+
 test('durations read as seconds, minutes, hours or days and never go negative', () => {
   assert.deepEqual([0, 59999, 61000, 3600000, 3661000, 2 * DAY + 3 * 3600000, -5000].map(S.duration),
     ['0s', '59s', '1m 01s', '1h 00m', '1h 01m', '2d 3h', '0s']);
@@ -260,6 +283,12 @@ test('a chat link for another waypoint is refused', () => {
 });
 test('an unsorted daily list is refused', () => {
   assert.match(errorsAfter((s) => { ev(s, 'karka-queen').schedule.startsUtc = [360, 120, 630, 900, 1080, 1380]; }), /sorted/);
+});
+test('a daily list whose windows overlap is refused, across midnight too', () => {
+  assert.match(errorsAfter((s) => { ev(s, 'karka-queen').schedule.windowMin = 200; }), /karka-queen.*windows overlap/);
+  // Starts 23:50 and 00:10 the next day are 20 minutes apart: a 30-minute window overlaps.
+  assert.match(errorsAfter((s) => { const k = ev(s, 'karka-queen').schedule; k.startsUtc = [10, 1430]; k.windowMin = 30; }), /windows overlap/);
+  assert.doesNotMatch(errorsAfter((s) => { const k = ev(s, 'karka-queen').schedule; k.startsUtc = [10, 1420]; k.windowMin = 30; }), /windows overlap/);
 });
 test('a period that does not divide the day is refused', () => {
   assert.match(errorsAfter((s) => { ev(s, 'octovine').schedule.periodMin = 100; }), /periodMin must divide a day/);
@@ -456,6 +485,16 @@ test('saved stars and hidden events keep only ids the dataset knows, once each',
   const p = Store.sanitizePrefs({ starred: ['octovine', 'octovine', 'gone', 5], hidden: ['drakkar', null] }, DATA.events.map((e) => e.id), DATA.regions.map((r) => r.id));
   assert.deepEqual([p.starred, p.hidden], [['octovine'], ['drakkar']]);
 });
+test('settings saved by v0.1.0 load unchanged, with news collapsed by default', () => {
+  const ids = DATA.events.map((e) => e.id), regions = DATA.regions.map((r) => r.id);
+  // Exactly the shape v0.1.0 wrote under gw2-timer:v1:prefs.
+  const v010 = { filter: 'meta', regions: ['core', 'hot', 'pof', 'ibs', 'eod', 'soto', 'jw'], starred: ['octovine'], hidden: ['tequatl-the-sunless'], aheadMin: 240, compact: true, showUtc: false, theme: 'light', news: true };
+  assert.deepEqual(Store.sanitizePrefs(v010, ids, regions), { ...v010, newsExpanded: false });
+  assert.equal(Store.sanitizePrefs({ ...v010, newsExpanded: true }, ids, regions).newsExpanded, true);
+  for (const bad of ['yes', 1, null, {}]) assert.equal(Store.sanitizePrefs({ ...v010, newsExpanded: bad }, ids, regions).newsExpanded, false, JSON.stringify(bad));
+  assert.equal(Store.defaults(regions).newsExpanded, false);
+  assert.equal(Store.PREFIX, 'gw2-timer:v1:', 'the storage prefix is unchanged, so saved settings carry over');
+});
 test('saved overrides are kept only for adjustable events with an offset inside the period', () => {
   const o = Store.sanitizeOverrides({
     'shackles-of-the-ancients': { offsetMin: 70, setAt: 1 }, 'depths-of-cruelty': { offsetMin: 180 },
@@ -474,7 +513,28 @@ test('the feed parser keeps five guildwars2.com https links as plain text, witho
   assert.ok(items.every((i) => !/[<>]/.test(i.title)));
 });
 test('links to other sites, other schemes or plain http are refused', () => {
-  for (const l of ['https://example.com/', 'javascript:alert(1)', 'http://www.guildwars2.com/x', 'https://www.guildwars2.com.evil.com/x', 'not a url']) assert.equal(News.cleanLink(l), null, l);
+  for (const l of ['https://example.com/', 'javascript:alert(1)', 'http://www.guildwars2.com/x', 'https://www.guildwars2.com.evil.com/x', 'not a url',
+    'https://www.guildwars2.com@evil.example/x', '//www.guildwars2.com/x', 'data:text/html,x', 'java\tscript:alert(1)', 'https://guildwars2.com/x']) assert.equal(News.cleanLink(l), null, l);
+});
+test('dashes in headlines become hyphens, typed or as entities, fresh or saved by an earlier version', () => {
+  const EM = String.fromCharCode(0x2014), EN = String.fromCharCode(0x2013);
+  const feed = `<item><title>Announcing Guild Wars Afterlife${EM}Prepurchase Available Now! Nov 3${EN}10 &#8212; a &mdash; b &#x2013; c</title><link>https://www.guildwars2.com/en/news/x/</link></item>`;
+  assert.equal(News.parseFeed(feed)[0].title, 'Announcing Guild Wars Afterlife - Prepurchase Available Now! Nov 3-10 - a - b - c');
+  const saved = News.sanitizeCache({ fetchedAt: 1, items: [{ title: `Afterlife${EM}Prepurchase\u202e`, link: 'https://www.guildwars2.com/en/news/x/', dateMs: 2 }, { title: '\u0007', link: 'https://www.guildwars2.com/en/news/y/' }] });
+  assert.deepEqual(saved.items.map((i) => i.title), ['Afterlife - Prepurchase']);
+});
+test('three headlines show at first, of at most five kept', () => {
+  assert.deepEqual([News.SHOWN, News.MAX_ITEMS], [3, 5]);
+});
+test('a hostile feed: markup, scripts, direction overrides and control characters come out as plain text, and bad links are dropped', () => {
+  const items = News.parseFeed(file('tests/fixtures/news-feed-hostile.xml'), 10);
+  assert.deepEqual(items.map((i) => i.title).slice(0, 5), ['Image tag as text', '<script>window.__pwned=2</script> Double encoded', 'gnp.exe Direction override', 'Null and bell characters', 'Uppercase host is kept']);
+  assert.deepEqual(items.map((i) => i.link), ['img', 'double', 'rlo', 'controls', 'upper', 'long'].map((p) => `https://www.guildwars2.com/en/news/${p}/`));
+  assert.equal(items[5].title.length, 200, 'long titles are cut');
+  assert.ok(items.every((i) => !/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/.test(i.title)));
+  assert.ok(!items.some((i) => /Commented-out/.test(i.title)), 'an item inside a comment is ignored');
+  assert.equal(News.parseFeed(file('tests/fixtures/news-feed-hostile.xml')).length, 5);
+  for (const junk of ['', '<html><body>502 Bad Gateway</body></html>', '{"items":[]}', '<item><title>x</title></item>']) assert.deepEqual(News.parseFeed(junk), [], junk);
 });
 test('a cached copy is fresh for 30 minutes and is re-checked when read back', () => {
   const now = utc('2026-10-25T12:00:00Z');
@@ -544,6 +604,14 @@ test('the CSP allows scripts and styles from this site only, and connections to 
   const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>/g)].map((m) => m[1].trim());
   assert.deepEqual(inline, ['type="application/ld+json"']);
   assert.ok(!/\sstyle="/.test(html) && !/\son[a-z]+="/.test(html), 'no inline style or handler attributes');
+});
+test('the page is in the v0.2.0 order: clocks and strip, news, filters, Scheduled now, Coming up, Schedule notes, footer', () => {
+  const marks = ['<header class="topbar">', 'class="strip panel"', 'id="news"', 'class="controls panel"', 'id="now-title"', 'id="coming-title"', 'id="schedule-notes"', '<footer'];
+  const at = marks.map((m) => html.indexOf(m));
+  assert.ok(at.every((i) => i > 0), JSON.stringify(at));
+  assert.deepEqual(at.slice().sort((a, b) => a - b), at);
+  assert.match(html, /<h2 id="now-title" tabindex="-1">Scheduled now<\/h2>/);
+  assert.match(html, /<details class="notes panel" id="schedule-notes">/, 'Schedule notes start closed');
 });
 test('the only network calls in the code are the news feed and the same-origin clock check', () => {
   const calls = [];
