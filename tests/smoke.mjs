@@ -583,7 +583,10 @@ check('compact mode puts each Coming up start on one line', async () => {
     const before = await page.eval("Math.max(...[...document.querySelectorAll('#next-list .row')].map((r) => r.getBoundingClientRect().height))");
     await click(page, '#compact-btn'); await settle();
     const after = await page.eval("[...document.querySelectorAll('#next-list .row')].map((r) => r.getBoundingClientRect().height)");
-    assert.ok(Math.max(...after) <= 46 && Math.max(...after) < before, `${before} -> ${Math.max(...after)}`);
+    assert.ok(Math.max(...after) < before, `${before} -> ${Math.max(...after)}`);
+    // One line, whatever the fonts: the time, countdown, name and Copy button share a horizontal band.
+    // (A pixel limit failed on Ubuntu's fonts in CI, where the rows were one line but 50 px tall.)
+    assert.equal(await page.eval("[...document.querySelectorAll('#next-list .row')].every((r) => { const b = ['.t', '.in', '.name', '[data-copy]'].map((s) => r.querySelector(s).getBoundingClientRect()); return Math.max(...b.map((x) => x.top)) < Math.min(...b.map((x) => x.bottom)); })"), true, 'each row on one line');
     assert.equal(await page.eval("[...document.querySelectorAll('#next-list .row .when')].every((w) => { const t = w.querySelector('.t').getBoundingClientRect(), i = w.querySelector('.in').getBoundingClientRect(); return i.left > t.right && i.top < t.bottom && i.bottom > t.top; })"), true, 'time and countdown side by side');
     if (SHOTS) await page.screenshot(join(SHOTS, 'desktop-compact.png'), { height: 1100 });
   } finally { await page.close(); }
