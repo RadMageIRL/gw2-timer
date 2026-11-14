@@ -22,6 +22,28 @@ export const KINDS = ['world-boss', 'meta'];
 export const AGREE_TOLERANCE_MIN = 2;
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The source a ref counts as. A later reading of a source that is already listed (a newer wiki
+ * revision, a newer commit of the same file) names it with "sameAs", so reading one source again
+ * never counts as a second, independent source.
+ *
+ * The build refuses a sameAs that is chained, circular or unknown (see validate). This function is
+ * still safe on such data, and never counts more sources than there are: a chain is followed to its
+ * end, every member of a loop gets the same answer (the loop's first id in sort order), and a sameAs
+ * that names an unlisted source counts as that name, so two readings that claim it count once.
+ */
+export function sourceRoot(sources, ref) {
+  const has = (k) => Object.prototype.hasOwnProperty.call(sources || {}, k);
+  const seen = [];
+  let r = String(ref);
+  while (has(r) && typeof sources[r].sameAs === 'string' && sources[r].sameAs) {
+    if (seen.includes(r)) return seen.slice(seen.indexOf(r)).sort()[0];
+    seen.push(r);
+    r = sources[r].sameAs;
+  }
+  return r;
+}
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));
@@ -117,10 +139,10 @@ function checkSchedule(where, s, errors) {
   }
 }
 
-function checkStatus(where, v, schedule, adjustable, errors) {
+function checkStatus(where, v, schedule, adjustable, errors, sources = {}) {
   if (!STATUSES.includes(v.status)) { errors.push(`${where}: unknown status ${v.status}`); return; }
   const ev = v.evidence || [];
-  const agreeingRefs = new Set(ev.filter((e) => e.agrees && e.kind !== 'in-game').map((e) => e.ref));
+  const agreeingRefs = new Set(ev.filter((e) => e.agrees && e.kind !== 'in-game').map((e) => sourceRoot(sources, e.ref)));
   const needs = NEEDS_CHECK.has(v.status);
   if (v.needsInGameCheck !== needs) errors.push(`${where}: needsInGameCheck must be ${needs} for ${v.status}`);
   if (v.status === 'recheck') {
@@ -140,6 +162,11 @@ export function validate(src, patches, lock) {
   if (!Number.isInteger(m.datasetRevision) || m.datasetRevision < 1) errors.push('meta.datasetRevision must be a whole number from 1');
   for (const k of ['reviewedOn', 'verifiedOn', 'reviewedThroughPatch']) if (!DATE.test(m[k] || '')) errors.push(`meta.${k} must be a date`);
   for (const r of m.verifiedAgainst || []) if (!sources[r]) errors.push(`meta.verifiedAgainst: unknown source ${r}`);
+  for (const [id, s] of Object.entries(sources)) {
+    if (s.sameAs === undefined) continue;
+    if (typeof s.sameAs !== 'string' || s.sameAs === id || !Object.prototype.hasOwnProperty.call(sources, s.sameAs)) errors.push(`source ${id}: sameAs must name another listed source`);
+    else if (sources[s.sameAs].sameAs !== undefined) errors.push(`source ${id}: sameAs must name the first listing of that source, not another reading of it`);
+  }
 
   const patchIds = new Set();
   for (const p of patches.reviews || []) {
@@ -172,7 +199,7 @@ export function validate(src, patches, lock) {
     checkEvidence(where, v.evidence, sources, errors);
     if (v.evidence && v.evidence.length && v.lastVerifiedOn !== newestChecked(v.evidence)) errors.push(`${where}: lastVerifiedOn must be the newest evidence date (${newestChecked(v.evidence)})`);
     if (!patchIds.has(v.lastReviewedPatch)) errors.push(`${where}: lastReviewedPatch ${v.lastReviewedPatch} is not a recorded review`);
-    checkStatus(where, v, e.schedule || {}, e.adjustable, errors);
+    checkStatus(where, v, e.schedule || {}, e.adjustable, errors, sources);
   }
   for (const c of src.cycles || []) {
     const sum = (c.phases || []).reduce((a, p) => a + p.durMin, 0);
@@ -200,7 +227,7 @@ export function validate(src, patches, lock) {
       if (before && before !== sha(it.schedule)) {
         const added = (it.evidence || []).slice(was ? was.count : 0).filter((e) => e.agrees);
         const strong = added.some((e) => e.kind === 'in-game' || e.kind === 'official');
-        const sourceRefs = new Set(added.filter((e) => e.kind === 'source').map((e) => e.ref));
+        const sourceRefs = new Set(added.filter((e) => e.kind === 'source').map((e) => sourceRoot(sources, e.ref)));
         if (!strong && sourceRefs.size < 2) errors.push(`${it.key}: schedule changed without new supporting evidence (an in-game check, an ArenaNet statement, or two sources)`);
       }
     }

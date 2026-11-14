@@ -58,7 +58,11 @@
       "postedOn": "2026-10-12",
       "reviewedOn": "2026-10-25",
       "mode": "full-read",
-      "buildObserved": { "id": 209026, "observedOn": "2026-10-25", "source": "https://api.guildwars2.com/v2/build" },
+      "buildObserved": {
+        "id": 209026,
+        "observedOn": "2026-10-25",
+        "source": "https://api.guildwars2.com/v2/build"
+      },
       "sourcesRead": [
         "https://en-forum.guildwars2.com/topic/177745-game-update-notes-october-13-2026/",
         "https://www.guildwars2.com/en/news/shadow-of-the-mad-king-2026-is-now-live/",
@@ -74,11 +78,54 @@
       ],
       "newContent": [],
       "result": "no schedule changes found"
+    },
+    {
+      "id": "2026-11-10",
+      "title": "Game Update Notes: November 10, 2026",
+      "url": "https://en-forum.guildwars2.com/topic/178316-game-update-notes-november-10-2026%C2%A0/",
+      "postedOn": "2026-11-09",
+      "reviewedOn": "2026-11-14",
+      "mode": "full-read",
+      "buildObserved": {
+        "id": 210361,
+        "observedOn": "2026-11-14",
+        "source": "https://api.guildwars2.com/v2/build"
+      },
+      "sourcesRead": [
+        "https://en-forum.guildwars2.com/forum/6-game-release-notes.xml/",
+        "https://en-forum.guildwars2.com/discover/6.xml/",
+        "https://www.guildwars2.com/en/news/the-new-world-vs-world-borderlands-map-beta-is-live/",
+        "https://www.guildwars2.com/en/news/champion-a-noble-cause-with-the-extra-life-2026-donation-bundle/"
+      ],
+      "flagged": [],
+      "findings": [
+        "Notes: adjusted health of some bosses in the Secrets of the Weald meta-event. Balance only; no timing change stated.",
+        "Notes: Fractal Incursion event, November 10 to December 1, with open-world incursion boss events (limited-time; not in the dataset).",
+        "Notes: two Leyspring Hollows map-event fixes and three Nexus of Eternity raid fixes (no timing change; not the meta or the Convergence schedule).",
+        "Notes: Seared Borderlands WvW map beta until December 8 (not open world).",
+        "Hotfixes 2026-11-11 and 2026-11-12 (dev tracker): skill, WvW and achievement fixes; a WvW waypoint moved. No tracked event or waypoint affected.",
+        "Build 210361 is what the API reported on 2026-11-14, after the 2026-11-12 hotfix; the build of the 2026-11-10 release itself was not observed.",
+        "Read through the official feeds: the forum page itself refuses scripted requests, so player replies on the notes topic were not read."
+      ],
+      "newContent": [],
+      "result": "no schedule changes found"
     }
   ],
   "upcoming": [
-    { "date": "2026-11-03", "what": "Halloween ends", "source": "https://www.guildwars2.com/en/news/code-of-creation-concludes-visions-of-eternity-on-september-15/" },
-    { "date": "2026-11-10", "what": "Skills and balance update; Fractal Incursion event (to December 1); WvW new map beta", "source": "https://www.guildwars2.com/en/news/code-of-creation-concludes-visions-of-eternity-on-september-15/" },
-    { "date": "2026-12-08", "what": "Wintersday (to January 5)", "source": "https://www.guildwars2.com/en/news/code-of-creation-concludes-visions-of-eternity-on-september-15/" }
+    {
+      "date": "2026-11-23",
+      "what": "Gnashbash \"Birthday\" Celebration (to December 1)",
+      "source": "https://www.guildwars2.com/en/news/code-of-creation-concludes-visions-of-eternity-on-september-15/"
+    },
+    {
+      "date": "2026-12-01",
+      "what": "Fractal Incursion and the Extra Life bonus event end",
+      "source": "https://www.guildwars2.com/en/news/code-of-creation-concludes-visions-of-eternity-on-september-15/"
+    },
+    {
+      "date": "2026-12-08",
+      "what": "Wintersday (to January 5)",
+      "source": "https://www.guildwars2.com/en/news/code-of-creation-concludes-visions-of-eternity-on-september-15/"
+    }
   ]
 }

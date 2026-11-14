@@ -2,18 +2,22 @@
   "$comment": "GW2 Timer schedule source. Hand-maintained; see docs/MAINTENANCE.md (local). All times are UTC minutes. The build (tools/build-events.mjs) checks every rule.",
   "meta": {
     "datasetRevision": 1,
-    "reviewedOn": "2026-10-25",
-    "reviewedThroughPatch": "2026-10-13",
-    "verifiedOn": "2026-10-25",
+    "reviewedOn": "2026-11-14",
+    "reviewedThroughPatch": "2026-11-10",
+    "verifiedOn": "2026-11-14",
     "verifiedAgainst": [
       "wiki-widget-v5.4",
       "wiki-world-boss-2026-10-06",
       "qjv-8e09f2b6",
       "anet-news-2026-09-08",
       "wiki-day-night-2026-09-17",
-      "wiki-server-reset-2026-09-29"
+      "wiki-server-reset-2026-09-29",
+      "wiki-widget-rev3198874",
+      "qjv-a5aacf5b",
+      "wiki-widget-rev3217039",
+      "qjv-24c30643"
     ],
-    "waypointsCheckedOn": "2026-10-25"
+    "waypointsCheckedOn": "2026-11-14"
   },
   "regions": [
     {
@@ -99,6 +103,34 @@
       "url": "https://api.guildwars2.com/v2/continents/1/floors/1",
       "retrieved": "2026-10-25",
       "license": "ArenaNet Content Terms of Use"
+    },
+    "wiki-widget-rev3198874": {
+      "title": "Guild Wars 2 Wiki, Widget:Event timer/data.json (config v5.4, revision 3198874 of 2026-09-19)",
+      "url": "https://wiki.guildwars2.com/index.php?title=Widget:Event_timer/data.json&oldid=3198874",
+      "retrieved": "Live wiki, 2026-11-08 06:08 UTC. The same content as wiki-widget-v5.4, read again",
+      "license": "GFDL 1.3 (facts restated, nothing copied)",
+      "sameAs": "wiki-widget-v5.4"
+    },
+    "qjv-a5aacf5b": {
+      "title": "qjv/event-timers, event_tracks.json at commit a5aacf5b (file last changed 2026-11-04)",
+      "url": "https://github.com/qjv/event-timers/blob/a5aacf5bfd21ce8a78ee3471b2567276ffd76667/event_tracks.json",
+      "retrieved": "2026-11-08",
+      "license": "MIT (compared only, nothing copied)",
+      "sameAs": "qjv-8e09f2b6"
+    },
+    "wiki-widget-rev3217039": {
+      "title": "Guild Wars 2 Wiki, Widget:Event timer/data.json (config v5.4, revision 3217039 of 2026-11-08)",
+      "url": "https://wiki.guildwars2.com/index.php?title=Widget:Event_timer/data.json&oldid=3217039",
+      "retrieved": "Live wiki, 2026-11-14 02:34 UTC. Differs from revision 3198874 only in the waypoint link of the Nexus of Eternity Convergence; no time changed",
+      "license": "GFDL 1.3 (facts restated, nothing copied)",
+      "sameAs": "wiki-widget-v5.4"
+    },
+    "qjv-24c30643": {
+      "title": "qjv/event-timers, event_tracks.json at commit 24c30643 (file last changed 2026-11-04)",
+      "url": "https://github.com/qjv/event-timers/blob/24c3064388230fcdbe41d33bde69096ee70a2926/event_tracks.json",
+      "retrieved": "2026-11-14. The file is byte-identical to the one at a5aacf5b",
+      "license": "MIT (compared only, nothing copied)",
+      "sameAs": "qjv-8e09f2b6"
     }
   },
   "resets": [
@@ -170,7 +202,7 @@
       ],
       "verification": {
         "status": "documented",
-        "lastVerifiedOn": "2026-10-25",
+        "lastVerifiedOn": "2026-11-14",
         "evidence": [
           {
             "kind": "source",
@@ -193,6 +225,20 @@
             "checked": "2026-10-25",
             "agrees": true,
             "note": "Same phase lengths; Tyrian midnight on even UTC hours."
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
           }
         ]
       }
@@ -226,7 +272,7 @@
       ],
       "verification": {
         "status": "documented",
-        "lastVerifiedOn": "2026-10-25",
+        "lastVerifiedOn": "2026-11-14",
         "evidence": [
           {
             "kind": "source",
@@ -249,6 +295,20 @@
             "checked": "2026-10-25",
             "agrees": true,
             "note": "Same phase lengths; Tyrian midnight on even UTC hours."
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
           }
         ]
       }
@@ -282,7 +342,7 @@
       ],
       "verification": {
         "status": "documented",
-        "lastVerifiedOn": "2026-10-25",
+        "lastVerifiedOn": "2026-11-14",
         "evidence": [
           {
             "kind": "source",
@@ -305,6 +365,20 @@
             "checked": "2026-10-25",
             "agrees": true,
             "note": "Same phase lengths; Tyrian midnight on even UTC hours."
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
           }
         ]
       }
@@ -336,8 +410,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -359,6 +433,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -391,8 +493,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -414,6 +516,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -446,8 +576,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -469,6 +599,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -501,8 +659,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -524,6 +682,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -556,8 +742,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -579,6 +765,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -611,8 +825,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -634,6 +848,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -666,8 +908,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -689,6 +931,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -721,8 +991,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -744,6 +1014,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -776,8 +1074,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -799,6 +1097,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -831,8 +1157,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -854,6 +1180,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -892,8 +1246,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -915,6 +1269,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -953,8 +1335,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -976,6 +1358,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1014,8 +1424,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1037,6 +1447,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1069,8 +1507,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1085,6 +1523,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1117,8 +1583,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1133,6 +1599,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1164,8 +1658,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1180,6 +1674,36 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true,
+            "note": "qjv lists xx:09; within the 2-minute tolerance"
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true,
+            "note": "qjv lists xx:09; within the 2-minute tolerance"
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true,
             "note": "qjv lists xx:09; within the 2-minute tolerance"
           }
@@ -1212,8 +1736,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1228,6 +1752,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1259,8 +1811,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1275,6 +1827,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1306,8 +1886,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1322,6 +1902,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1353,8 +1961,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1369,6 +1977,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1400,8 +2036,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1416,6 +2052,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1447,8 +2111,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1463,6 +2127,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1494,8 +2186,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1510,6 +2202,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1541,8 +2261,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1557,6 +2277,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1588,8 +2336,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1604,6 +2352,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1635,8 +2411,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1651,6 +2427,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1682,8 +2486,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1698,6 +2502,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1729,8 +2561,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1745,6 +2577,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1776,8 +2636,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1792,6 +2652,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1823,8 +2711,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1839,6 +2727,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1870,8 +2786,8 @@
       "verification": {
         "status": "documented",
         "needsInGameCheck": false,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1886,6 +2802,34 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],
@@ -1917,8 +2861,8 @@
       "verification": {
         "status": "disputed",
         "needsInGameCheck": true,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -1933,6 +2877,36 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": false,
+            "note": "qjv lists xx:45 with a 20 min window"
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": false,
+            "note": "qjv lists xx:45 with a 20 min window"
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": false,
             "note": "qjv lists xx:45 with a 20 min window"
           }
@@ -1965,8 +2939,8 @@
       "verification": {
         "status": "disputed",
         "needsInGameCheck": true,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "official",
         "evidence": [
           {
@@ -1990,6 +2964,34 @@
             "checked": "2026-10-25",
             "agrees": false,
             "note": "Start moved \"five minutes earlier\". The wiki had xx:10 before the move, which would give xx:05, but it now lists xx:15 (as does qjv)."
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
+            "agrees": true
           }
         ],
         "since": "2026-09-20",
@@ -2020,8 +3022,8 @@
       "verification": {
         "status": "unverified",
         "needsInGameCheck": true,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "official",
         "evidence": [
           {
@@ -2045,6 +3047,34 @@
             "checked": "2026-10-25",
             "agrees": true,
             "note": "Confirms the three-hour cycle; gives no start time."
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
+            "agrees": true
           }
         ],
         "since": "2026-09-17",
@@ -2075,8 +3105,8 @@
       "verification": {
         "status": "unverified",
         "needsInGameCheck": true,
-        "lastReviewedPatch": "2026-10-13",
-        "lastVerifiedOn": "2026-10-25",
+        "lastReviewedPatch": "2026-11-10",
+        "lastVerifiedOn": "2026-11-14",
         "method": "sources",
         "evidence": [
           {
@@ -2091,6 +3121,35 @@
             "ref": "qjv-8e09f2b6",
             "on": "2026-09-27",
             "checked": "2026-10-25",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3198874",
+            "on": "2026-09-19",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-a5aacf5b",
+            "on": "2026-11-04",
+            "checked": "2026-11-08",
+            "agrees": true
+          },
+          {
+            "kind": "source",
+            "ref": "wiki-widget-rev3217039",
+            "on": "2026-11-08",
+            "checked": "2026-11-14",
+            "agrees": true,
+            "note": "The schedule agrees. This revision lists Doyen's Adytum Waypoint for the Convergence; the dataset keeps Hall of Assemblage Waypoint until the entrance is checked in game."
+          },
+          {
+            "kind": "source",
+            "ref": "qjv-24c30643",
+            "on": "2026-11-04",
+            "checked": "2026-11-14",
             "agrees": true
           }
         ],

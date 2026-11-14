@@ -11,7 +11,7 @@
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { ROOT, PATHS, AGREE_TOLERANCE_MIN, readJson, writeJson, today } from './lib/dataset.mjs';
+import { ROOT, PATHS, AGREE_TOLERANCE_MIN, readJson, writeJson, today, sourceRoot } from './lib/dataset.mjs';
 
 const S = createRequire(import.meta.url)('../js/schedule.js');
 
@@ -69,7 +69,7 @@ export function recordEvidence(source, opts) {
   } else if (!agrees) {
     v.status = 'disputed'; v.needsInGameCheck = true; v.flag = null;
   } else if (v.status === 'recheck') {
-    const refs = new Set(v.evidence.filter((x) => x.agrees && x.kind !== 'in-game' && x.checked >= v.flag.patch).map((x) => x.ref));
+    const refs = new Set(v.evidence.filter((x) => x.agrees && x.kind !== 'in-game' && x.checked >= v.flag.patch).map((x) => sourceRoot(source.sources, x.ref)));
     if (refs.size >= 2) { v.status = 'documented'; v.needsInGameCheck = false; v.flag = null; }
   }
   return { id: e.id, before, after: v.status, agrees, implied };

@@ -4,10 +4,10 @@
   var data = {
    "meta": {
     "datasetRevision": 1,
-    "reviewedOn": "2026-10-25",
-    "reviewedThroughPatch": "2026-10-13",
-    "reviewedThroughTitle": "Game Update Notes: October 13, 2026",
-    "verifiedOn": "2026-10-25"
+    "reviewedOn": "2026-11-14",
+    "reviewedThroughPatch": "2026-11-10",
+    "reviewedThroughTitle": "Game Update Notes: November 10, 2026",
+    "verifiedOn": "2026-11-14"
    },
    "regions": [
     {

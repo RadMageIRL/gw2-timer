@@ -262,6 +262,12 @@ test('the page data carries no evidence or maintenance internals', () => {
 
 // ---- The build rules, each shown failing on a broken copy ----
 
+// Dates for evidence and reviews added in these tests: always after everything the data holds, so a
+// data update (a later review, a later source check) never breaks them.
+const dayAfter = (d, n = 1) => new Date(Date.parse(`${d}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
+const NEWEST = [SOURCE.meta.verifiedOn, SOURCE.meta.reviewedOn, SOURCE.meta.reviewedThroughPatch].sort().pop();
+const NEXT_PATCH = dayAfter(NEWEST, 1), NEXT_DAY = dayAfter(NEWEST, 2), DAY_AFTER = dayAfter(NEWEST, 3);
+
 const errorsAfter = (mutate) => { const s = copy(SOURCE); mutate(s); return D.validate(s, PATCHES, LOCK).join('\n'); };
 const ev = (s, id) => s.events.find((e) => e.id === id);
 
@@ -308,9 +314,9 @@ test('a schedule edit with a new agreeing in-game check is accepted', () => {
   const out = errorsAfter((s) => {
     const e = ev(s, 'octovine');
     e.schedule.offsetMin = 65;
-    e.verification.evidence.push({ kind: 'in-game', ref: 'sighting:2026-10-26-octovine-0105', on: '2026-10-26', checked: '2026-10-26', agrees: true });
-    e.verification.lastVerifiedOn = '2026-10-26';
-    s.meta.verifiedOn = '2026-10-26';
+    e.verification.evidence.push({ kind: 'in-game', ref: 'sighting:2026-10-26-octovine-0105', on: NEXT_DAY, checked: NEXT_DAY, agrees: true });
+    e.verification.lastVerifiedOn = NEXT_DAY;
+    s.meta.verifiedOn = NEXT_DAY;
   });
   assert.equal(out, '');
 });
@@ -318,9 +324,9 @@ test('a schedule edit backed by only one new source is refused, by two is accept
   const add = (s, refs) => {
     const e = ev(s, 'octovine');
     e.schedule.offsetMin = 65;
-    for (const r of refs) e.verification.evidence.push({ kind: 'source', ref: r, on: '2026-10-26', checked: '2026-10-26', agrees: true });
-    e.verification.lastVerifiedOn = '2026-10-26';
-    s.meta.verifiedOn = '2026-10-26';
+    for (const r of refs) e.verification.evidence.push({ kind: 'source', ref: r, on: NEXT_DAY, checked: NEXT_DAY, agrees: true });
+    e.verification.lastVerifiedOn = NEXT_DAY;
+    s.meta.verifiedOn = NEXT_DAY;
   };
   assert.match(errorsAfter((s) => add(s, ['qjv-8e09f2b6'])), /without new supporting evidence/);
   assert.equal(errorsAfter((s) => add(s, ['qjv-8e09f2b6', 'wiki-widget-v5.4'])), '');
@@ -370,18 +376,18 @@ const scheduleSnapshot = (s) => JSON.stringify(s.events.map((e) => [e.id, e.sche
 test('a patch review with no flags changes no schedule, evidence, verification date or status', () => {
   const s = copy(SOURCE), p = copy(PATCHES);
   const before = scheduleSnapshot(s);
-  const r = recordReview(s, p, { id: '2026-11-03', title: 'Game Update Notes: November 3, 2026', url: 'https://en-forum.guildwars2.com/topic/1-test/', date: '2026-11-04' });
+  const r = recordReview(s, p, { id: NEXT_PATCH, title: 'Game Update Notes: a later update', url: 'https://en-forum.guildwars2.com/topic/1-test/', date: NEXT_DAY });
   assert.equal(r.result, 'no schedule changes found');
   assert.equal(scheduleSnapshot(s), before);
-  assert.ok(s.events.every((e) => e.verification.lastReviewedPatch === '2026-11-03'));
-  assert.deepEqual([s.meta.reviewedOn, s.meta.reviewedThroughPatch, s.meta.verifiedOn], ['2026-11-04', '2026-11-03', SOURCE.meta.verifiedOn]);
+  assert.ok(s.events.every((e) => e.verification.lastReviewedPatch === NEXT_PATCH));
+  assert.deepEqual([s.meta.reviewedOn, s.meta.reviewedThroughPatch, s.meta.verifiedOn], [NEXT_DAY, NEXT_PATCH, SOURCE.meta.verifiedOn]);
   assert.deepEqual(D.validate(s, p, LOCK), []);
   assert.equal(D.revisionState(s, LOCK).changed, false);
 });
 
 test('a patch review that flags an event sets recheck and keeps its schedule', () => {
   const s = copy(SOURCE), p = copy(PATCHES);
-  recordReview(s, p, { id: '2026-11-03', title: 'Game Update Notes: November 3, 2026', url: 'https://en-forum.guildwars2.com/topic/1-test/', flag: ['octovine'], reason: 'Auric Basin meta rework', date: '2026-11-04' });
+  recordReview(s, p, { id: NEXT_PATCH, title: 'Game Update Notes: a later update', url: 'https://en-forum.guildwars2.com/topic/1-test/', flag: ['octovine'], reason: 'Auric Basin meta rework', date: NEXT_DAY });
   const o = ev(s, 'octovine');
   assert.deepEqual([o.verification.status, o.verification.needsInGameCheck, o.verification.flag.previousStatus], ['recheck', true, 'documented']);
   assert.deepEqual(o.schedule, ev(SOURCE, 'octovine').schedule);
@@ -392,22 +398,22 @@ test('a patch review that flags an event sets recheck and keeps its schedule', (
 
 test('a review cannot be recorded twice or flag an unknown event', () => {
   assert.throws(() => recordReview(copy(SOURCE), copy(PATCHES), { id: '2026-10-13', title: 'x', url: 'https://x/' }), /already recorded/);
-  assert.throws(() => recordReview(copy(SOURCE), copy(PATCHES), { id: '2026-11-03', title: 'x', url: 'https://x/', flag: ['nope'], reason: 'r' }), /unknown event/);
+  assert.throws(() => recordReview(copy(SOURCE), copy(PATCHES), { id: NEXT_PATCH, title: 'x', url: 'https://x/', flag: ['nope'], reason: 'r' }), /unknown event/);
 });
 
 test('an agreeing in-game sighting confirms an event and removes its override', () => {
   const s = copy(SOURCE);
-  const r = recordEvidence(s, { id: 'shackles-of-the-ancients', method: 'in-game', seen: '2026-10-26T21:16:00Z', date: '2026-10-26', sightingsDir: null });
+  const r = recordEvidence(s, { id: 'shackles-of-the-ancients', method: 'in-game', seen: '2026-10-26T21:16:00Z', date: NEXT_DAY, sightingsDir: null });
   const e = ev(s, 'shackles-of-the-ancients');
   assert.deepEqual([r.agrees, e.verification.status, e.verification.needsInGameCheck, e.adjustable], [true, 'confirmed', false, false]);
   assert.deepEqual(e.schedule, ev(SOURCE, 'shackles-of-the-ancients').schedule);
-  assert.deepEqual([e.verification.lastVerifiedOn, s.meta.verifiedOn], ['2026-10-26', '2026-10-26']);
+  assert.deepEqual([e.verification.lastVerifiedOn, s.meta.verifiedOn], [NEXT_DAY, NEXT_DAY]);
   assert.deepEqual(D.validate(s, PATCHES, LOCK), []);
 });
 
 test('a disagreeing sighting marks the event disputed, implies a schedule, and does not change it', () => {
   const s = copy(SOURCE);
-  const r = recordEvidence(s, { id: 'depths-of-cruelty', method: 'in-game', seen: '2026-10-26T20:10:00Z', date: '2026-10-26', sightingsDir: null });
+  const r = recordEvidence(s, { id: 'depths-of-cruelty', method: 'in-game', seen: '2026-10-26T20:10:00Z', date: NEXT_DAY, sightingsDir: null });
   const e = ev(s, 'depths-of-cruelty');
   // Seen 10 minutes after the 20:00 start: 20:10 is 130 minutes into the 18:00 three-hour cycle.
   assert.deepEqual([r.agrees, e.verification.status, r.implied.offsetMin], [false, 'disputed', 130]);
@@ -430,12 +436,121 @@ test('a sighting 2 minutes off is recorded as agreeing, 3 minutes off as disagre
 
 test('a recheck clears to documented only after two agreeing sources dated after the flag', () => {
   const s = copy(SOURCE), p = copy(PATCHES);
-  recordReview(s, p, { id: '2026-11-03', title: 'Game Update Notes: November 3, 2026', url: 'https://en-forum.guildwars2.com/topic/1-test/', flag: ['octovine'], reason: 'r', date: '2026-11-04' });
-  recordEvidence(s, { id: 'octovine', method: 'sources', ref: 'qjv-8e09f2b6', on: '2026-11-05', agrees: 'yes', date: '2026-11-05' });
+  recordReview(s, p, { id: NEXT_PATCH, title: 'Game Update Notes: a later update', url: 'https://en-forum.guildwars2.com/topic/1-test/', flag: ['octovine'], reason: 'r', date: NEXT_DAY });
+  recordEvidence(s, { id: 'octovine', method: 'sources', ref: 'qjv-8e09f2b6', on: DAY_AFTER, agrees: 'yes', date: DAY_AFTER });
   assert.equal(ev(s, 'octovine').verification.status, 'recheck');
-  recordEvidence(s, { id: 'octovine', method: 'sources', ref: 'wiki-widget-v5.4', on: '2026-11-05', agrees: 'yes', date: '2026-11-05' });
+  recordEvidence(s, { id: 'octovine', method: 'sources', ref: 'wiki-widget-v5.4', on: DAY_AFTER, agrees: 'yes', date: DAY_AFTER });
   assert.equal(ev(s, 'octovine').verification.status, 'documented');
   assert.deepEqual(D.validate(s, p, LOCK), []);
+});
+
+// ---- Reading one source again is not a second source ----
+
+const withReading = (s, id, of) => { s.sources[id] = { title: 'a later reading', url: 'https://example.org/', retrieved: DAY_AFTER, license: 'x', sameAs: of }; };
+
+test('two readings of the same source count as one: documented, a schedule edit and a recheck all still need a second source', () => {
+  // Documented: Secrets of the Weald agrees with the wiki only, however many wiki revisions were read.
+  const weald = ev(SOURCE, 'secrets-of-the-weald').verification.evidence.filter((x) => x.agrees);
+  assert.ok(weald.length > 1 && new Set(weald.map((x) => D.sourceRoot(SOURCE.sources, x.ref))).size === 1, 'the data holds several agreeing readings of one source');
+  // A schedule edit backed by two readings of the wiki is refused; a reading of each source is accepted.
+  const edit = (s, refs) => {
+    withReading(s, 'wiki-again', 'wiki-widget-v5.4'); withReading(s, 'qjv-again', 'qjv-8e09f2b6');
+    const e = ev(s, 'octovine');
+    e.schedule.offsetMin = 65;
+    for (const r of refs) e.verification.evidence.push({ kind: 'source', ref: r, on: NEXT_DAY, checked: NEXT_DAY, agrees: true });
+    e.verification.lastVerifiedOn = NEXT_DAY;
+    s.meta.verifiedOn = NEXT_DAY;
+  };
+  assert.match(errorsAfter((s) => edit(s, ['wiki-widget-v5.4', 'wiki-again'])), /without new supporting evidence/);
+  assert.equal(errorsAfter((s) => edit(s, ['wiki-again', 'qjv-again'])), '');
+  // A recheck does not clear on two readings of the wiki.
+  const s = copy(SOURCE), p = copy(PATCHES);
+  withReading(s, 'wiki-again', 'wiki-widget-v5.4');
+  recordReview(s, p, { id: NEXT_PATCH, title: 'Game Update Notes: a later update', url: 'https://en-forum.guildwars2.com/topic/1-test/', flag: ['octovine'], reason: 'r', date: NEXT_DAY });
+  recordEvidence(s, { id: 'octovine', method: 'sources', ref: 'wiki-widget-v5.4', on: DAY_AFTER, agrees: 'yes', date: DAY_AFTER });
+  recordEvidence(s, { id: 'octovine', method: 'sources', ref: 'wiki-again', on: DAY_AFTER, agrees: 'yes', date: DAY_AFTER });
+  assert.equal(ev(s, 'octovine').verification.status, 'recheck');
+  recordEvidence(s, { id: 'octovine', method: 'sources', ref: 'qjv-8e09f2b6', on: DAY_AFTER, agrees: 'yes', date: DAY_AFTER });
+  assert.equal(ev(s, 'octovine').verification.status, 'documented');
+});
+
+test('sameAs must name the first listing of another source', () => {
+  assert.match(errorsAfter((s) => withReading(s, 'x', 'nope')), /source x: sameAs must name another listed source/);
+  assert.match(errorsAfter((s) => withReading(s, 'x', 'x')), /source x: sameAs must name another listed source/);
+  assert.match(errorsAfter((s) => { withReading(s, 'x', 'wiki-widget-v5.4'); withReading(s, 'y', 'x'); }), /source y: sameAs must name the first listing/);
+  assert.equal(errorsAfter((s) => withReading(s, 'x', 'wiki-widget-v5.4')), '');
+});
+
+test('sourceRoot is safe on chained, circular and unknown sameAs, and never counts a source twice', () => {
+  const src = {
+    a: {}, b: { sameAs: 'a' }, c: { sameAs: 'b' },            // a chain: c -> b -> a
+    p: { sameAs: 'q' }, q: { sameAs: 'r' }, r: { sameAs: 'p' }, // a loop
+    self: { sameAs: 'self' },
+    lost1: { sameAs: 'gone' }, lost2: { sameAs: 'gone' },      // sameAs names nothing listed
+    odd: { sameAs: 42 }, proto: { sameAs: 'constructor' },
+  };
+  const root = (r) => D.sourceRoot(src, r);
+  assert.deepEqual(['a', 'b', 'c'].map(root), ['a', 'a', 'a']);
+  assert.deepEqual(['p', 'q', 'r'].map(root), ['p', 'p', 'p']);
+  assert.equal(root('self'), 'self');
+  assert.deepEqual(['lost1', 'lost2'].map(root), ['gone', 'gone']);
+  assert.deepEqual([root('odd'), root('proto'), root('never-listed'), root('constructor'), root('__proto__')], ['odd', 'constructor', 'never-listed', 'constructor', '__proto__']);
+  assert.equal(D.sourceRoot(undefined, 'x'), 'x');
+  // However the refs are arranged, the number of sources counted is never more than the number of separate lineages.
+  assert.equal(new Set(['a', 'b', 'c', 'a', 'c'].map(root)).size, 1);
+  assert.equal(new Set(['p', 'q', 'r', 'self'].map(root)).size, 2);
+});
+
+test('the same ref given twice, or with its later readings, is one source for documented and for a schedule edit', () => {
+  // Documented on the wiki alone, listed three times over, is refused.
+  const out = errorsAfter((s) => {
+    const e = ev(s, 'secrets-of-the-weald');
+    for (const r of ['wiki-widget-v5.4', 'wiki-widget-v5.4', 'wiki-widget-rev3217039']) e.verification.evidence.push({ kind: 'source', ref: r, on: NEXT_DAY, checked: NEXT_DAY, agrees: true });
+    e.verification.lastVerifiedOn = NEXT_DAY; s.meta.verifiedOn = NEXT_DAY;
+    e.verification.status = 'documented'; e.verification.needsInGameCheck = false; e.adjustable = false;
+  });
+  assert.match(out, /event secrets-of-the-weald: documented needs two agreeing sources, has 1/);
+  // A schedule edit backed by the same ref twice and a later reading of it is refused.
+  const twice = errorsAfter((s) => {
+    const e = ev(s, 'octovine');
+    e.schedule.offsetMin = 65;
+    for (const r of ['qjv-8e09f2b6', 'qjv-8e09f2b6', 'qjv-24c30643']) e.verification.evidence.push({ kind: 'source', ref: r, on: NEXT_DAY, checked: NEXT_DAY, agrees: true });
+    e.verification.lastVerifiedOn = NEXT_DAY; s.meta.verifiedOn = NEXT_DAY;
+  });
+  assert.match(twice, /without new supporting evidence/);
+});
+
+test('a circular or non-text sameAs is refused by the build', () => {
+  const loop = errorsAfter((s) => { withReading(s, 'x', 'y'); withReading(s, 'y', 'x'); });
+  assert.match(loop, /source x: sameAs must name the first listing/);
+  assert.match(loop, /source y: sameAs must name the first listing/);
+  assert.match(errorsAfter((s) => { withReading(s, 'x', 42); }), /source x: sameAs must name another listed source/);
+  assert.match(errorsAfter((s) => { withReading(s, 'x', 'constructor'); }), /source x: sameAs must name another listed source/);
+});
+
+test('the November 2026 source checks are on record as readings, each on its own date, and moved nothing', () => {
+  const dates = (id) => ev(SOURCE, id).verification.evidence.map((x) => `${x.ref}@${x.checked}`);
+  for (const e of SOURCE.events) {
+    for (const want of ['wiki-widget-rev3198874@2026-11-08', 'qjv-a5aacf5b@2026-11-08', 'wiki-widget-rev3217039@2026-11-14', 'qjv-24c30643@2026-11-14']) assert.ok(dates(e.id).includes(want), `${e.id} ${want}`);
+  }
+  for (const [id, of] of [['wiki-widget-rev3198874', 'wiki-widget-v5.4'], ['wiki-widget-rev3217039', 'wiki-widget-v5.4'], ['qjv-a5aacf5b', 'qjv-8e09f2b6'], ['qjv-24c30643', 'qjv-8e09f2b6']]) assert.equal(SOURCE.sources[id].sameAs, of);
+  const status = (id) => ev(SOURCE, id).verification.status;
+  assert.deepEqual(['secrets-of-the-weald', 'shackles-of-the-ancients', 'depths-of-cruelty', 'nexus-of-eternity'].map(status), ['disputed', 'disputed', 'unverified', 'unverified']);
+  // An ArenaNet statement on record is not hidden behind a later reading of other sources.
+  assert.deepEqual(['shackles-of-the-ancients', 'depths-of-cruelty'].map((id) => ev(SOURCE, id).verification.method), ['official', 'official']);
+  assert.equal(ev(SOURCE, 'nexus-of-eternity').waypoint.name, 'Hall of Assemblage Waypoint');
+  // The build seen on 2026-11-14 is recorded as seen then, with the release build stated as not observed.
+  const nov = PATCHES.reviews.find((p) => p.id === '2026-11-10');
+  assert.deepEqual([nov.buildObserved.id, nov.buildObserved.observedOn], [210361, '2026-11-14']);
+  assert.ok(nov.findings.some((f) => /build of the 2026-11-10 release itself was not observed/.test(f)));
+});
+
+test('no documented status rests on readings of a single source, and the four uncertain events keep Adjust', () => {
+  for (const e of SOURCE.events) {
+    const roots = new Set(e.verification.evidence.filter((x) => x.agrees && x.kind !== 'in-game').map((x) => D.sourceRoot(SOURCE.sources, x.ref)));
+    if (e.verification.status === 'documented') assert.ok(roots.size >= 2, e.id);
+  }
+  assert.deepEqual(SOURCE.events.filter((e) => e.adjustable).map((e) => e.id).sort(), ['depths-of-cruelty', 'nexus-of-eternity', 'secrets-of-the-weald', 'shackles-of-the-ancients']);
 });
 
 test('the scan finds event names, map names and schedule words, and lists unknown new metas', () => {
@@ -463,8 +578,8 @@ test('feed items are read from RSS with their text and dates', () => {
 
 test('the report keeps the patch review date and the verification date apart and lists each status', () => {
   const r = report(SOURCE, PATCHES, LOCK, '0.1.0', '2026-10-25');
-  assert.match(r, /Latest patch review: 2026-10-13 .*reviewed 2026-10-25/);
-  assert.match(r, /Last direct or independently sourced verification: 2026-10-25/);
+  assert.ok(r.includes(`Latest patch review: ${SOURCE.meta.reviewedThroughPatch} `) && r.includes(`reviewed ${SOURCE.meta.reviewedOn}`));
+  assert.ok(r.includes(`Last direct or independently sourced verification: ${SOURCE.meta.verifiedOn}`));
   assert.match(r, /Last in-game verification: none yet/);
   assert.match(r, /## Disputed \(sources disagree\): 2/);
   assert.match(r, /## Unverified: 2/);

@@ -20,6 +20,7 @@ const SHOTS = opt('shots', null);
 if (!existsSync(join(DIR, 'index.html'))) { console.error(`No site in ${DIR}: run node tools/build.mjs first.`); process.exit(1); }
 
 const DATA = createRequire(import.meta.url)(join(DIR, 'events-data.js'));
+const fmtDay = (iso) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(iso + 'T12:00:00Z'));
 const S = createRequire(import.meta.url)(join(DIR, 'js', 'schedule.js'));
 const FEED = readFileSync(join(ROOT, 'tests', 'fixtures', 'news-feed.xml'), 'utf8');
 const HOSTILE = readFileSync(join(ROOT, 'tests', 'fixtures', 'news-feed-hostile.xml'), 'utf8');
@@ -87,7 +88,7 @@ check('desktop load at 23:50 UTC in Chicago: header, footer, Scheduled now and C
     assert.equal(await page.eval('document.title'), 'GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers');
     assert.equal(await text(page, '.brand .tag'), `v${VERSION} · Guild Wars 2 Boss & Meta Timers · RadMage Labs`);
     assert.equal(await text(page, '#now-title'), 'Scheduled now');
-    assert.equal(await text(page, '#revision'), 'Schedule r1 · reviewed Oct 25, 2026');
+    assert.equal(await text(page, '#revision'), `Schedule r${DATA.meta.datasetRevision} · reviewed ${fmtDay(DATA.meta.reviewedOn)}`);
     const now = await cards(page);
     for (const id of ['dragons-stand', 'shadow-behemoth', 'battle-for-the-jade-sea', 'secrets-of-the-weald']) assert.ok(now.includes(id), `${id} is in its window`);
     for (const id of ['claw-of-jormag', 'octovine', 'karka-queen']) assert.ok(!now.includes(id), `${id} window closed`);
@@ -486,7 +487,6 @@ check('the news headlines are on screen without scrolling, on a desktop and on a
   }
 });
 
-const fmtDay = (iso) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(iso + 'T12:00:00Z'));
 check('Schedule notes: closed at first; then the revision, review dates, counts per status, what they mean, and the uncertain events', async () => {
   const page = await open({ at: utc('2026-10-25T23:50:00Z') });
   try {

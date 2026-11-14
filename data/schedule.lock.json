@@ -46,156 +46,156 @@
   },
   "evidence": {
     "event:admiral-taidha-covington": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:svanir-shaman-chief": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:megadestroyer": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:fire-elemental": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:the-shatterer": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:great-jungle-wurm": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:modniir-ulgoth": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:shadow-behemoth": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:inquest-golem-mark-ii": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:claw-of-jormag": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:tequatl-the-sunless": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:triple-trouble": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:karka-queen": {
-      "count": 3,
-      "hash": "sha256:5f54a8a5fe359491803035e45af89613ff87ac81bfaa2ba1d48aebfe5fdbe0ff"
+      "count": 7,
+      "hash": "sha256:01c4af5fc7b6bde06fdb9a6c62d906b2eec231188105bd5c0fde3bfd9c0f5763"
     },
     "event:drakkar": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:of-mists-and-monsters": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:night-and-the-enemy": {
-      "count": 2,
-      "hash": "sha256:070d64dd376dd9fca870981a125f4bfb0b82d87fd93757235c4033821647c0ee"
+      "count": 6,
+      "hash": "sha256:d052a5dfa6cb98577d04f74e327c12b34867842732f30004cf79d32ea75a3a4b"
     },
     "event:octovine": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:chak-gerent": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:dragons-stand": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:casino-blitz": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:path-to-ascension": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:maws-of-torment": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:serpents-ire": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:aetherblade-assault": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:kaineng-blackout": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:gang-war": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:battle-for-the-jade-sea": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:unlocking-the-wizards-tower": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:defense-of-amnytas": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:a-titanic-voyage": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:hammerhart-rumble": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:f4d7371a9b97a2f76a5fd5a4e2a478e1f6604a60b99ae21d9f69bf0834c57be8"
     },
     "event:secrets-of-the-weald": {
-      "count": 2,
-      "hash": "sha256:bdb1015bdfbd4cc053bc5abbb99b1696604a9a13976b8fe069286fc50a612034"
+      "count": 6,
+      "hash": "sha256:493b962eac35b2beff3b6dd1b960dfdb9c3b5f89f4f1bb3623fab552af41f5e3"
     },
     "event:shackles-of-the-ancients": {
-      "count": 3,
-      "hash": "sha256:6a8606d5fafbad3133c3001b5d13a3c25c1c4d726017076c185015a3d02f2a59"
+      "count": 7,
+      "hash": "sha256:e0f078109250c8769b8a05fe2a9654de014c45b180aec80a8ffbd6cd27f09b35"
     },
     "event:depths-of-cruelty": {
-      "count": 3,
-      "hash": "sha256:600685b2ee6fb1d7e5099b48a8ccc695ed789efa9a816a757bf2fdcef7411f6b"
+      "count": 7,
+      "hash": "sha256:0a5c4a657e6f4f742970aa4bc0e1c8b06ab31a73151df26e7de19ccfa9ad0bfb"
     },
     "event:nexus-of-eternity": {
-      "count": 2,
-      "hash": "sha256:109ee806f4d7fd8f32bdd4164b8b2117db7b84f562134b75c99fe191f822390e"
+      "count": 6,
+      "hash": "sha256:592dd0d6d4d63ec59b12f72290b5c84358fb1a3cd0c5d9bf923c36967ba6fa1a"
     },
     "cycle:tyria": {
-      "count": 3,
-      "hash": "sha256:f07bcaf24cb742d689cf71bf3df7db24e2e58130dd93cae755f29cf74812eecc"
+      "count": 5,
+      "hash": "sha256:39d2e24da794efafee4477e0d2214281a69b2613924ee6b2854e75d51a7d30b0"
     },
     "cycle:cantha": {
-      "count": 3,
-      "hash": "sha256:f07bcaf24cb742d689cf71bf3df7db24e2e58130dd93cae755f29cf74812eecc"
+      "count": 5,
+      "hash": "sha256:39d2e24da794efafee4477e0d2214281a69b2613924ee6b2854e75d51a7d30b0"
     },
     "cycle:castora": {
-      "count": 3,
-      "hash": "sha256:f07bcaf24cb742d689cf71bf3df7db24e2e58130dd93cae755f29cf74812eecc"
+      "count": 5,
+      "hash": "sha256:39d2e24da794efafee4477e0d2214281a69b2613924ee6b2854e75d51a7d30b0"
     },
     "reset:daily": {
       "count": 1,
