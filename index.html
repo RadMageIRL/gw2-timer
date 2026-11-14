@@ -6,16 +6,19 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://www.guildwars2.com; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="dark light">
-  <link rel="stylesheet" href="style.css?v=0.2.1">
+  <link rel="stylesheet" href="style.css?v=0.3.0">
   <!-- The scripts download together and run in order once the page is parsed. app.js holds the
        first paint until it has filled the page in, so the page does not jump as it loads. -->
   <script defer src="events-data.js?r=1"></script>
-  <script defer src="js/schedule.js?v=0.2.1"></script>
-  <script defer src="js/store.js?v=0.2.1"></script>
-  <script defer src="js/news.js?v=0.2.1"></script>
-  <script defer src="js/clock.js?v=0.2.1"></script>
-  <script defer blocking="render" src="js/app.js?v=0.2.1"></script>
-  <script src="js/theme-boot.js?v=0.2.1"></script>
+  <script defer src="js/schedule.js?v=0.3.0"></script>
+  <script defer src="js/store.js?v=0.3.0"></script>
+  <script defer src="js/news.js?v=0.3.0"></script>
+  <script defer src="js/clock.js?v=0.3.0"></script>
+  <script defer src="js/search.js?v=0.3.0"></script>
+  <script defer src="js/link.js?v=0.3.0"></script>
+  <script defer src="js/reminders.js?v=0.3.0"></script>
+  <script defer blocking="render" src="js/app.js?v=0.3.0"></script>
+  <script src="js/theme-boot.js?v=0.3.0"></script>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23101114'/%3E%3Ccircle cx='32' cy='34' r='19' fill='none' stroke='%23d9a441' stroke-width='5'/%3E%3Cpath d='M32 34V22M32 34l9 6' stroke='%23e9e4da' stroke-width='5' stroke-linecap='round'/%3E%3Crect x='26' y='6' width='12' height='7' rx='2' fill='%23d9a441'/%3E%3C/svg%3E">
   <title>GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers</title>
   <meta name="description" content="Guild Wars 2 world boss and meta-event timer: what is scheduled now and next in your local time, day and night cycles, resets and waypoints. Unofficial fansite.">
@@ -39,8 +42,11 @@
   <a class="skip" href="#coming-title">Skip to Coming up</a>
   <header class="topbar">
     <div class="brand">
-      <h1>GW2 Timer</h1>
-      <span class="tag">v0.2.1 · Guild Wars 2 Boss &amp; Meta Timers · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
+      <div class="brand-line">
+        <h1>GW2 Timer</h1>
+        <span class="tag">v0.3.0 · Guild Wars 2 Boss &amp; Meta Timers · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
+      </div>
+      <nav class="share-links" aria-label="Share and support"><button type="button" class="link-btn" data-share title="Share https://radmagelabs.com/gw2-timer/">share</button> · <a href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">buy me a coffee<span class="sr-only"> (opens a new tab)</span></a></nav>
     </div>
     <div class="clock" role="group" aria-label="Current time">
       <div class="now" id="local-time">--:--</div>
@@ -54,6 +60,7 @@
 
   <main>
     <p class="notice-bar" id="clock-notice" hidden></p>
+    <div class="notice-bar link-notice" id="link-notice" role="status" hidden><span id="link-notice-text"></span> <button type="button" class="link-btn" id="link-notice-dismiss">Dismiss</button></div>
 
     <section class="strip panel" aria-label="Day and night, and resets">
       <ul class="strip-list" id="strip"></ul>
@@ -72,32 +79,49 @@
       </div>
     </section>
 
-    <section class="controls panel" aria-label="Filters">
-      <div class="ctl-line">
-        <span class="ctl-label" id="show-label">Show</span>
-        <div class="seg" role="group" aria-labelledby="show-label">
-          <button type="button" class="seg-btn" data-filter="all" aria-pressed="true">All</button>
-          <button type="button" class="seg-btn" data-filter="world-boss" aria-pressed="false">World bosses</button>
-          <button type="button" class="seg-btn" data-filter="meta" aria-pressed="false">Meta events</button>
-          <button type="button" class="seg-btn" data-filter="starred" aria-pressed="false">Starred</button>
+    <section class="controls panel" id="filters" aria-label="Filters">
+      <div class="find-block">
+        <div class="ctl-line find-line">
+          <label class="ctl-label" for="find">Find</label>
+          <div class="find-row">
+            <div class="find-box" role="search">
+              <input type="search" id="find" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" placeholder="Event, map or region" aria-describedby="find-status">
+              <button type="button" class="find-clear" id="find-clear" aria-label="Clear the search" hidden>Clear</button>
+            </div>
+            <button type="button" class="btn small filters-toggle" id="filters-toggle" aria-expanded="false" aria-controls="filters-body" aria-describedby="filters-summary">Filters</button>
+          </div>
         </div>
+        <div class="find-status" id="find-status" role="status"></div>
+        <p class="filters-summary" id="filters-summary"></p>
       </div>
-      <div class="ctl-line">
-        <span class="ctl-label" id="regions-label">Regions</span>
-        <div class="chips" id="region-chips" role="group" aria-labelledby="regions-label"></div>
-      </div>
-      <div class="control-row">
-        <label class="field">Coming up for
-          <select id="ahead">
-            <option value="60">1 hour</option>
-            <option value="120">2 hours</option>
-            <option value="240">4 hours</option>
-            <option value="480">8 hours</option>
-          </select>
-        </label>
-        <button type="button" class="btn small" id="compact-btn" aria-pressed="false">Compact</button>
-        <button type="button" class="btn small" id="utc-btn" aria-pressed="true">UTC</button>
-        <button type="button" class="btn small" id="hidden-btn" aria-haspopup="dialog">Hidden (0)</button>
+      <div class="filters-body" id="filters-body">
+        <div class="ctl-line">
+          <span class="ctl-label" id="show-label">Show</span>
+          <div class="seg" role="group" aria-labelledby="show-label">
+            <button type="button" class="seg-btn" data-filter="all" aria-pressed="true">All</button>
+            <button type="button" class="seg-btn" data-filter="world-boss" aria-pressed="false">World bosses</button>
+            <button type="button" class="seg-btn" data-filter="meta" aria-pressed="false">Meta events</button>
+            <button type="button" class="seg-btn" data-filter="starred" aria-pressed="false">Starred</button>
+          </div>
+        </div>
+        <div class="ctl-line">
+          <span class="ctl-label" id="regions-label">Regions</span>
+          <div class="chips" id="region-chips" role="group" aria-labelledby="regions-label"></div>
+        </div>
+        <div class="control-row">
+          <label class="field">Coming up for
+            <select id="ahead">
+              <option value="60">1 hour</option>
+              <option value="120">2 hours</option>
+              <option value="240">4 hours</option>
+              <option value="480">8 hours</option>
+            </select>
+          </label>
+          <button type="button" class="btn small" id="compact-btn" aria-pressed="false">Compact</button>
+          <button type="button" class="btn small" id="utc-btn" aria-pressed="true">UTC</button>
+          <button type="button" class="btn small" id="hidden-btn" aria-haspopup="dialog">Hidden (0)</button>
+          <button type="button" class="btn small" id="reminders-btn" aria-haspopup="dialog">Reminders: off</button>
+        </div>
       </div>
     </section>
 
@@ -149,31 +173,31 @@
           <div class="index-region">
             <h4>Core Tyria</h4>
             <ul>
-              <li><span class="index-name">Admiral Taidha Covington</span> <span class="index-where">Bloodtide Coast · every 3 hours</span></li>
-              <li><span class="index-name">Svanir Shaman Chief</span> <span class="index-where">Wayfarer Foothills · every 2 hours</span></li>
-              <li><span class="index-name">Megadestroyer</span> <span class="index-where">Mount Maelstrom · every 3 hours</span></li>
-              <li><span class="index-name">Fire Elemental</span> <span class="index-where">Metrica Province · every 2 hours</span></li>
-              <li><span class="index-name">The Shatterer</span> <span class="index-where">Blazeridge Steppes · every 3 hours</span></li>
-              <li><span class="index-name">Great Jungle Wurm</span> <span class="index-where">Caledon Forest · every 2 hours</span></li>
-              <li><span class="index-name">Modniir Ulgoth</span> <span class="index-where">Harathi Hinterlands · every 3 hours</span></li>
-              <li><span class="index-name">Shadow Behemoth</span> <span class="index-where">Queensdale · every 2 hours</span></li>
-              <li><span class="index-name">Inquest Golem Mark II</span> <span class="index-where">Mount Maelstrom · every 3 hours</span></li>
-              <li><span class="index-name">Claw of Jormag</span> <span class="index-where">Frostgorge Sound · every 3 hours</span></li>
-              <li><span class="index-name">Tequatl the Sunless</span> <span class="index-where">Sparkfly Fen · 6 times a day</span></li>
-              <li><span class="index-name">Triple Trouble</span> <span class="index-where">Bloodtide Coast · 6 times a day</span></li>
-              <li><span class="index-name">Karka Queen</span> <span class="index-where">Southsun Cove · 6 times a day</span></li>
+              <li><a class="index-name event-link" href="#event/admiral-taidha-covington" aria-haspopup="dialog">Admiral Taidha Covington</a> <span class="index-where">Bloodtide Coast · every 3 hours</span></li>
+              <li><a class="index-name event-link" href="#event/svanir-shaman-chief" aria-haspopup="dialog">Svanir Shaman Chief</a> <span class="index-where">Wayfarer Foothills · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/megadestroyer" aria-haspopup="dialog">Megadestroyer</a> <span class="index-where">Mount Maelstrom · every 3 hours</span></li>
+              <li><a class="index-name event-link" href="#event/fire-elemental" aria-haspopup="dialog">Fire Elemental</a> <span class="index-where">Metrica Province · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/the-shatterer" aria-haspopup="dialog">The Shatterer</a> <span class="index-where">Blazeridge Steppes · every 3 hours</span></li>
+              <li><a class="index-name event-link" href="#event/great-jungle-wurm" aria-haspopup="dialog">Great Jungle Wurm</a> <span class="index-where">Caledon Forest · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/modniir-ulgoth" aria-haspopup="dialog">Modniir Ulgoth</a> <span class="index-where">Harathi Hinterlands · every 3 hours</span></li>
+              <li><a class="index-name event-link" href="#event/shadow-behemoth" aria-haspopup="dialog">Shadow Behemoth</a> <span class="index-where">Queensdale · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/inquest-golem-mark-ii" aria-haspopup="dialog">Inquest Golem Mark II</a> <span class="index-where">Mount Maelstrom · every 3 hours</span></li>
+              <li><a class="index-name event-link" href="#event/claw-of-jormag" aria-haspopup="dialog">Claw of Jormag</a> <span class="index-where">Frostgorge Sound · every 3 hours</span></li>
+              <li><a class="index-name event-link" href="#event/tequatl-the-sunless" aria-haspopup="dialog">Tequatl the Sunless</a> <span class="index-where">Sparkfly Fen · 6 times a day</span></li>
+              <li><a class="index-name event-link" href="#event/triple-trouble" aria-haspopup="dialog">Triple Trouble</a> <span class="index-where">Bloodtide Coast · 6 times a day</span></li>
+              <li><a class="index-name event-link" href="#event/karka-queen" aria-haspopup="dialog">Karka Queen</a> <span class="index-where">Southsun Cove · 6 times a day</span></li>
             </ul>
           </div>
           <div class="index-region">
             <h4>The Icebrood Saga</h4>
             <ul>
-              <li><span class="index-name">Drakkar</span> <span class="index-where">Bjora Marches · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/drakkar" aria-haspopup="dialog">Drakkar</a> <span class="index-where">Bjora Marches · every 2 hours</span></li>
             </ul>
           </div>
           <div class="index-region">
             <h4>Janthir Wilds</h4>
             <ul>
-              <li><span class="index-name">Of Mists and Monsters</span> <span class="index-where">Janthir Syntri · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/of-mists-and-monsters" aria-haspopup="dialog">Of Mists and Monsters</a> <span class="index-where">Janthir Syntri · every 2 hours</span></li>
             </ul>
           </div>
         </div>
@@ -182,51 +206,51 @@
           <div class="index-region">
             <h4>Heart of Thorns</h4>
             <ul>
-              <li><span class="index-name">Night and the Enemy</span> <span class="index-where">Verdant Brink · every 2 hours</span></li>
-              <li><span class="index-name">Battle in Tarir (Octovine)</span> <span class="index-where">Auric Basin · every 2 hours</span></li>
-              <li><span class="index-name">King of the Jungle (Chak Gerent)</span> <span class="index-where">Tangled Depths · every 2 hours</span></li>
-              <li><span class="index-name">Dragon's Stand</span> <span class="index-where">Dragon's Stand · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/night-and-the-enemy" aria-haspopup="dialog">Night and the Enemy</a> <span class="index-where">Verdant Brink · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/octovine" aria-haspopup="dialog">Battle in Tarir (Octovine)</a> <span class="index-where">Auric Basin · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/chak-gerent" aria-haspopup="dialog">King of the Jungle (Chak Gerent)</a> <span class="index-where">Tangled Depths · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/dragons-stand" aria-haspopup="dialog">Dragon's Stand</a> <span class="index-where">Dragon's Stand · every 2 hours</span></li>
             </ul>
           </div>
           <div class="index-region">
             <h4>Path of Fire</h4>
             <ul>
-              <li><span class="index-name">Casino Blitz</span> <span class="index-where">Crystal Oasis · every 2 hours</span></li>
-              <li><span class="index-name">The Path to Ascension</span> <span class="index-where">Elon Riverlands · every 2 hours</span></li>
-              <li><span class="index-name">Maws of Torment</span> <span class="index-where">The Desolation · every 2 hours</span></li>
-              <li><span class="index-name">Serpents' Ire</span> <span class="index-where">Domain of Vabbi · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/casino-blitz" aria-haspopup="dialog">Casino Blitz</a> <span class="index-where">Crystal Oasis · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/path-to-ascension" aria-haspopup="dialog">The Path to Ascension</a> <span class="index-where">Elon Riverlands · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/maws-of-torment" aria-haspopup="dialog">Maws of Torment</a> <span class="index-where">The Desolation · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/serpents-ire" aria-haspopup="dialog">Serpents' Ire</a> <span class="index-where">Domain of Vabbi · every 2 hours</span></li>
             </ul>
           </div>
           <div class="index-region">
             <h4>End of Dragons</h4>
             <ul>
-              <li><span class="index-name">Aetherblade Assault</span> <span class="index-where">Seitung Province · every 2 hours</span></li>
-              <li><span class="index-name">Kaineng Blackout</span> <span class="index-where">New Kaineng City · every 2 hours</span></li>
-              <li><span class="index-name">The Gang War of Echovald</span> <span class="index-where">The Echovald Wilds · every 2 hours</span></li>
-              <li><span class="index-name">Battle for the Jade Sea</span> <span class="index-where">Dragon's End · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/aetherblade-assault" aria-haspopup="dialog">Aetherblade Assault</a> <span class="index-where">Seitung Province · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/kaineng-blackout" aria-haspopup="dialog">Kaineng Blackout</a> <span class="index-where">New Kaineng City · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/gang-war" aria-haspopup="dialog">The Gang War of Echovald</a> <span class="index-where">The Echovald Wilds · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/battle-for-the-jade-sea" aria-haspopup="dialog">Battle for the Jade Sea</a> <span class="index-where">Dragon's End · every 2 hours</span></li>
             </ul>
           </div>
           <div class="index-region">
             <h4>Secrets of the Obscure</h4>
             <ul>
-              <li><span class="index-name">Unlocking the Wizard's Tower</span> <span class="index-where">Skywatch Archipelago · every 2 hours</span></li>
-              <li><span class="index-name">Defense of Amnytas</span> <span class="index-where">Amnytas · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/unlocking-the-wizards-tower" aria-haspopup="dialog">Unlocking the Wizard's Tower</a> <span class="index-where">Skywatch Archipelago · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/defense-of-amnytas" aria-haspopup="dialog">Defense of Amnytas</a> <span class="index-where">Amnytas · every 2 hours</span></li>
             </ul>
           </div>
           <div class="index-region">
             <h4>Janthir Wilds</h4>
             <ul>
-              <li><span class="index-name">A Titanic Voyage</span> <span class="index-where">Bava Nisos · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/a-titanic-voyage" aria-haspopup="dialog">A Titanic Voyage</a> <span class="index-where">Bava Nisos · every 2 hours</span></li>
             </ul>
           </div>
           <div class="index-region">
             <h4>Visions of Eternity</h4>
             <ul>
-              <li><span class="index-name">Hammerhart Rumble!</span> <span class="index-where">Shipwreck Strand · every 2 hours</span></li>
-              <li><span class="index-name">Secrets of the Weald</span> <span class="index-where">Starlit Weald · every 2 hours</span></li>
-              <li><span class="index-name">Shackles of the Ancients</span> <span class="index-where">Eternity's Garden · every 2 hours</span></li>
-              <li><span class="index-name">Depths of Cruelty</span> <span class="index-where">Leyspring Hollows · every 3 hours</span></li>
-              <li><span class="index-name">Convergence: Nexus of Eternity</span> <span class="index-where">Leyspring Hollows (instance) · every 3 hours</span></li>
+              <li><a class="index-name event-link" href="#event/hammerhart-rumble" aria-haspopup="dialog">Hammerhart Rumble!</a> <span class="index-where">Shipwreck Strand · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/secrets-of-the-weald" aria-haspopup="dialog">Secrets of the Weald</a> <span class="index-where">Starlit Weald · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/shackles-of-the-ancients" aria-haspopup="dialog">Shackles of the Ancients</a> <span class="index-where">Eternity's Garden · every 2 hours</span></li>
+              <li><a class="index-name event-link" href="#event/depths-of-cruelty" aria-haspopup="dialog">Depths of Cruelty</a> <span class="index-where">Leyspring Hollows · every 3 hours</span></li>
+              <li><a class="index-name event-link" href="#event/nexus-of-eternity" aria-haspopup="dialog">Convergence: Nexus of Eternity</a> <span class="index-where">Leyspring Hollows (instance) · every 3 hours</span></li>
             </ul>
           </div>
         </div>
@@ -238,13 +262,26 @@
   <footer class="site-footer">
     <p class="revision" id="revision"></p>
     <p>Unofficial fansite. Free, no ads, no tracking. Made by <a href="https://radmagelabs.com/">RadMage Labs</a>.</p>
+    <p class="share-links"><button type="button" class="link-btn" data-share title="Share https://radmagelabs.com/gw2-timer/">Share</button> · <a href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (opens a new tab)</span></a></p>
     <p>More from RadMage Labs: <a href="https://radmagelabs.com/ffxi/">FFXI Timer</a>, <a href="https://radmagelabs.com/ffxiv/">FFXIV Timer</a> and <a href="https://radmagelabs.com/d4/">D4 Tracker</a>.</p>
     <p class="legal">Guild Wars Games © ArenaNet LLC. All rights reserved. NCSOFT, ArenaNet, Guild Wars, Guild Wars 2, GW2, Heart of Thorns, Path of Fire, End of Dragons, Secrets of the Obscure, Janthir Wilds, Visions of Eternity, and all associated logos, designs, and composite marks are trademarks or registered trademarks of NCSOFT Corporation. All other trademarks are the property of their respective owners.</p>
   </footer>
 
+  <!-- Reminders this tab has given, fixed at the bottom of the window. Filled in by app.js; never saved.
+       Not a live region: each batch is announced once, in the status line below. On a phone, with
+       several notices, app.js moves rm-foot into the first notice's row of buttons. -->
+  <section class="rm-tray" id="reminders-tray" aria-label="Reminders" hidden>
+    <ul class="rm-notices" id="reminders-notices"></ul>
+    <div class="rm-foot" id="reminders-foot" hidden>
+      <button type="button" class="link-btn" id="reminders-more" aria-expanded="false" aria-controls="reminders-notices">Show more</button>
+      <button type="button" class="link-btn" id="reminders-dismiss-all">Dismiss all</button>
+    </div>
+  </section>
+  <p class="sr-only" id="reminders-announce" role="status" data-announce></p>
+
   <dialog id="about" aria-labelledby="about-title">
     <div class="dialog-close"><button type="button" class="btn small" data-close>Close</button></div>
-    <h2 id="about-title">GW2 Timer v0.2.1</h2>
+    <h2 id="about-title">GW2 Timer v0.3.0</h2>
     <p>A Guild Wars 2 timer for world bosses and meta-events: what is in its scheduled window now, what starts next, in your local time. Unofficial fansite, not affiliated with ArenaNet or NCSOFT.</p>
     <h3>Scheduled, not live</h3>
     <p>Every time here is a scheduled start. The game publishes no live state for events, so a map can run early, late, fail, or close. "Scheduled now" means the scheduled window is open, not that the fight is on in your map.</p>
@@ -256,11 +293,17 @@
       <li><strong>Recheck</strong>: a game update may have changed it; the time shown is the previous schedule until it is checked.</li>
     </ul>
     <p>Sources: the Guild Wars 2 Wiki's event timer data, ArenaNet's game update notes and news, and the official Guild Wars 2 API for waypoint codes. Times were also compared with an independent community schedule (qjv/event-timers).</p>
+    <h3>Reminders</h3>
+    <p>Reminders are off until you turn them on with the Reminders button by the filters. Then a notice appears on this page, with a count in the tab's title, 5, 10 or 15 minutes before a starred event starts. A reminder is not a notification from your browser or your computer, and it comes only while this page is open: a closed page, a sleeping device, or a tab your browser has put to sleep cannot remind you, and a background tab can be about a minute late. A reminder that would come after its event has started is not shown. With several tabs open, one of them gives each reminder. The page's two addresses (radmagelabs.com and radmageirl.github.io) keep separate settings.</p>
     <h3>Privacy</h3>
-    <p>Settings, stars and adjustments are saved in this browser only. Two things leave it: the clock check asks this site's own address for the time, and the news panel loads headlines from guildwars2.com, so ArenaNet sees that request. You can turn news off.</p>
+    <p>Settings, stars, adjustments and reminder choices are saved in this browser only. A search you type in Find is not saved at all, and a link to an event carries the event's name and nothing of yours. Two things leave it: the clock check asks this site's own address for the time, and the news panel loads headlines from guildwars2.com, so ArenaNet sees that request. You can turn news off.</p>
+    <h3>Share and support</h3>
+    <p>Share passes this timer's address, https://radmagelabs.com/gw2-timer/, to your device's share sheet, or copies it where there is none. It carries nothing of yours. If the timer helps you, you can buy me a coffee; the link opens buymeacoffee.com in a new tab, so reminders keep running in this one.</p>
+    <p class="about-actions"><button type="button" class="btn small" data-share>Share</button> <a class="btn small" href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (opens a new tab)</span></a></p>
     <h3>Notice</h3>
     <p class="legal">Guild Wars Games © ArenaNet LLC. All rights reserved. NCSOFT, ArenaNet, Guild Wars, Guild Wars 2, GW2, Heart of Thorns, Path of Fire, End of Dragons, Secrets of the Obscure, Janthir Wilds, Visions of Eternity, and all associated logos, designs, and composite marks are trademarks or registered trademarks of NCSOFT Corporation. All other trademarks are the property of their respective owners.</p>
     <p>The app is MIT licensed; event names and game content are ArenaNet's. Made by <a href="https://radmagelabs.com/">RadMage Labs</a>. Source: <a href="https://github.com/RadMageIRL/gw2-timer">github.com/RadMageIRL/gw2-timer</a>.</p>
+    <p class="sr-only" role="status" data-announce></p>
   </dialog>
 
   <dialog id="hidden-dialog" aria-labelledby="hidden-title">
@@ -268,6 +311,49 @@
     <h2 id="hidden-title">Hidden events</h2>
     <ul class="hidden-list" id="hidden-list"></ul>
     <p class="empty" id="hidden-empty">Nothing is hidden.</p>
+    <p class="sr-only" role="status" data-announce></p>
+  </dialog>
+
+  <!-- One event, opened from a link to it (#event/<id>). Filled in by app.js. -->
+  <dialog id="event-dialog" class="event-dialog" aria-labelledby="event-dialog-title" aria-describedby="event-dialog-when">
+    <div class="dialog-close"><button type="button" class="btn small" data-close>Close</button></div>
+    <h2 id="event-dialog-title" tabindex="-1"></h2>
+    <div id="event-dialog-body"></div>
+    <p class="ed-status" id="event-dialog-status" role="status"></p>
+    <label class="ed-linkbox" id="event-dialog-linkbox" hidden>Link to this event <input type="text" id="event-dialog-link" readonly></label>
+    <p class="sr-only" role="status" data-announce></p>
+  </dialog>
+
+  <!-- Reminder settings and what reminders can and cannot do. Filled in by app.js. -->
+  <dialog id="reminders-dialog" class="rm-dialog" aria-labelledby="reminders-title" aria-describedby="reminders-intro">
+    <div class="dialog-close"><button type="button" class="btn small" data-close>Close</button></div>
+    <h2 id="reminders-title">Reminders</h2>
+    <p id="reminders-intro">A notice on this page 5, 10 or 15 minutes before a starred event starts, while this page is open.</p>
+    <div class="rm-settings">
+      <label class="rm-option"><input type="checkbox" id="reminders-on"> Remind me before my starred events start</label>
+      <fieldset class="rm-leads">
+        <legend>How long before</legend>
+        <label class="rm-option"><input type="radio" name="reminders-lead" value="5"> 5 minutes</label>
+        <label class="rm-option"><input type="radio" name="reminders-lead" value="10"> 10 minutes</label>
+        <label class="rm-option"><input type="radio" name="reminders-lead" value="15"> 15 minutes</label>
+      </fieldset>
+    </div>
+    <p class="rm-unsaved" id="reminders-unsaved" hidden>Your browser is not saving settings, so reminders last until you close this tab.</p>
+    <h3 id="reminders-list-title">Your starred events</h3>
+    <ul class="rm-list" id="reminders-list" aria-labelledby="reminders-list-title"></ul>
+    <h3>What reminders can and cannot do</h3>
+    <ul class="rm-limits">
+      <li>Reminders are for the events you have starred, unless you have hidden them.</li>
+      <li>They work only while this page is open in a tab. Nothing can remind you when the page or the browser is closed, or while your device sleeps.</li>
+      <li>A reminder shows only on this page: a notice at the bottom and a count in the tab's title. It is not a notification from your browser or your computer.</li>
+      <li>In a background tab, or a window covered by your game, a reminder can be up to about a minute late. A browser window you can see, for example on a second monitor, stays on time.</li>
+      <li>Browsers put tabs they think are unused to sleep, and a sleeping tab cannot remind you. If reminders stop after a while, add this site to your browser's "always keep these sites active" list.</li>
+      <li>A reminder that would arrive after its event has started is not shown.</li>
+      <li>With this page open in more than one tab, each reminder is given once, by one of them, so the notice may be in a tab you are not looking at.</li>
+      <li>This page has two addresses, radmagelabs.com and radmageirl.github.io. Your browser keeps their settings apart, so reminders turned on at one are not on at the other.</li>
+      <li>Reminders follow the times this page shows. For an event marked Unverified, or one you have adjusted, the reminder says so.</li>
+    </ul>
+    <p class="sr-only" role="status" data-announce></p>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>

@@ -39,6 +39,12 @@ const EV = new Map(DATA.events.map((e) => [e.id, e]));
 
 const { server, port } = await serve(DIR, 0, { sendDate: false });
 const { server: dated, port: datedPort } = await serve(DIR, 0, { sendDate: true });
+// A server whose Date header is `skewMs` away from this machine's clock: the "true" time for a page's
+// clock check, set per check (reminders, v0.3.0 Phase E).
+const { server: skewed, port: skewedPort } = await serve(DIR, 0, { sendDate: false });
+let skewMs = 0;
+skewed.prependListener('request', (req, res) => res.setHeader('Date', new Date(Date.now() + skewMs).toUTCString()));
+const SKEWED = `http://127.0.0.1:${skewedPort}/`;
 const BASE = `http://127.0.0.1:${port}/`;
 const chrome = await launchChrome();
 await chrome.grant(BASE.slice(0, -1), ['clipboardReadWrite', 'clipboardSanitizedWrite']);
@@ -47,16 +53,34 @@ let passed = 0, failed = 0;
 const checks = [];
 const check = (name, fn) => checks.push({ name, fn });
 
-/** A fresh tab: storage cleared, a simulated clock and zone, and the news feed answered by `news.mode`. */
-async function open({ at, tz = 'America/Chicago', width = 1280, height = 900, mobile = false, news = { mode: 'fixture' }, url = BASE, keepStorage = false } = {}) {
+/**
+ * A fresh tab: storage cleared, a simulated clock and zone, and the news feed answered by `news.mode`.
+ * Since v0.3.0 Phase E also: `offset`, a fixed amount added to this machine's clock (tabs given the same
+ * offset read the same time, to the millisecond); `seed`, storage keys written before the page first
+ * loads (not again on a reload); `init`, scripts run before the page's own in every load; and `clock`:
+ * 'fail' makes the page's clock check fail at once (unavailable), 'hold' leaves it unanswered.
+ */
+async function open({ at, offset, tz = 'America/Chicago', width = 1280, height = 900, mobile = false, news = { mode: 'fixture' }, url = BASE, keepStorage = false, seed = null, init = [], clock = null } = {}) {
   const page = await chrome.newPage();
-  if (!keepStorage) await page.send('Storage.clearDataForOrigin', { origin: BASE.slice(0, -1), storageTypes: 'all' });
+  const origin = /^https?:/.test(url) ? new URL(url).origin : BASE.slice(0, -1);
+  if (!keepStorage) await page.send('Storage.clearDataForOrigin', { origin, storageTypes: 'all' });
   await page.emulate({ timezone: tz, locale: 'en-US' });
   await page.viewport(width, height, mobile);
   if (at) await page.startClockAt(at);
-  page.newsRequests = 0;
-  await page.send('Fetch.enable', { patterns: [{ urlPattern: 'https://www.guildwars2.com/*' }] });
+  else if (offset !== undefined) await page.beforeLoad(`(() => { const real = Date.now; Date.now = () => real() + ${Number(offset)}; })();`);
+  if (seed && Object.keys(seed).length) {
+    const writes = Object.entries(seed).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(typeof v === 'string' ? v : JSON.stringify(v))});`).join(' ');
+    await page.beforeLoad(`try { if (!sessionStorage.getItem('gw2-test-seeded')) { ${writes} sessionStorage.setItem('gw2-test-seeded', '1'); } } catch (e) {}`);
+  }
+  for (const source of init) await page.beforeLoad(source);
+  page.newsRequests = 0; page.clockRequests = 0;
+  await page.send('Fetch.enable', { patterns: [{ urlPattern: 'https://www.guildwars2.com/*' }, ...(clock ? [{ urlPattern: '*clock=*' }] : [])] });
   page.on('Fetch.requestPaused', async (p) => {
+    if (/[?&]clock=/.test(p.request.url)) {
+      page.clockRequests++;
+      if (clock === 'fail') await page.send('Fetch.failRequest', { requestId: p.requestId, errorReason: 'Failed' });
+      return; // 'hold': never answered
+    }
     page.newsRequests++;
     if (news.mode === 'hold') { page.held = p.requestId; return; }
     // fixture and hostile answer with a feed; garbage with an HTML error page; http500 with a server error.
@@ -554,12 +578,61 @@ check('settings saved by v0.1.0 come back unchanged after the update, and only g
 // ---- Layout, keyboard, motion ----
 
 const sideways = (page, w) => page.eval(`[document.documentElement.scrollWidth, ${w}]`);
+check('Share and Buy me a coffee, as on FFXI Timer: in the header, footer and About; Share passes https://radmagelabs.com/gw2-timer/ to the share sheet, or copies it where there is none or the sheet fails; a closed sheet does nothing; About\'s Share closes About so the toast is seen; nothing is requested; 36 px on a phone', async () => {
+  const CANONICAL = 'https://radmagelabs.com/gw2-timer/';
+  const STUB = `(() => { window.__shared = []; window.__copied = []; window.__mode = 'ok';
+    Object.defineProperty(navigator, 'share', { configurable: true, value: async (d) => { window.__shared.push(d); if (window.__mode !== 'ok') throw new DOMException('sheet', window.__mode); } });
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { window.__copied.push(t); } } }); })()`;
+  let page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    await page.eval(STUB);
+    const asked = page.requests.length;
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('[data-share]')].map((b) => b.closest('.topbar') ? 'header' : b.closest('.site-footer') ? 'footer' : b.closest('#about') ? 'about' : '?')"), ['header', 'footer', 'about']);
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('a[href=\"https://buymeacoffee.com/radmageirl\"]')].map((a) => [a.closest('.topbar') ? 'header' : a.closest('.site-footer') ? 'footer' : a.closest('#about') ? 'about' : '?', a.target, a.rel, a.textContent])"), [
+      ['header', '_blank', 'noopener noreferrer', 'buy me a coffee (opens a new tab)'], ['footer', '_blank', 'noopener noreferrer', 'Buy me a coffee (opens a new tab)'], ['about', '_blank', 'noopener noreferrer', 'Buy me a coffee (opens a new tab)']]);
+    const state = () => page.eval("({ shared: window.__shared.map((d) => [d.url, d.title]), copied: window.__copied, toast: document.getElementById('toast').textContent, about: document.getElementById('about').open })");
+    // With a share sheet: the canonical address and the page's own title, never the address it was opened at.
+    await click(page, '.topbar [data-share]'); await settle();
+    await click(page, '.site-footer [data-share]'); await settle();
+    let s = await state();
+    const sheet = [CANONICAL, 'GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers'];
+    assert.deepEqual([s.shared, s.copied], [[sheet, sheet], []], 'the share sheet, twice; nothing copied');
+    // The reader closes the sheet: nothing happens. The sheet fails: the address is copied instead.
+    await page.eval("window.__mode = 'AbortError'"); await click(page, '.topbar [data-share]'); await settle();
+    assert.deepEqual([(await state()).copied, (await state()).shared.length], [[], 3], 'a closed sheet does nothing');
+    await page.eval("window.__mode = 'NotAllowedError'"); await click(page, '.topbar [data-share]'); await settle();
+    s = await state();
+    assert.deepEqual([s.copied, s.toast], [[CANONICAL], `Copied the link to GW2 Timer: ${CANONICAL}`], 'a failed sheet: copied');
+    // No share sheet (most desktop browsers): copied. About's Share closes About first, so the toast shows.
+    await page.eval("Object.defineProperty(navigator, 'share', { configurable: true, value: undefined }); window.__copied = []");
+    await click(page, '#about-btn'); await settle();
+    await click(page, '#about [data-share]'); await settle();
+    s = await state();
+    assert.deepEqual([s.copied, s.about, s.toast], [[CANONICAL], false, `Copied the link to GW2 Timer: ${CANONICAL}`], 'About closed; copied');
+    // Copying not allowed either: the toast gives the address to copy by hand.
+    await page.eval("Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new DOMException('no', 'NotAllowedError'); } } }); document.execCommand = () => false");
+    await click(page, '.site-footer [data-share]'); await settle();
+    assert.equal((await state()).toast, `Copy did not work here. The link is ${CANONICAL}`);
+    assert.deepEqual(page.requests.slice(asked), [], 'Share and the coffee link request nothing');
+    assert.deepEqual(unexpected(page), []);
+  } finally { await page.close(); }
+  // On a phone: both header links 36 px tall to tap, on a line of their own under the tagline.
+  page = await open({ at: utc('2026-10-25T23:50:00Z'), width: 390, height: 844, mobile: true });
+  try {
+    const r = await page.eval("[...document.querySelectorAll('.topbar .share-links button, .topbar .share-links a')].map((x) => Math.round(x.getBoundingClientRect().height))");
+    assert.deepEqual(r, [36, 36]);
+    assert.equal(await page.eval("document.querySelector('.topbar .share-links').getBoundingClientRect().top >= document.querySelector('.brand .tag').getBoundingClientRect().bottom"), true, 'under the tagline');
+  } finally { await page.close(); }
+});
+
 check('on a 390 px phone nothing scrolls sideways and every control is at least 36 px tall', async () => {
   const page = await open({ at: utc('2026-10-25T23:50:00Z'), width: 390, height: 844, mobile: true });
   try {
     await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
     await click(page, '#next-list .row [data-adjust], #now-list [data-adjust]'); await settle();
     await click(page, '#schedule-notes summary'); await settle();
+    await click(page, '#filters-toggle'); await settle(); // since v0.3.0 the filters fold on phones: open them so every control is measured
     // Mobile emulation widens the layout to fit overflowing content, so compare with the device width itself.
     const [sw] = await sideways(page, 390);
     assert.equal(sw, 390, 'no sideways scroll');
@@ -576,6 +649,8 @@ check('on a 320 px phone, in normal and compact mode, nothing scrolls sideways',
   try {
     await click(page, '#next-list .row [data-adjust], #now-list [data-adjust]'); await settle();
     await click(page, '#news-more'); await click(page, '#schedule-notes summary'); await click(page, '#event-index summary'); await settle();
+    assert.equal((await sideways(page, 320))[0], 320, 'normal, filters folded');
+    await click(page, '#filters-toggle'); await settle();
     assert.equal((await sideways(page, 320))[0], 320, 'normal');
     await click(page, '#compact-btn'); await settle();
     assert.equal((await sideways(page, 320))[0], 320, 'compact');
@@ -610,7 +685,7 @@ check('keyboard: skip links, news, filters and event buttons in order; Enter ope
     }
     assert.deepEqual(seen.slice(0, 2), ['skip', 'skip']);
     const at = (x) => seen.findIndex((c) => (typeof x === 'string' ? c === x : x.test(c)));
-    const order = [at('news-toggle'), at('news-link'), at('news-more'), at('seg-btn'), at('chip'), at('ahead'), at(/star-btn/), at(/copy/)];
+    const order = [at('news-toggle'), at('news-link'), at('news-more'), at('find'), at('seg-btn'), at('chip'), at('ahead'), at(/star-btn/), at(/copy/)];
     assert.ok(order.every((i, n) => i >= 0 && (n === 0 || i > order[n - 1])), seen.join(','));
     // The first skip link moves focus to Scheduled now.
     await page.eval("document.querySelector('.skip').focus()");
@@ -632,7 +707,7 @@ check('keyboard: skip links, news, filters and event buttons in order; Enter ope
 check('every button and link has a name, and every event button names its event', async () => {
   const page = await open({ at: utc('2026-10-25T23:50:00Z') });
   try {
-    const unnamed = await page.eval("[...document.querySelectorAll('button, a[href], select, summary')].filter((el) => !(el.getAttribute('aria-label') || el.textContent.trim() || (el.labels && el.labels.length))).map((el) => el.outerHTML.slice(0, 80))");
+    const unnamed = await page.eval("[...document.querySelectorAll('button, a[href], select, input, summary')].filter((el) => !(el.getAttribute('aria-label') || el.textContent.trim() || (el.labels && el.labels.length))).map((el) => el.outerHTML.slice(0, 80))");
     assert.deepEqual(unnamed, []);
     const generic = await page.eval("[...document.querySelectorAll('[data-copy], [data-hide], [data-adjust], [data-star]')].filter((b) => !b.getAttribute('aria-label') || !b.getAttribute('aria-label').includes(document.querySelector('#next-list [data-id=\"' + b.closest('[data-id]').dataset.id + '\"] .name, #now-list [data-id=\"' + b.closest('[data-id]').dataset.id + '\"] h3').textContent)).length");
     assert.equal(generic, 0);
@@ -747,6 +822,1294 @@ check('the page does not move as it loads: on a slow network with headlines arri
   }
 });
 
+// ---- v0.3.0 Phase C: Find, the phone filter fold, the Starred empty text, the reset countdown ----
+
+// Times as the page shows them in Chicago (en-US), whatever this machine's own zone and ICU spacing.
+const chicago = (ms) => new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }).format(ms).replace(/\s/g, ' ');
+const utcHm = (ms) => new Date(ms).toISOString().slice(11, 16);
+const PREFS = 'gw2-timer:v1:prefs';
+const listedIds = (page) => page.eval("[...new Set([...document.querySelectorAll('#now-list .event, #next-list .row')].map((x) => x.dataset.id))]");
+const findText = (page) => page.eval("document.getElementById('find-status').innerText.replace(/\\s+/g, ' ').trim()");
+const findItems = (page) => page.eval("[...document.querySelectorAll('#find-status li')].map((li) => li.textContent.replace(/\\s+/g, ' '))");
+/** Types into Find one letter at a time, as a person does, then waits for the typing pause to end. */
+async function typeFind(page, text, { gap = 40, settleMs = 800 } = {}) {
+  await page.eval("document.getElementById('find').focus()");
+  for (const ch of text) { await page.send('Input.insertText', { text: ch }); await sleep(gap); }
+  await sleep(settleMs);
+}
+const setPrefs = async (page, p) => {
+  await page.eval(`localStorage.setItem('${PREFS}', ${JSON.stringify(JSON.stringify(p))})`);
+  await page.reload();
+  await page.waitFor("document.querySelectorAll('#next-list .row, #next-empty:not([hidden])').length > 0");
+};
+// The settings a v0.2.1 reader may have saved, every key set away from its default.
+const SAVED = { filter: 'meta', regions: ['hot', 'pof', 'ibs', 'eod', 'soto', 'jw', 'voe'], starred: ['octovine', 'drakkar'], hidden: ['claw-of-jormag'], aheadMin: 120, compact: false, showUtc: true, theme: 'dark', news: true, newsExpanded: false };
+
+check('Find: typing narrows both lists to the matches and says how many; clearing brings every row back', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    const before = await listedIds(page);
+    assert.equal(await page.eval("document.getElementById('find-clear').hidden"), true, 'no Clear while the field is empty');
+    await typeFind(page, 'wurm');
+    assert.deepEqual(await listedIds(page), ['great-jungle-wurm']);
+    assert.equal(await findText(page), '1 event matches.');
+    assert.equal(await page.eval("document.getElementById('find-clear').hidden"), false);
+    await typeFind(page, ' core'); // every word has to match, and the region counts
+    assert.deepEqual(await listedIds(page), ['great-jungle-wurm']);
+    await page.eval("document.getElementById('find').value = ''; document.getElementById('find').dispatchEvent(new Event('input', { bubbles: true }))");
+    await sleep(800);
+    assert.deepEqual(await listedIds(page), before, 'every row is back');
+    assert.equal(await findText(page), '');
+    assert.equal(await page.eval("document.getElementById('find-clear').hidden"), true, 'no Clear once the text is deleted');
+    await typeFind(page, 'boss');
+    const bosses = DATA.events.filter((e) => e.kind === 'world-boss').map((e) => e.id);
+    const got = await listedIds(page);
+    assert.ok(got.length > 3 && got.every((id) => bosses.includes(id)), JSON.stringify(got));
+    assert.match(await findText(page), /^15 events match; \d+ are not in your lists:/);
+    assert.deepEqual(unexpected(page), []);
+  } finally { await page.close(); }
+});
+
+check('Find: a match left out by Show, Regions, Starred or the Hidden list is named with every reason and when it next starts; saved settings stay byte-identical', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    await setPrefs(page, SAVED);
+    const saved = await page.eval(`localStorage.getItem('${PREFS}')`);
+    const overrides = await page.eval("localStorage.getItem('gw2-timer:v1:overrides')");
+    await typeFind(page, 'claw');
+    assert.deepEqual(await listedIds(page), []);
+    assert.equal(await findText(page), `1 event matches, but it is not in your lists: Claw of Jormag: on your Hidden list; Core Tyria is off in Regions; Show is set to Meta events. Next at ${chicago(utc('2026-10-26T02:30:00Z'))} (02:30 UTC).`);
+    // In its window now: the window's end, not a next start.
+    await page.eval("document.getElementById('find-clear').click()"); await settle();
+    await typeFind(page, 'behemoth');
+    assert.equal(await findText(page), `1 event matches, but it is not in your lists: Shadow Behemoth: Core Tyria is off in Regions; Show is set to Meta events. In its scheduled window now, until ${chicago(utc('2026-10-26T00:00:00Z'))} (00:00 UTC).`);
+    // Fifteen world bosses: the first five named in the order they come, the rest counted.
+    await page.eval("document.getElementById('find-clear').click()"); await settle();
+    await typeFind(page, 'world boss');
+    const items = await findItems(page);
+    assert.equal(items.length, 5);
+    assert.match(await findText(page), /^15 events match, but none is in your lists: .* And 10 more not in your lists\.$/);
+    const S2 = (id) => { const e = EV.get(id); const w = S.currentWindow(e.schedule, utc('2026-10-25T23:50:00Z')); return w ? w.end : S.nextStart(e.schedule, utc('2026-10-25T23:50:00Z')); };
+    const order = DATA.events.filter((e) => e.kind === 'world-boss').sort((a, b) => S2(a.id) - S2(b.id) || a.name.localeCompare(b.name)).slice(0, 5).map((e) => e.name);
+    assert.deepEqual(items.map((t) => t.split(':')[0]), order, 'soonest first');
+    assert.ok(items.every((t) => t.includes('Show is set to Meta events')), JSON.stringify(items));
+    // Starred: the reason says so.
+    await page.eval("document.getElementById('find-clear').click()"); await settle();
+    await click(page, '[data-filter="starred"]'); await settle();
+    await typeFind(page, 'tequatl');
+    assert.match(await findText(page), /^1 event matches, but it is not in your lists: Tequatl the Sunless: Core Tyria is off in Regions; not starred, and Show is set to Starred\. Next at /);
+    await click(page, '[data-filter="meta"]'); await settle();
+    // Exactly five left out: no "more" line.
+    await page.eval(`localStorage.setItem('${PREFS}', ${JSON.stringify(JSON.stringify({ ...SAVED, regions: SAVED.regions.filter((r) => r !== 'voe') }))})`);
+    await page.reload(); await page.waitFor("document.querySelectorAll('#next-list .row').length > 0");
+    const saved2 = await page.eval(`localStorage.getItem('${PREFS}')`);
+    await typeFind(page, 'voe');
+    assert.equal((await findItems(page)).length, 5);
+    assert.ok(!/more not in your lists/.test(await findText(page)));
+    assert.equal(await page.eval(`localStorage.getItem('${PREFS}')`), saved2, 'searching saved nothing');
+    await page.eval(`localStorage.setItem('${PREFS}', ${JSON.stringify(saved)})`);
+    // Typing, Enter, Escape and Clear never write the settings, and never change the filters shown.
+    await page.reload(); await page.waitFor("document.querySelectorAll('#next-list .row').length > 0");
+    const pressed = () => page.eval("[...document.querySelectorAll('[aria-pressed]')].map((b) => b.getAttribute('aria-pressed')).join()");
+    const p0 = await pressed();
+    await typeFind(page, 'claw');
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    await key(page, 'Escape', 'Escape', 27); await settle();
+    await typeFind(page, 'tequatl'); await page.eval("document.getElementById('find-clear').click()"); await settle();
+    assert.equal(await page.eval(`localStorage.getItem('${PREFS}')`), saved, 'prefs byte-identical');
+    assert.equal(await page.eval("localStorage.getItem('gw2-timer:v1:overrides')"), overrides);
+    assert.equal(await pressed(), p0, 'no filter changed to show a match');
+    assert.equal(await page.eval('localStorage.length'), await page.eval("Object.keys(localStorage).filter((k) => k.startsWith('gw2-timer:v1:')).length"), 'nothing stored outside the app keys');
+    assert.ok(!(await page.eval('Object.keys(localStorage).join()')).includes('find'));
+    assert.equal(await page.eval('location.hash + location.search'), '', 'not in the address');
+    // A reload starts with an empty field and the reader's own lists.
+    await typeFind(page, 'claw');
+    await page.reload(); await page.waitFor("document.querySelectorAll('#next-list .row').length > 0");
+    assert.equal(await page.eval("document.getElementById('find').value"), '');
+    assert.equal(await findText(page), '');
+    assert.ok((await listedIds(page)).length > 3);
+    assert.deepEqual(unexpected(page), []);
+  } finally { await page.close(); }
+});
+
+check('Find: a match outside the Coming up span is named with its next start, in the span chosen, with the day and UTC as set', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    await typeFind(page, 'karka');
+    assert.equal(await findText(page), `1 event matches, but it is not in your lists: Karka Queen: starts after the 2 hours shown in Coming up. Next at ${chicago(utc('2026-10-26T02:00:00Z'))} (02:00 UTC).`);
+    await page.eval("(() => { const s = document.getElementById('ahead'); s.value = '60'; s.dispatchEvent(new Event('change')); })()"); await settle();
+    assert.match(await findText(page), /starts after the 1 hour shown in Coming up\./);
+    await click(page, '#utc-btn'); await settle();
+    assert.ok(!/UTC/.test(await findText(page)), 'no UTC time when UTC is off');
+    await page.eval("(() => { const s = document.getElementById('ahead'); s.value = '480'; s.dispatchEvent(new Event('change')); })()"); await settle();
+    assert.deepEqual(await listedIds(page), ['karka-queen']);
+    assert.equal(await findText(page), '1 event matches.');
+    await page.eval(`localStorage.removeItem('${PREFS}')`);
+  } finally { await page.close(); }
+  const late = await open({ at: utc('2026-10-26T04:30:00Z') }); // 11:30 PM in Chicago
+  try {
+    await typeFind(late, 'tequatl');
+    assert.equal(await findText(late), `1 event matches, but it is not in your lists: Tequatl the Sunless: starts after the 2 hours shown in Coming up. Next tomorrow at ${chicago(utc('2026-10-26T07:00:00Z'))} (07:00 UTC).`);
+  } finally { await late.close(); }
+});
+
+check('Find: no match says so; look-alikes are not found; punctuation alone searches nothing', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    await typeFind(page, 'zzzz');
+    assert.equal(await findText(page), 'No event matches. Try part of a name, a map or a region.');
+    assert.deepEqual(await page.eval("[document.getElementById('now-empty').hidden, document.getElementById('now-empty').textContent, document.getElementById('next-empty').hidden, document.getElementById('next-empty').textContent]"),
+      [false, 'Nothing that matches your search is in its scheduled window right now.', false, 'Nothing that matches your search starts in this time span.']);
+    await page.eval("document.getElementById('find-clear').click()"); await settle();
+    // "mega" is the start of a real name, so it finds Megadestroyer and not every meta event (one letter from "meta").
+    await page.eval("(() => { const s = document.getElementById('ahead'); s.value = '480'; s.dispatchEvent(new Event('change')); })()"); await settle();
+    await typeFind(page, 'mega');
+    assert.deepEqual(await listedIds(page), ['megadestroyer']);
+    assert.equal(await findText(page), '1 event matches.');
+    await page.eval("document.getElementById('find-clear').click()"); await settle();
+    await typeFind(page, 'tequatel'); // one typo in a whole word
+    assert.deepEqual(await listedIds(page), ['tequatl-the-sunless']);
+    await page.eval("document.getElementById('find-clear').click()"); await settle();
+    await typeFind(page, 'worm'); // close to "wurm", not to every world boss
+    assert.deepEqual(await listedIds(page), ['great-jungle-wurm']);
+    await page.eval("document.getElementById('find-clear').click()"); await settle();
+    const all = await listedIds(page);
+    await typeFind(page, '!!!');
+    assert.deepEqual(await listedIds(page), all, 'punctuation alone narrows nothing');
+    assert.equal(await findText(page), '');
+  } finally { await page.close(); }
+});
+
+check('Find: keyboard: the field comes before the filters, Enter applies at once, Escape and Clear empty it and keep focus in the field', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    await page.eval("document.getElementById('news-toggle').focus()");
+    const seen = [];
+    for (let i = 0; i < 12; i++) { await key(page, 'Tab', 'Tab', 9); seen.push(await page.eval("document.activeElement.id || document.activeElement.className")); }
+    assert.ok(seen.indexOf('find') >= 0 && seen.indexOf('find') < seen.findIndex((c) => /seg-btn/.test(c)), seen.join(','));
+    assert.ok(!seen.includes('find-clear') && !seen.includes('filters-toggle'), 'no Clear while empty, and no Filters button on a desktop');
+    await page.eval("document.getElementById('find').focus()");
+    await page.send('Input.insertText', { text: 'karka' });
+    await key(page, 'Enter', 'Enter', 13);
+    await sleep(60); // well inside the typing pause: Enter does not wait for it
+    assert.match(await findText(page), /^1 event matches, but it is not in your lists: Karka Queen/);
+    await key(page, 'Tab', 'Tab', 9);
+    assert.equal(await page.eval('document.activeElement.id'), 'find-clear', 'Clear comes right after the field');
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.deepEqual([await page.eval('document.activeElement.id'), await page.eval("document.getElementById('find').value"), await findText(page)], ['find', '', '']);
+    await page.send('Input.insertText', { text: 'wurm' }); await sleep(800);
+    assert.deepEqual(await listedIds(page), ['great-jungle-wurm']);
+    await key(page, 'Escape', 'Escape', 27); await settle();
+    assert.deepEqual([await page.eval('document.activeElement.id'), await page.eval("document.getElementById('find').value"), await findText(page)], ['find', '', '']);
+    assert.ok((await listedIds(page)).length > 3);
+    assert.equal(await page.eval("document.getElementById('find-clear').hidden"), true, 'Clear goes with the text');
+    // Escape in an empty field does nothing at all.
+    await key(page, 'Escape', 'Escape', 27); await settle();
+    assert.equal(await page.eval('document.activeElement.id'), 'find');
+  } finally { await page.close(); }
+});
+
+check('Find: screen readers: the field is named and described by the status, which is a polite region that speaks once per pause, not per letter', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    assert.equal(await page.eval("document.getElementById('find-status').getAttribute('role')"), 'status');
+    assert.notEqual(await page.eval("getComputedStyle(document.getElementById('find-status')).display"), 'none', 'the region exists before it first speaks');
+    assert.equal(await page.eval("document.getElementById('find').getAttribute('aria-describedby')"), 'find-status');
+    assert.deepEqual(await page.eval("[document.getElementById('find').type, document.getElementById('find').maxLength, document.getElementById('find').autocomplete, document.querySelector('[role=search]').contains(document.getElementById('find'))]"), ['search', 60, 'off', true]);
+    // Every change the region goes through while a slow typist types a name (a letter every 250 ms: the
+    // lists narrow after each letter, 150 ms in, and the status waits for a 500 ms pause), and for two
+    // seconds after.
+    await page.eval("window.__said = []; window.__rows = []; new MutationObserver(() => window.__said.push(document.getElementById('find-status').textContent)).observe(document.getElementById('find-status'), { childList: true, subtree: true, characterData: true }); new MutationObserver(() => window.__rows.push(document.querySelectorAll('#next-list .row').length)).observe(document.getElementById('next-list'), { childList: true })");
+    await typeFind(page, 'tequatl', { gap: 250, settleMs: 2200 });
+    const said = await page.eval('window.__said');
+    assert.equal(said.length, 1, JSON.stringify(said));
+    assert.equal(said[0], '1 event matches.');
+    assert.ok((await page.eval('window.__rows')).length >= 3, 'the lists narrowed while typing, letter by letter');
+    await page.send('Accessibility.enable');
+    const ax = async (sel) => {
+      const { root } = await page.send('DOM.getDocument', {});
+      const { nodeId } = await page.send('DOM.querySelector', { nodeId: root.nodeId, selector: sel });
+      const { nodes } = await page.send('Accessibility.getPartialAXTree', { nodeId, fetchRelatives: false });
+      const n = nodes[0];
+      return { role: n.role && n.role.value, name: n.name && n.name.value, description: n.description && n.description.value };
+    };
+    assert.deepEqual(await ax('#find'), { role: 'searchbox', name: 'Find', description: '1 event matches.' });
+    assert.deepEqual(await ax('#find-clear'), { role: 'button', name: 'Clear the search', description: undefined });
+    // Countdowns elsewhere keep ticking; the region stays quiet.
+    await sleep(2100);
+    assert.equal((await page.eval('window.__said')).length, 1, 'no repeat while nothing changes');
+  } finally { await page.close(); }
+});
+
+check('Find: on a phone the filters fold under one button beside Find, the events start on the first screen, and the fold is never saved', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z'), width: 390, height: 844, mobile: true });
+  try {
+    await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
+    const state = () => page.eval("[document.getElementById('filters-toggle').getAttribute('aria-expanded'), getComputedStyle(document.getElementById('filters-body')).display, document.querySelector('[data-filter=\"all\"]').getBoundingClientRect().height > 0]");
+    assert.deepEqual(await state(), ['false', 'none', false], 'folded at first');
+    assert.equal(await page.eval("document.getElementById('filters-toggle').getAttribute('aria-controls')"), 'filters-body');
+    const head = await page.eval("document.getElementById('now-title').getBoundingClientRect().bottom");
+    assert.ok(head < 844, `Scheduled now ends at ${head} px, inside the 844 px screen`);
+    const row = await page.eval("[document.getElementById('find').getBoundingClientRect(), document.getElementById('filters-toggle').getBoundingClientRect()].map((r) => [Math.round(r.top), Math.round(r.height)])");
+    assert.ok(Math.abs(row[0][0] - row[1][0]) <= 2 && row[0][1] >= 36 && row[1][1] >= 36, `Find and Filters share one line, 36 px tall: ${JSON.stringify(row)}`);
+    assert.ok(Number.parseFloat(await page.eval("getComputedStyle(document.getElementById('find')).fontSize")) >= 16, 'no zoom into the field on phones');
+    const saved = await page.eval(`localStorage.getItem('${PREFS}')`);
+    await click(page, '#filters-toggle'); await settle();
+    assert.deepEqual(await state(), ['true', 'grid', true], 'a tap opens them');
+    await page.eval("document.getElementById('filters-toggle').focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.deepEqual(await state(), ['false', 'none', false], 'Enter folds them again');
+    await key(page, ' ', 'Space', 32); await settle();
+    assert.equal((await state())[0], 'true', 'Space opens them');
+    assert.equal(await page.eval(`localStorage.getItem('${PREFS}')`), saved, 'opening and folding wrote nothing');
+    await click(page, '[data-filter="meta"]'); await settle();
+    await click(page, '#filters-toggle'); await settle();
+    assert.equal(await text(page, '#filters-summary'), 'Meta events only', 'what narrows the lists shows under the folded filters');
+    assert.equal(await page.eval("getComputedStyle(document.getElementById('filters-summary')).display"), 'block');
+    assert.equal(await page.eval(`JSON.parse(localStorage.getItem('${PREFS}')).filter`), 'meta');
+    assert.ok(!/open|fold/i.test(await page.eval(`localStorage.getItem('${PREFS}')`)), 'the fold is not saved');
+    assert.equal(saved, null, 'a fresh profile');
+    await click(page, '#filters-toggle'); await settle();
+    await page.reload(); await page.waitFor("document.querySelectorAll('#next-list .row').length > 0");
+    assert.deepEqual(await state(), ['false', 'none', false], 'folded again after a reload');
+    assert.deepEqual(Object.keys(JSON.parse(await page.eval(`localStorage.getItem('${PREFS}')`))).sort(), Object.keys(SAVED).sort(), 'the saved settings gain no key');
+  } finally { await page.close(); }
+  const wide = await open({ at: utc('2026-10-25T23:50:00Z'), width: 1280, height: 900 });
+  try {
+    assert.deepEqual(await wide.eval("[getComputedStyle(document.getElementById('filters-toggle')).display, getComputedStyle(document.getElementById('filters-body')).display, getComputedStyle(document.getElementById('filters-summary')).display]"), ['none', 'grid', 'none'], 'a desktop shows every filter and no button');
+  } finally { await wide.close(); }
+});
+
+check('Find: at 320, 360 and 390 px nothing scrolls sideways with the filters folded or open and a long status, and every control is 36 px tall', async () => {
+  for (const [width, height] of [[320, 568], [360, 740], [390, 844]]) {
+    const page = await open({ at: utc('2026-10-25T23:50:00Z'), width, height, mobile: true });
+    try {
+      await setPrefs(page, SAVED);
+      await typeFind(page, 'world boss');
+      assert.match(await findText(page), /And 10 more/);
+      assert.equal((await sideways(page, width))[0], width, `${width} folded`);
+      // Typed text stops before the Clear button inside the field.
+      const [textEnd, clearStart] = await page.eval("(() => { const i = document.getElementById('find'), r = i.getBoundingClientRect(); return [r.right - parseFloat(getComputedStyle(i).paddingRight), document.getElementById('find-clear').getBoundingClientRect().left]; })()");
+      assert.ok(textEnd <= clearStart + 0.5, `${width}: text runs to ${textEnd}, Clear starts at ${clearStart}`);
+      await click(page, '#filters-toggle'); await settle();
+      assert.equal((await sideways(page, width))[0], width, `${width} open`);
+      const small = await page.eval("[...document.querySelectorAll('.controls button, .controls input, .controls select')].filter((b) => b.offsetParent && (b.getBoundingClientRect().height < 36 || b.getBoundingClientRect().width < 24)).map((b) => b.id || b.className)");
+      assert.deepEqual(small, [], `${width}`);
+    } finally { await page.close(); }
+  }
+});
+
+check('Starred with nothing starred: both lists say how to star; with stars, the usual text', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    const how = 'No events are starred yet. To star one, set Show to All, then select the star (☆) by its name.';
+    const empties = () => page.eval("['now-empty', 'next-empty'].map((id) => document.getElementById(id).textContent)");
+    await click(page, '[data-filter="meta"]'); await settle();
+    assert.ok(!(await empties()).includes(how), 'only under Starred');
+    await click(page, '[data-filter="starred"]'); await settle();
+    assert.deepEqual(await page.eval("['now-empty', 'next-empty'].map((id) => [document.getElementById(id).hidden, document.getElementById(id).textContent])"), [[false, how], [false, how]]);
+    await click(page, '[data-filter="all"]'); await settle();
+    await click(page, '#next-list .row[data-id="karka-queen"] [data-star], #next-list .row [data-star]'); await settle();
+    await click(page, '[data-filter="starred"]'); await settle();
+    const t = await page.eval("['now-empty', 'next-empty'].map((id) => document.getElementById(id).textContent)");
+    assert.ok(!t.includes(how), JSON.stringify(t));
+  } finally { await page.close(); }
+});
+
+check('the weekly reset countdown stays on one line at 390 and 768 px, moving under the time whole when it does not fit beside it', async () => {
+  for (const [width, height, mobile] of [[390, 844, true], [768, 1024, false], [320, 568, true]]) {
+    for (const at of ['2026-10-25T17:00:00Z', '2026-10-25T20:22:00Z', '2026-10-26T08:00:00Z']) {
+      const page = await open({ at: utc(at), width, height, mobile, news: { mode: 'fail' } });
+      try {
+        const subs = await page.eval("[...document.querySelectorAll('#strip li')].map((li) => { const s = li.querySelector('.sub'), b = s.getBoundingClientRect(), l = li.getBoundingClientRect(); return { t: s.textContent, h: b.height, line: parseFloat(getComputedStyle(s).lineHeight) || 18, inside: b.right <= l.right + 0.5 }; })");
+        for (const s of subs) assert.ok(s.h < 1.5 * s.line && s.inside, `${width} px at ${at}: "${s.t}" is ${s.h} px tall${s.inside ? '' : ', past its box'}`);
+      } finally { await page.close(); }
+    }
+  }
+});
+
+// ---- v0.3.0 Phase D: links to one event (#event/<id>) and the details dialog ----
+
+const CANON = 'https://radmagelabs.com/gw2-timer/#event/';
+const dlg = (page) => page.eval(`(() => { const d = document.getElementById('event-dialog'); const t = (s) => (d.querySelector(s) || {}).innerText || ''; return {
+  open: d.open, title: t('#event-dialog-title'), when: t('#event-dialog-when').replace(/\\s+/g, ' ').trim(), why: t('.ed-why').replace(/\\s+/g, ' ').trim(),
+  facts: t('.ed-facts').replace(/\\s+/g, ' ').trim(), status: t('#event-dialog-status'), active: document.activeElement.id || document.activeElement.getAttribute('data-fkey') || document.activeElement.tagName,
+  hash: location.hash, notice: document.getElementById('link-notice').hidden ? '' : document.getElementById('link-notice-text').textContent }; })()`);
+/** A tab whose address carries `hash` when the page loads, with the given settings already saved. */
+async function openLink(hash, { prefs = null, overrides = null, beforeLoad = null, ...opts } = {}) {
+  const page = await open(opts);
+  if (prefs) await page.eval(`localStorage.setItem('${PREFS}', ${JSON.stringify(JSON.stringify(prefs))})`);
+  if (overrides) await page.eval(`localStorage.setItem('gw2-timer:v1:overrides', ${JSON.stringify(JSON.stringify(overrides))})`);
+  if (beforeLoad) await page.beforeLoad(beforeLoad);
+  await page.eval(`history.replaceState(null, '', ${JSON.stringify(hash)})`);
+  await page.reload();
+  await page.waitFor("document.querySelectorAll('#next-list .row, #next-empty:not([hidden])').length > 0");
+  await sleep(100);
+  return page;
+}
+// Copy link and Copy waypoint, recorded instead of reaching the system clipboard (or refused, with refuse: true).
+const CLIP = (refuse) => `(() => { const w = (t) => { window.__copied = t; return ${refuse ? "Promise.reject(new Error('refused'))" : 'Promise.resolve()'}; };
+  try { Object.defineProperty(navigator, 'clipboard', { value: { writeText: w, readText: () => Promise.resolve(window.__copied || '') }, configurable: true }); } catch (e) {}
+  ${refuse ? 'document.execCommand = () => false;' : ''} })();`;
+
+check('Link: #event/<id> opened directly shows the event over the reader\'s own page, in Chicago and London: where, next start in local time and UTC with a countdown, focus on its name', async () => {
+  for (const [tz, start] of [['America/Chicago', '7:00 PM'], ['Europe/London', 'Tomorrow 12:00 AM']]) {
+    const page = await openLink('#event/tequatl-the-sunless', { at: utc('2026-10-25T23:50:00Z'), tz });
+    try {
+      const d = await dlg(page);
+      assert.equal(d.open, true, tz);
+      assert.equal(d.title, 'Tequatl the Sunless');
+      assert.match(d.when, new RegExp(`^Next scheduled start: ${start} \\(00:00 UTC\\), in (10m 00|9m 5\\d)s\\.$`), `${tz}: ${d.when}`);
+      assert.match(d.facts, /^Where Sparkfly Fen, Core Tyria How often Daily at 00:00, 03:00, 07:00, 11:30, 16:00, 19:00 UTC, runs about 30 min\. How sure Documented: at least two independent written sources agree on this time\. It has not been checked in game\.$/);
+      assert.match(await text(page, '#event-dialog .ed-live'), /^Scheduled, not live: the game has no public live-event feed/, 'scheduled, never presented as live');
+      assert.equal(d.why, '', 'it is in the lists, so no note');
+      assert.equal(d.active, 'event-dialog-title', 'focus on the name');
+      assert.ok((await rows(page)).length > 10, 'the reader\'s own page is behind it');
+      assert.equal(await page.eval(`localStorage.getItem('${PREFS}')`), null, 'opening a link saved nothing');
+      assert.deepEqual(page.requests.filter((u) => !u.startsWith(BASE) && u !== FEED_URL), [], 'no request leaves the site');
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  }
+  // Upper case, an escaped dash and one trailing slash are the same link.
+  for (const hash of ['#event/TEQUATL-THE-SUNLESS', '#event/tequatl%2Dthe%2Dsunless', '#event/tequatl-the-sunless/']) {
+    const page = await openLink(hash, { at: utc('2026-10-25T23:50:00Z') });
+    try { assert.deepEqual([(await dlg(page)).open, (await dlg(page)).title], [true, 'Tequatl the Sunless'], hash); } finally { await page.close(); }
+  }
+});
+
+check('Link: an event in its window says until when, and only its countdown changes while it is open', async () => {
+  const page = await openLink('#event/shadow-behemoth', { at: utc('2026-10-25T23:50:00Z') });
+  try {
+    const a = await dlg(page);
+    assert.match(a.when, /^Scheduled now, until 7:00 PM \(00:00 UTC\)\. Window closes in (10m 00|9m 5\d)s\.$/, a.when);
+    await page.eval("window.__rebuilt = 0; new MutationObserver(() => window.__rebuilt++).observe(document.getElementById('event-dialog-body'), { childList: true })");
+    await sleep(2300);
+    assert.notEqual((await dlg(page)).when, a.when, 'the countdown ticks');
+    assert.equal(await page.eval('window.__rebuilt'), 0, 'the rest of the dialog is not rebuilt every second');
+  } finally { await page.close(); }
+});
+
+check('Link: a hidden or filtered event still opens with every reason it has no row, and nothing saved changes; Star in the details saves like any star', async () => {
+  const page = await openLink('#event/claw-of-jormag', { at: utc('2026-10-25T23:50:00Z'), prefs: SAVED });
+  try {
+    const saved = await page.eval(`localStorage.getItem('${PREFS}')`);
+    const d = await dlg(page);
+    assert.equal(d.open, true);
+    assert.equal(d.why, 'Not in your lists right now: on your Hidden list; Core Tyria is off in Regions; Show is set to Meta events. Opening it here changed none of your settings.');
+    assert.match(d.when, /^Next scheduled start: 9:30 PM \(02:30 UTC\), in 2h 3\dm\.$/);
+    assert.equal(await page.eval(`localStorage.getItem('${PREFS}')`), saved, 'byte-identical');
+    assert.equal(await page.eval("document.getElementById('hidden-btn').textContent"), 'Hidden (1)');
+    // Star: the same setting as everywhere else, saved, and the dialog follows.
+    await page.eval("document.querySelector('#event-dialog [data-star]').focus()");
+    await key(page, ' ', 'Space', 32); await settle();
+    assert.equal(await page.eval("document.querySelector('#event-dialog [data-star]').getAttribute('aria-pressed')"), 'true');
+    assert.equal(await page.eval("document.activeElement.getAttribute('data-fkey')"), 'dlg:star', 'focus stays on Star');
+    assert.ok(JSON.parse(await page.eval(`localStorage.getItem('${PREFS}')`)).starred.includes('claw-of-jormag'));
+    await click(page, '#event-dialog [data-close]'); await settle();
+    // A search that leaves it out is a reason too.
+    await typeFind(page, 'wurm');
+    await page.eval("location.hash = '#event/drakkar'");
+    await page.waitFor("document.getElementById('event-dialog').open");
+    assert.equal((await dlg(page)).why, 'Not in your lists right now: it does not match your search; Show is set to Meta events. Opening it here changed none of your settings.');
+  } finally { await page.close(); }
+});
+
+check('Link: an adjusted event shows the reader\'s own time and the default; Copy link gives the canonical address with the event id and nothing else, and says so in the dialog', async () => {
+  const page = await openLink('#event/shackles-of-the-ancients', { at: utc('2026-10-25T23:50:00Z'), overrides: { 'shackles-of-the-ancients': { offsetMin: 70, setAt: 1 } } });
+  try {
+    const d = await dlg(page);
+    assert.match(d.when, /^Next scheduled start: 8:10 PM \(01:10 UTC\), in 1h 1\dm\.$/, d.when);
+    assert.match(d.facts, /How often Yours, set with Adjust in this browser: every 2 h from 01:10 UTC, runs about 25 min\. Default: every 2 h from 01:15 UTC\./);
+    assert.ok(await page.eval("Boolean(document.querySelector('#event-dialog .badge.adjusted'))"));
+    await click(page, '#event-dialog [data-copy-link]');
+    await page.waitFor("document.getElementById('event-dialog-status').textContent !== ''");
+    const copied = await page.eval('navigator.clipboard.readText()');
+    assert.equal(copied, `${CANON}shackles-of-the-ancients`);
+    assert.match(copied, /^https:\/\/radmagelabs\.com\/gw2-timer\/#event\/[a-z0-9-]+$/, 'nothing but the id: no offset, star, filter or time');
+    assert.equal((await dlg(page)).status, 'Copied the link to Shackles of the Ancients.');
+    assert.equal(await page.eval("document.getElementById('event-dialog-status').getAttribute('role')"), 'status');
+    // Copy waypoint inside the dialog speaks there too, not behind the backdrop.
+    await click(page, '#event-dialog [data-copy]');
+    await page.waitFor("/^Copied \\[/.test(document.getElementById('event-dialog-status').textContent)");
+    assert.equal(await page.eval("document.getElementById('toast').classList.contains('show')"), false);
+  } finally { await page.close(); }
+});
+
+const HOSTILE_HASHES = [
+  ['#event/zqx-unknown-boss', 'unknown'],
+  ['#event/tequatl-the-sunless-zqx', 'unknown'],
+  ['#event/__proto__', 'malformed'],
+  ['#event/zqx%3Cimg%20src%3Dx%20onerror%3Dwindow.__pwned%3D1%3E', 'malformed'],
+  ['#event/' + 'zqx'.repeat(30), 'malformed'],
+  ['#event/zqx%E0%A4%A', 'malformed'],
+  ['#event/tequatl-the-sunless/zqx', 'malformed'],
+  ['#event/zqx..%2F..%2Fetc', 'malformed'],
+];
+check('Link: unusable links open nothing, say so in fixed words, never write the link into the page, and change nothing saved', async () => {
+  const words = { unknown: 'That link names an event this timer does not cover. It may have been renamed or removed. Nothing of yours was changed.', malformed: 'That link to an event could not be read. Nothing of yours was changed.' };
+  for (const [hash, reason] of HOSTILE_HASHES) {
+    const page = await openLink(hash, { at: utc('2026-10-25T23:50:00Z'), prefs: SAVED, overrides: { 'secrets-of-the-weald': { offsetMin: 105, setAt: 1 } } });
+    try {
+      const store = await page.eval("JSON.stringify(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)]))");
+      const d = await dlg(page);
+      assert.equal(d.open, false, hash);
+      assert.equal(d.notice, words[reason], hash);
+      const html = await page.eval('document.documentElement.outerHTML + document.title');
+      assert.ok(!/zqx|__proto__|onerror/.test(html), `${hash}: the link's text reached the page`);
+      assert.equal(await page.eval('typeof window.__pwned'), 'undefined');
+      assert.equal(await page.eval("JSON.stringify(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)]))"), store);
+      assert.deepEqual(JSON.parse(await page.eval(`localStorage.getItem('${PREFS}')`)), SAVED, 'the saved settings are as they were');
+      assert.deepEqual(unexpected(page), [], hash);
+    } finally { await page.close(); }
+  }
+  // Dismiss takes the bad link out of the address; a later good link hides the notice; a bad link typed
+  // over an open dialog closes it and stays in the address while the notice says why.
+  const page = await openLink('#event/zqx-unknown-boss', { at: utc('2026-10-25T23:50:00Z') });
+  try {
+    await click(page, '#link-notice-dismiss'); await settle();
+    assert.deepEqual([(await dlg(page)).notice, (await dlg(page)).hash], ['', '']);
+    await page.eval("location.hash = '#event/zqx-again'"); await settle();
+    assert.notEqual((await dlg(page)).notice, '');
+    await page.eval("document.querySelector('#next-list .row a.event-link').click()");
+    await page.waitFor("document.getElementById('event-dialog').open");
+    assert.equal((await dlg(page)).notice, '', 'a link that works hides the notice');
+    await page.eval("location.hash = '#event/zqx-typed'"); await settle();
+    const d = await dlg(page);
+    assert.deepEqual([d.open, d.hash, d.notice === words.unknown], [false, '#event/zqx-typed', true]);
+  } finally { await page.close(); }
+});
+
+check('Link: the page\'s own anchors are untouched: #event-index and #now-title open nothing, and the skip links still move focus', async () => {
+  for (const hash of ['#event-index', '#now-title', '#coming-title', '#event', '#events/drakkar']) {
+    const page = await openLink(hash, { at: utc('2026-10-25T23:50:00Z') });
+    try {
+      const d = await dlg(page);
+      assert.deepEqual([d.open, d.notice, d.hash], [false, '', hash], hash);
+    } finally { await page.close(); }
+  }
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    await page.eval("document.querySelectorAll('.skip')[1].focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.deepEqual([await page.eval('document.activeElement.id'), (await dlg(page)).open], ['coming-title', false]);
+  } finally { await page.close(); }
+});
+
+check('Link: a name opens the details in the open tab with one history entry; Back closes them, Forward opens them again; Escape closes them, takes the event out of the address and returns focus to the name', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    const h0 = await page.eval('history.length');
+    const sel = '#next-list .row[data-id="tequatl-the-sunless"] a.event-link';
+    assert.equal(await page.eval(`document.querySelector('${sel}').getAttribute('href')`), '#event/tequatl-the-sunless');
+    await page.eval(`document.querySelector('${sel}').focus()`);
+    await key(page, 'Enter', 'Enter', 13);
+    await page.waitFor("document.getElementById('event-dialog').open");
+    assert.deepEqual([(await dlg(page)).hash, await page.eval('history.length')], ['#event/tequatl-the-sunless', h0 + 1]);
+    const nameKey = await page.eval(`document.querySelector('${sel}').getAttribute('data-fkey')`);
+    await page.eval('history.back()');
+    await page.waitFor("!document.getElementById('event-dialog').open");
+    assert.equal((await dlg(page)).hash, '');
+    assert.equal(await page.eval('document.activeElement.getAttribute("data-fkey")'), nameKey, 'Back returns focus to the name');
+    await page.eval('history.forward()');
+    await page.waitFor("document.getElementById('event-dialog').open");
+    assert.equal((await dlg(page)).title, 'Tequatl the Sunless');
+    // Starring rebuilds the lists behind the dialog; Escape still finds the name again.
+    await click(page, '#event-dialog [data-star]'); await settle();
+    await key(page, 'Escape', 'Escape', 27);
+    await page.waitFor("!document.getElementById('event-dialog').open && location.hash === ''");
+    assert.equal(await page.eval('history.length'), h0 + 1, 'closing added no entry');
+    assert.equal(await page.eval('document.activeElement.getAttribute("data-fkey")'), nameKey, 'focus back on the name');
+    // Closing stepped back to the page's entry (it did not rewrite the event's), so Forward opens the details again.
+    await page.eval('history.forward()');
+    await page.waitFor("document.getElementById('event-dialog').open");
+    await key(page, 'Escape', 'Escape', 27);
+    await page.waitFor("!document.getElementById('event-dialog').open && location.hash === ''");
+    await page.reload(); await page.waitFor("document.querySelectorAll('#next-list .row').length > 0");
+    assert.equal((await dlg(page)).open, false, 'a reload shows the reader\'s own page');
+    // The event index and the Find status open the same details.
+    await click(page, '#event-index summary'); await settle();
+    await click(page, '#event-index a[href="#event/drakkar"]');
+    await page.waitFor("document.getElementById('event-dialog').open");
+    assert.equal((await dlg(page)).title, 'Drakkar');
+    await click(page, '#event-dialog [data-close]');
+    await page.waitFor("!document.getElementById('event-dialog').open && location.hash === ''");
+    await typeFind(page, 'karka');
+    await click(page, '#find-status a.event-link');
+    await page.waitFor("document.getElementById('event-dialog').open");
+    assert.equal((await dlg(page)).why, 'Not in your lists right now: starts after the 2 hours shown in Coming up. Opening it here changed none of your settings.');
+  } finally { await page.close(); }
+});
+
+check('Link: opened directly, closing drops the event from the address in place: no new history entry, nothing to reopen on reload; modified clicks stay the browser\'s', async () => {
+  const page = await openLink('#event/drakkar', { at: utc('2026-10-25T23:50:00Z') });
+  try {
+    const h0 = await page.eval('history.length');
+    await click(page, '#event-dialog [data-close]'); await settle();
+    assert.deepEqual([(await dlg(page)).open, (await dlg(page)).hash, await page.eval('history.length')], [false, '', h0]);
+    await page.reload(); await page.waitFor("document.querySelectorAll('#next-list .row').length > 0");
+    assert.equal((await dlg(page)).open, false);
+    // A click with Ctrl, or not with the main button, is left to the browser (a new tab); a plain one opens the details.
+    // Whether the page took the click is read on window, after the page's own handler, which then stops the browser following it here.
+    const taken = await page.eval("[{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { button: 1 }, {}].map((o) => { let took = null; window.addEventListener('click', (e) => { took = e.defaultPrevented; e.preventDefault(); }, { once: true }); document.querySelector('#next-list a.event-link').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...o })); return took && document.getElementById('event-dialog').open; })");
+    assert.deepEqual(taken, [false, false, false, false, true]);
+  } finally { await page.close(); }
+});
+
+check('Link: Copy link from a file and from another address gives the canonical address; with the clipboard refused, the link is shown selected', async () => {
+  for (const url of [pathToFileURL(join(DIR, 'index.html')).href + '#event/karka-queen', `${BASE}#event/karka-queen`]) {
+    const page = await chrome.newPage();
+    try {
+      await page.emulate({ timezone: 'America/Chicago', locale: 'en-US' });
+      await page.startClockAt(utc('2026-10-25T23:50:00Z'));
+      await page.beforeLoad(CLIP(false));
+      await page.goto(url);
+      await page.waitFor("document.getElementById('event-dialog').open");
+      await click(page, '#event-dialog [data-copy-link]');
+      await page.waitFor('window.__copied');
+      assert.equal(await page.eval('window.__copied'), `${CANON}karka-queen`, url);
+      assert.deepEqual(unexpected(page), [], url);
+    } finally { await page.close(); }
+  }
+  const page = await openLink('#event/karka-queen', { at: utc('2026-10-25T23:50:00Z'), beforeLoad: CLIP(true) });
+  try {
+    await click(page, '#event-dialog [data-copy-link]');
+    await page.waitFor("!document.getElementById('event-dialog-linkbox').hidden");
+    assert.deepEqual(await page.eval("(() => { const i = document.getElementById('event-dialog-link'); return [i.value, document.activeElement === i, i.selectionStart, i.selectionEnd === i.value.length]; })()"), [`${CANON}karka-queen`, true, 0, true]);
+    assert.match((await dlg(page)).status, /^Copy did not work here\. The link is selected in the box/);
+  } finally { await page.close(); }
+});
+
+check('Link: screen readers and keyboard: a modal named by the event and described by its start; names say they open a dialog; Tab stays inside; Escape returns to the page', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    await page.send('Accessibility.enable');
+    const ax = async (sel) => {
+      const { root } = await page.send('DOM.getDocument', {});
+      const { nodeId } = await page.send('DOM.querySelector', { nodeId: root.nodeId, selector: sel });
+      const { nodes } = await page.send('Accessibility.getPartialAXTree', { nodeId, fetchRelatives: false });
+      const n = nodes[0], prop = (k) => ((n.properties || []).find((p) => p.name === k) || {}).value;
+      return { role: n.role && n.role.value, name: n.name && n.name.value, description: n.description && n.description.value, haspopup: prop('hasPopup') && prop('hasPopup').value, modal: prop('modal') && prop('modal').value };
+    };
+    const link = await ax('#next-list .row[data-id="tequatl-the-sunless"] a.event-link');
+    assert.deepEqual([link.role, link.name, link.haspopup], ['link', 'Tequatl the Sunless', 'dialog']);
+    await page.eval("document.querySelector('#next-list .row[data-id=\"tequatl-the-sunless\"] a.event-link').focus()");
+    await key(page, 'Enter', 'Enter', 13);
+    await page.waitFor("document.getElementById('event-dialog').open");
+    const d = await ax('#event-dialog');
+    assert.deepEqual([d.role, d.name, d.modal], ['dialog', 'Tequatl the Sunless', true]);
+    assert.match(d.description, /^Next scheduled start: 7:00 PM \(00:00 UTC\), in/);
+    // Tab goes round the dialog and may step out to the browser's own controls, never to the page behind.
+    const where = [];
+    for (let i = 0; i < 14; i++) { await key(page, 'Tab', 'Tab', 9); where.push(await page.eval("(() => { const a = document.activeElement; return !a || a === document.body ? 'browser' : document.getElementById('event-dialog').contains(a) ? 'dialog' : 'page:' + (a.id || a.className); })()")); }
+    assert.ok(!where.some((w) => w.startsWith('page:')) && where.filter((w) => w === 'dialog').length >= 10, where.join(','));
+    const names = await page.eval("[...document.querySelectorAll('#event-dialog button, #event-dialog a')].map((b) => b.getAttribute('aria-label') || b.textContent.trim())");
+    assert.deepEqual(names, ['Close', 'Star Tequatl the Sunless', 'Copy waypoint for Tequatl the Sunless: [&BNABAAA=]', 'Tequatl the Sunless on the Guild Wars 2 Wiki (opens a new tab)', 'Copy a link to Tequatl the Sunless']);
+    assert.ok(!(await page.eval("[...document.querySelectorAll('#event-dialog *')].filter((n) => n.childElementCount === 0).map((n) => n.textContent).join(' ')")).includes('★'), 'the star glyph stays out of the names');
+    await key(page, 'Escape', 'Escape', 27);
+    await page.waitFor("!document.getElementById('event-dialog').open");
+    assert.equal(await page.eval('document.activeElement.classList.contains("event-link")'), true);
+  } finally { await page.close(); }
+});
+
+check('Link: the details fit a 320, 360 and 390 px phone and a desktop: no sideways scroll, 36 px controls, name links big enough to tap', async () => {
+  for (const [width, height, mobile] of [[320, 568, true], [360, 740, true], [390, 844, true], [1280, 900, false]]) {
+    const page = await openLink('#event/claw-of-jormag', { at: utc('2026-10-25T23:50:00Z'), width, height, mobile, prefs: SAVED });
+    try {
+      const r = await page.eval("(() => { const d = document.getElementById('event-dialog'), b = d.getBoundingClientRect(); return { left: b.left, right: b.right, inner: d.scrollWidth <= d.clientWidth, page: document.documentElement.scrollWidth }; })()");
+      assert.ok(r.left >= 0 && r.right <= width && r.inner && r.page <= width, `${width}: ${JSON.stringify(r)}`);
+      if (mobile) {
+        const small = await page.eval("[...document.querySelectorAll('#event-dialog button, #event-dialog a.btn')].filter((b) => b.getBoundingClientRect().height < 36).map((b) => b.textContent)");
+        assert.deepEqual(small, [], `${width}`);
+        await click(page, '#event-dialog [data-close]'); await settle();
+        const names = await page.eval("[...document.querySelectorAll('#next-list a.event-link, #now-list a.event-link')].map((a) => a.getBoundingClientRect().height)");
+        assert.ok(names.length > 3 && names.every((x) => x >= 36), `${width}: name links ${JSON.stringify(names.slice(0, 4))} px tall to tap`);
+      }
+    } finally { await page.close(); }
+  }
+});
+
+// ---- v0.3.0 Phase E: reminders on the page ----
+
+const MIN = 60000, DAY = 86400000;
+const TITLE = 'GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers';
+const RSET = 'gw2-timer:v1:reminders', RDONE = 'gw2-timer:v1:reminded';
+const ON = { on: true, lead: 10, notify: false };
+// Tequatl, Admiral Taidha Covington, Kaineng Blackout and Defense of Amnytas all start then (7:00 PM in Chicago).
+const T0 = utc('2026-10-26T00:00:00Z');
+const FOUR = ['tequatl-the-sunless', 'admiral-taidha-covington', 'kaineng-blackout', 'defense-of-amnytas'];
+const ALLOW = [/ERR_FAILED/]; // the clock check failed on purpose (clock: 'fail')
+// Every reminder announcement the page makes: when (performance.now and the page's own Date.now), where,
+// and whether the clock had been corrected by then. One entry per write of text: two writes in one task,
+// or the same sentence written twice, are two entries.
+const LISTEN = `(() => { window.__said = [];
+  new MutationObserver((ms) => {
+    for (const m of ms) {
+      const n = m.target.nodeType === 1 ? m.target : m.target.parentElement, a = n && n.closest && n.closest('[data-announce]');
+      const text = !a ? '' : m.type === 'characterData' ? m.target.data : [...m.addedNodes].map((x) => x.textContent).join('');
+      if (text) window.__said.push({ t: performance.now(), wall: Date.now(), text, where: a.id || (a.closest('dialog') || {}).id || '', corrected: !document.getElementById('clock-notice').hidden });
+    }
+  }).observe(document, { subtree: true, childList: true, characterData: true }); })();`;
+// Phase E must never touch browser notifications: a stand-in counts any use.
+const NOTIFY = `(() => { window.__notify = { made: 0, asked: 0 }; const N = function () { window.__notify.made++; }; N.permission = 'default';
+  N.requestPermission = () => { window.__notify.asked++; return Promise.resolve('default'); }; window.Notification = N; })();`;
+const COUNT_WRITES = `(() => { window.__writes = {}; const set = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (k, v) { window.__writes[k] = (window.__writes[k] || 0) + 1; return set.call(this, k, v); }; })();`;
+const COUNT_READS = `(() => { window.__reads = {}; const get = Storage.prototype.getItem;
+  Storage.prototype.getItem = function (k) { window.__reads[k] = (window.__reads[k] || 0) + 1; return get.call(this, k); }; })();`;
+const CLOCK_SPY = `(() => { const f = window.fetch; window.fetch = (...a) => f(...a).catch((e) => { if (/clock=/.test(String(a[0]))) window.__clockFailed = performance.now(); throw e; }); })();`;
+const LOCK_SPY = `(() => { window.__locks = []; const l = navigator.locks; if (!l) return; const req = l.request.bind(l);
+  l.request = (name, ...rest) => { window.__locks.push(name); return req(name, ...rest); }; })();`;
+const NO_LOCKS = `(() => { try { Object.defineProperty(Navigator.prototype, 'locks', { get: () => undefined, configurable: true }); } catch (e) {} })();`;
+const SLOW_LOCK = `(() => { window.__lockCalls = 0; const l = navigator.locks; const req = l.request.bind(l);
+  l.request = (name, fn) => { window.__lockCalls++; return new Promise((ok) => setTimeout(ok, 2500)).then(() => req(name, fn)); }; })();`;
+const BLOCK_STORAGE = `(() => { Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('The operation is insecure.', 'SecurityError'); }, configurable: true }); })();`;
+const FAIL_WRITES = `(() => { Storage.prototype.setItem = function () { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); }; })();`;
+
+/** A tab with reminder settings, stars, Adjust times and records saved before the page first loads. */
+const openR = ({ prefs, overrides, reminders = ON, records, init = [], ...opts } = {}) => open({ ...opts, init: [LISTEN, ...init],
+  seed: { ...(prefs ? { [PREFS]: prefs } : {}), ...(overrides ? { 'gw2-timer:v1:overrides': overrides } : {}), ...(reminders ? { [RSET]: reminders } : {}), ...(records ? { [RDONE]: records } : {}) } });
+const trayState = (page) => page.eval(`(() => { const t = document.getElementById('reminders-tray'), ns = [...t.querySelectorAll('.rm-notice')], more = document.getElementById('reminders-more');
+  return { shown: !t.hidden, ids: ns.map((n) => n.dataset.id), starts: ns.map((n) => Number(n.dataset.start)), texts: ns.map((n) => n.innerText.replace(/\\s+/g, ' ').trim()),
+    more: more.hidden || document.getElementById('reminders-foot').hidden ? '' : more.textContent, title: document.title, said: window.__said || [] }; })()`);
+const saved = async (page, k) => JSON.parse(await page.eval(`localStorage.getItem('${k}')`));
+const jump = (page, ms) => page.eval(`(() => { const prev = Date.now; Date.now = () => prev() + ${ms}; })()`);
+const pageNow = (page) => page.eval('Date.now()');
+/** Text whose contrast with its background is below 4.5:1, among the elements `sel` finds. */
+const lowContrast = (page, sel) => page.eval(`(() => {
+  const lum = (c) => { const v = c.match(/[\\d.]+/g).slice(0, 3).map(Number).map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+  const bg = (el) => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (c !== 'transparent' && !/^rgba\\(.*,\\s*0\\)$/.test(c)) return c; } return 'rgb(255, 255, 255)'; };
+  return [...document.querySelectorAll(${JSON.stringify(sel)})].filter((el) => el.getClientRects().length && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()))
+    .map((el) => { const a = lum(getComputedStyle(el).color), b = lum(bg(el)); return [el.className || el.tagName, (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)]; })
+    .filter(([, r]) => r < 4.5).map(([c, r]) => c + ' ' + r.toFixed(2)); })()`);
+
+check('Reminders: off by default: nothing reminded, saved or asked for; the dialog lists the starred events and says what reminders can and cannot do', async () => {
+  const page = await openR({ at: utc('2026-10-25T23:52:00Z'), prefs: { starred: ['tequatl-the-sunless', 'claw-of-jormag'], hidden: ['claw-of-jormag'] }, reminders: null, clock: 'fail', init: [NOTIFY] });
+  try {
+    await sleep(2500);
+    const t = await trayState(page);
+    assert.deepEqual([t.shown, t.title, t.said.length], [false, TITLE, 0]);
+    assert.equal(await text(page, '#reminders-btn'), 'Reminders: off');
+    assert.deepEqual(await page.eval(`[localStorage.getItem('${RSET}'), localStorage.getItem('${RDONE}')]`), [null, null], 'nothing saved');
+    await page.eval("document.getElementById('reminders-btn').focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    const d = await page.eval(`(() => { const d = document.getElementById('reminders-dialog'); return { open: d.open, on: document.getElementById('reminders-on').checked,
+      lead: document.querySelector('[name="reminders-lead"]:checked').value, leads: [...document.querySelectorAll('[name="reminders-lead"]')].map((r) => r.value),
+      list: [...d.querySelectorAll('#reminders-list li')].map((li) => li.textContent), text: d.innerText.replace(/\\s+/g, ' ') }; })()`);
+    assert.deepEqual([d.open, d.on, d.lead, d.leads], [true, false, '10', ['5', '10', '15']]);
+    assert.deepEqual(d.list, ['Tequatl the Sunless: starts 7:00 PM (00:00 UTC); no reminder while reminders are off.', 'Claw of Jormag: starts 9:30 PM (02:30 UTC); hidden, so no reminder.']);
+    for (const promise of [/only while this page is open in a tab\. Nothing can remind you when the page or the browser is closed/, /It is not a notification from your browser or your computer\./,
+      /up to about a minute late/, /"always keep these sites active"/, /A reminder that would arrive after its event has started is not shown\./, /For an event marked Unverified, or one you have adjusted, the reminder says so\./]) assert.match(d.text, promise);
+    assert.ok(!/we will notify|you will be notified|even when (the page|it) is closed/i.test(d.text), 'nothing promises a notification');
+    await key(page, 'Escape', 'Escape', 27); await settle();
+    assert.deepEqual(await page.eval("[document.getElementById('reminders-dialog').open, document.activeElement.id]"), [false, 'reminders-btn'], 'Escape closes and returns focus');
+    assert.deepEqual(await page.eval('window.__notify'), { made: 0, asked: 0 }, 'no browser notification, and no permission asked');
+    assert.deepEqual(await page.eval(`localStorage.getItem('${RSET}')`), null, 'opening and closing saves nothing');
+    assert.deepEqual(unexpected(page, ALLOW), []);
+  } finally { await page.close(); }
+});
+
+check('Reminders: turned on with a starred event inside its lead time, it is reminded at once: notice, title count, one announcement, the saved record; it ticks with no word, no rebuild, no write and no layout shift; Dismiss keeps it given', async () => {
+  const page = await openR({ at: utc('2026-10-25T23:52:00Z'), prefs: { starred: ['tequatl-the-sunless'] }, reminders: null, clock: 'fail', init: [NOTIFY, COUNT_WRITES] });
+  try {
+    await sleep(600);
+    await click(page, '#reminders-btn'); await settle();
+    await page.eval("window.__shiftFrom = performance.now()");
+    await click(page, '#reminders-on');
+    await page.waitFor("!document.getElementById('reminders-tray').hidden", 3000);
+    assert.deepEqual(await saved(page, RSET), ON);
+    assert.equal(await text(page, '#reminders-btn'), 'Reminders: 10 min');
+    let t = await trayState(page);
+    assert.deepEqual(t.said.map((s) => [s.text, s.where]), [['Reminder: Tequatl the Sunless starts at 7:00 PM, in 8 minutes.', 'reminders-dialog']], 'said once, in the open dialog');
+    assert.match(await text(page, '#reminders-list li'), /^Tequatl the Sunless: starts 7:00 PM \(00:00 UTC\); reminder given\.$/);
+    await key(page, 'Escape', 'Escape', 27); await settle();
+    t = await trayState(page);
+    assert.deepEqual([t.ids, t.title, t.more], [['tequatl-the-sunless'], `(1) ${TITLE}`, '']);
+    assert.deepEqual(await page.eval("[document.getElementById('reminders-foot').hidden, document.getElementById('reminders-unsaved').hidden]"), [true, true], 'one notice: no Show more or Dismiss all; and settings are being saved');
+    assert.match(t.texts[0], /^Reminder Tequatl the Sunless Starts 7:00 PM \(00:00 UTC\) · in 7m 5\ds Copy waypoint Dismiss$/i);
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('#reminders-tray button')].filter((b) => b.closest('.rm-notice')).map((b) => b.getAttribute('aria-label'))"),
+      ['Copy waypoint for Tequatl the Sunless: [&BNABAAA=]', 'Dismiss the reminder for Tequatl the Sunless']);
+    const rec = await saved(page, RDONE);
+    assert.deepEqual([Object.keys(rec), rec['tequatl-the-sunless'].start, typeof rec['tequatl-the-sunless'].by], [['tequatl-the-sunless'], T0, 'string']);
+    // Ticking: the countdown moves; the notice is not rebuilt, nothing more is said and nothing is written.
+    await page.eval("window.__card = document.querySelector('.rm-notice'); window.__w = JSON.stringify(window.__writes)");
+    const c1 = await text(page, '.rm-left'); await sleep(2300); const c2 = await text(page, '.rm-left');
+    assert.notEqual(c1, c2);
+    assert.equal(await page.eval("window.__card === document.querySelector('.rm-notice')"), true, 'the notice is not rebuilt as it counts down');
+    assert.equal(await page.eval('JSON.stringify(window.__writes) === window.__w'), true, 'nothing is written while it ticks');
+    assert.equal((await trayState(page)).said.length, 1, 'nothing more is said');
+    const shift = await page.eval("new Promise((ok) => { let s = 0; new PerformanceObserver((l) => { for (const e of l.getEntries()) if (e.startTime > window.__shiftFrom) s += e.value; }).observe({ type: 'layout-shift', buffered: true }); setTimeout(() => ok(s), 50); })");
+    assert.ok(shift < 0.001, `layout shift ${shift} when the reminder came`);
+    // Copy waypoint works from the notice.
+    await page.eval(CLIP(false)); await click(page, '#reminders-tray [data-copy]'); await settle();
+    assert.equal(await page.eval('window.__copied'), '[&BNABAAA=]');
+    // Dismiss: the notice goes, focus moves to Coming up, and the start stays given.
+    await page.eval("document.querySelector('[data-rm-dismiss]').focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    t = await trayState(page);
+    assert.deepEqual([t.shown, t.title, await page.eval('document.activeElement.id')], [false, TITLE, 'coming-title']);
+    await sleep(1500);
+    t = await trayState(page);
+    assert.deepEqual([t.shown, t.said.length], [false, 1], 'dismissed, and not given again');
+    // The next reminder is said on the page, and the line in the closed dialog is emptied.
+    await click(page, '#next-list .row[data-id="kaineng-blackout"] [data-star]');
+    await page.waitFor('window.__said.length === 2', 3000);
+    t = await trayState(page);
+    assert.deepEqual([t.said[1].text, t.said[1].where], ['Reminder: Kaineng Blackout starts at 7:00 PM, in 8 minutes.', 'reminders-announce']);
+    assert.equal(await page.eval("document.querySelector('#reminders-dialog [data-announce]').textContent"), '', 'no stale sentence left in the dialog');
+    assert.deepEqual(await page.eval('window.__notify'), { made: 0, asked: 0 }, 'no browser notification in Phase E');
+    assert.deepEqual(page.requests.filter((u) => !u.startsWith(BASE) && u !== FEED_URL), [], 'no request leaves the site');
+    assert.deepEqual(unexpected(page, ALLOW), []);
+  } finally { await page.close(); }
+});
+
+check('Reminders: on a settled clock the notice comes at the reminder time, never before and within a second and a half, for leads of 5, 10 and 15 minutes', async () => {
+  for (const lead of [10, 5, 15]) {
+    const due = T0 - lead * MIN;
+    const page = await openR({ at: due - 3000, prefs: { starred: ['tequatl-the-sunless'] }, reminders: { ...ON, lead }, clock: 'fail' });
+    try {
+      await page.waitFor('(window.__said || []).length > 0', 8000);
+      await sleep(300);
+      const t = await trayState(page);
+      const late = t.said[0].wall - due;
+      assert.ok(late >= 0 && late < 1500, `lead ${lead}: given ${late} ms after the reminder time`);
+      assert.deepEqual([t.said.length, t.said[0].text], [1, `Reminder: Tequatl the Sunless starts at 7:00 PM, in ${lead} minutes.`]);
+      assert.equal(await text(page, '#reminders-btn'), `Reminders: ${lead} min`);
+    } finally { await page.close(); }
+  }
+});
+
+check('Reminders: while the clock check has not answered, delivery waits, at most 8 seconds after load, then the reminder comes once', async () => {
+  const page = await openR({ at: utc('2026-10-25T23:51:00Z'), prefs: { starred: ['tequatl-the-sunless'] }, clock: 'hold' });
+  try {
+    await page.waitFor('performance.now() > 6500', 10000);
+    assert.equal((await trayState(page)).shown, false, 'nothing while the check may still correct the clock');
+    await click(page, '#reminders-btn'); await settle();
+    assert.equal(await text(page, '#reminders-list li'), 'Tequatl the Sunless: starts 7:00 PM (00:00 UTC); reminder due now.');
+    await key(page, 'Escape', 'Escape', 27);
+    await page.waitFor('(window.__said || []).length > 0', 8000);
+    await sleep(1200);
+    const t = await trayState(page);
+    assert.equal(t.said.length, 1);
+    assert.ok(t.said[0].t >= 7900 && t.said[0].t <= 10000, `given ${Math.round(t.said[0].t)} ms after load`);
+    assert.ok(page.clockRequests >= 1, 'the check was asked and never answered');
+  } finally { await page.close(); }
+});
+
+check('Reminders: a device clock 5 minutes fast waits for the clock check: nothing early, then one reminder at the true time', async () => {
+  skewMs = utc('2026-10-25T23:49:51Z') - Date.now(); // the true time at load; the device reads 23:54:51, inside Tequatl's lead
+  const page = await openR({ offset: skewMs + 5 * MIN, url: SKEWED, prefs: { starred: ['tequatl-the-sunless'] } });
+  try {
+    await page.waitFor('(window.__said || []).length > 0', 20000);
+    await sleep(300);
+    const t = await trayState(page);
+    assert.equal(t.said.length, 1);
+    assert.equal(t.said[0].corrected, true, 'given only after the correction');
+    assert.match(await text(page, '#clock-notice'), /Your device clock is (4m 5\d|5m 0\d)s fast/);
+    const at = t.said[0].wall - 5 * MIN - (T0 - 10 * MIN); // the true moment it was given, against 23:50:00
+    assert.ok(at > -1500 && at < 2500, `given ${at} ms from the true reminder time (the check is good to about a second)`);
+    assert.match(t.said[0].text, /^Reminder: Tequatl the Sunless starts at 7:00 PM, in 10 minutes\.$/);
+  } finally { await page.close(); }
+});
+
+check('Reminders: after a clock change the new clock check is waited for, so a clock jumped 6 minutes ahead gives nothing early', async () => {
+  skewMs = utc('2026-10-25T23:44:00Z') - Date.now();
+  const page = await openR({ offset: skewMs, url: SKEWED, prefs: { starred: ['tequatl-the-sunless'] } });
+  try {
+    await page.waitFor('performance.now() > 6500', 10000); // the first check has settled
+    assert.equal(await page.eval("document.getElementById('clock-notice').hidden"), true, 'the device clock was right');
+    await jump(page, 6 * MIN); // 23:50:06 by the device clock: Tequatl would be due
+    await page.waitFor("!document.getElementById('clock-notice').hidden", 12000);
+    await sleep(1500);
+    const t = await trayState(page);
+    assert.deepEqual([t.shown, t.said.length], [false, 0], 'nothing given by the jumped clock');
+    assert.match(await text(page, '#clock-notice'), /Your device clock is (5m 5\d|6m 0\d)s fast/);
+  } finally { await page.close(); }
+});
+
+check('Reminders: a clock moved back, a reload and a second tab never repeat a reminder; after a reload the tray starts empty', async () => {
+  const page = await openR({ at: utc('2026-10-25T23:52:00Z'), prefs: { starred: ['tequatl-the-sunless'] }, clock: 'fail', init: [COUNT_READS] });
+  let other = null;
+  try {
+    await page.waitFor('(window.__said || []).length === 1', 4000);
+    await jump(page, -2 * MIN); // 23:50:0x: inside the lead time again
+    await sleep(2500);
+    let t = await trayState(page);
+    assert.deepEqual([t.said.length, t.ids, t.starts], [1, ['tequatl-the-sunless'], [T0]], 'the clock moved back: not given again');
+    await page.reload(); await sleep(2500);
+    t = await trayState(page);
+    assert.deepEqual([t.shown, t.title, t.said.length], [false, TITLE, 0], 'after a reload: covered, and the tray is empty');
+    const reads = await page.eval(`window.__reads['${RDONE}'] || 0`);
+    assert.ok(reads >= 1 && reads <= 2, `the saved record was read ${reads} times in 2.5 s: once is enough, never once a tick`);
+    other = await openR({ at: utc('2026-10-25T23:52:30Z'), keepStorage: true, reminders: null, clock: 'fail' });
+    await sleep(2500);
+    t = await trayState(other);
+    assert.deepEqual([t.shown, t.said.length], [false, 0], 'a second tab: covered');
+    assert.equal((await saved(page, RDONE))['tequatl-the-sunless'].start, T0);
+  } finally { await page.close(); if (other) await other.close(); }
+});
+
+/** Two tabs on one clock, both due at the same moment, 9 s from now. Returns what each showed and said. */
+async function twoTabs(init) {
+  const due = T0 - 10 * MIN, offset = due - 9000 - Date.now();
+  const a = await openR({ offset, prefs: { starred: ['tequatl-the-sunless'] }, clock: 'fail', init });
+  const b = await openR({ offset, keepStorage: true, reminders: null, clock: 'fail', init });
+  try {
+    assert.ok(Date.now() + offset < due - 1500, 'both tabs were ready before the reminder time');
+    await sleep(due - (Date.now() + offset) + 2500);
+    const ta = await trayState(a), tb = await trayState(b);
+    return { tabs: [ta, tb], locks: [await a.eval('window.__locks || null'), await b.eval('window.__locks || null')], record: await saved(a, RDONE), due };
+  } finally { await a.close(); await b.close(); }
+}
+check('Reminders: two tabs due at the same moment give one notice in all, claimed under the gw2-timer:reminders Web Lock', async () => {
+  const r = await twoTabs([LOCK_SPY]);
+  assert.equal(r.tabs.reduce((n, t) => n + t.ids.length, 0), 1, 'one notice in all');
+  assert.equal(r.tabs.reduce((n, t) => n + t.said.length, 0), 1, 'one announcement in all');
+  const w = r.tabs.findIndex((t) => t.ids.length);
+  assert.deepEqual([r.tabs[w].title, r.tabs[1 - w].title], [`(1) ${TITLE}`, TITLE]);
+  assert.ok(r.locks[w].includes('gw2-timer:reminders'), JSON.stringify(r.locks));
+  assert.ok(r.locks.flat().every((n) => n === 'gw2-timer:reminders'), 'no other lock name');
+  assert.ok(r.tabs[w].said[0].wall >= r.due, 'not before the reminder time');
+  assert.equal(r.record['tequatl-the-sunless'].start, T0);
+});
+check('Reminders: without Web Locks, two tabs due at the same moment still give one notice (the best-effort claim: write, wait, read back)', async () => {
+  const r = await twoTabs([NO_LOCKS]);
+  assert.equal(r.tabs.reduce((n, t) => n + t.ids.length, 0), 1, 'one notice in all');
+  assert.equal(r.tabs.reduce((n, t) => n + t.said.length, 0), 1, 'one announcement in all');
+  const w = r.tabs.findIndex((t) => t.ids.length);
+  assert.ok(r.tabs[w].said[0].wall - r.due >= 250, `the winner waited for the read back (${r.tabs[w].said[0].wall - r.due} ms)`);
+  assert.equal(r.record['tequatl-the-sunless'].start, T0);
+});
+
+check('Reminders: a tab still waiting for its clock check shows a reminder another tab gave as given, and never gives it again', async () => {
+  const offset = utc('2026-10-25T23:52:00Z') - Date.now(); // Tequatl is already inside its lead time
+  const waiting = await openR({ offset, prefs: { starred: ['tequatl-the-sunless'] }, clock: 'hold' }); // held for 8 s
+  let ready = null;
+  try {
+    await click(waiting, '#reminders-btn'); await settle();
+    assert.equal(await text(waiting, '#reminders-list li'), 'Tequatl the Sunless: starts 7:00 PM (00:00 UTC); reminder due now.');
+    ready = await openR({ offset, keepStorage: true, reminders: null, clock: 'fail' });
+    await ready.waitFor('(window.__said || []).length === 1', 4000);
+    await sleep(1500);
+    assert.ok(await waiting.eval('performance.now()') < 7500, 'the waiting tab is still held');
+    assert.equal(await text(waiting, '#reminders-list li'), 'Tequatl the Sunless: starts 7:00 PM (00:00 UTC); reminder given.', 'it learns of the reminder the other tab gave at once');
+    await waiting.waitFor('performance.now() > 9500', 12000); // past the end of its hold
+    const a = await trayState(ready), b = await trayState(waiting);
+    assert.deepEqual([a.ids, a.said.length], [['tequatl-the-sunless'], 1], 'the tab with a settled clock gave it');
+    assert.deepEqual([b.shown, b.said.length, b.title], [false, 0, TITLE], 'the waiting tab did not');
+  } finally { await waiting.close(); if (ready) await ready.close(); }
+});
+
+check('Reminders: a claim still in flight is never started again: with a lock that answers after 2.5 s, one lock request, one notice, one announcement', async () => {
+  const page = await openR({ at: utc('2026-10-25T23:59:00Z'), prefs: { starred: ['tequatl-the-sunless'] }, clock: 'fail', init: [SLOW_LOCK] });
+  try {
+    await page.waitFor('(window.__said || []).length > 0', 7000);
+    await sleep(1500);
+    const t = await trayState(page);
+    assert.deepEqual([await page.eval('window.__lockCalls'), t.said.length, t.ids], [1, 1, ['tequatl-the-sunless']]);
+    assert.equal(t.said[0].text, 'Reminder: Tequatl the Sunless starts at 7:00 PM, in 1 minute.');
+    assert.ok(t.said[0].t > 2500, 'it waited for the lock');
+  } finally { await page.close(); }
+});
+
+check('Reminders: four starred events due on one tick are one batch: one announcement, "(4)" in the title, three notices on a desktop with Show 1 more, and Dismiss all', async () => {
+  const page = await openR({ at: T0 - 10 * MIN - 2500, prefs: { starred: FOUR }, clock: 'fail', init: [NOTIFY] });
+  try {
+    await page.waitFor('(window.__said || []).length > 0', 6000); await sleep(1200);
+    let t = await trayState(page);
+    assert.deepEqual(t.said.map((s) => s.text), ['Reminders: Admiral Taidha Covington and 3 more starred events start within 10 minutes.']);
+    assert.deepEqual([t.title, t.ids, t.more], [`(4) ${TITLE}`, ['admiral-taidha-covington', 'defense-of-amnytas', 'kaineng-blackout'], 'Show 1 more']);
+    const room = () => page.eval("parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tray-space')) || 0");
+    assert.ok(await room() > 100, 'the page keeps room for the tray');
+    await click(page, '#reminders-more'); await settle();
+    t = await trayState(page);
+    assert.deepEqual([t.ids.length, t.more, await page.eval("document.getElementById('reminders-more').getAttribute('aria-expanded')")], [4, 'Show fewer', 'true']);
+    await click(page, '#reminders-more'); await settle();
+    t = await trayState(page);
+    assert.deepEqual([t.ids.length, t.more, await page.eval("document.getElementById('reminders-more').getAttribute('aria-expanded')")], [3, 'Show 1 more', 'false'], 'Show fewer folds it again');
+    await click(page, '[data-rm-dismiss="admiral-taidha-covington"]'); await settle();
+    t = await trayState(page);
+    assert.deepEqual([t.ids, t.more, t.title], [['defense-of-amnytas', 'kaineng-blackout', 'tequatl-the-sunless'], '', `(3) ${TITLE}`], 'three left: all shown, nothing more');
+    assert.deepEqual(Object.keys(await saved(page, RDONE)).sort(), [...FOUR].sort(), 'each start recorded');
+    await page.eval("document.getElementById('reminders-dismiss-all').focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    t = await trayState(page);
+    assert.deepEqual([t.shown, t.title, t.said.length, await page.eval('document.activeElement.id')], [false, TITLE, 1, 'coming-title']);
+    assert.equal(await room(), 0, 'and gives it back');
+    assert.deepEqual(await page.eval('window.__notify'), { made: 0, asked: 0 });
+  } finally { await page.close(); }
+});
+
+check('Reminders: hidden events are never reminded; unstarring, hiding or turning reminders off takes a notice away silently and undoing it brings it back silently; starring an event inside its lead reminds at once', async () => {
+  const page = await openR({ at: utc('2026-10-25T23:52:00.300Z'), prefs: { starred: ['tequatl-the-sunless', 'kaineng-blackout'], hidden: ['kaineng-blackout'] }, clock: 'fail', init: [CLOCK_SPY] });
+  const back = async (why) => { const t = await trayState(page); assert.deepEqual([t.ids, t.said.length, t.title], [['tequatl-the-sunless'], 1, `(1) ${TITLE}`], why); };
+  const gone = async (why) => { const t = await trayState(page); assert.deepEqual([t.shown, t.title, t.said.length], [false, TITLE, 1], why); };
+  try {
+    await page.waitFor('(window.__said || []).length > 0', 4000); await sleep(1200);
+    await back('the hidden starred event is not reminded');
+    assert.deepEqual(Object.keys(await saved(page, RDONE)), ['tequatl-the-sunless'], 'and not claimed');
+    const waited = (await trayState(page)).said[0].t - await page.eval('window.__clockFailed');
+    assert.ok(waited >= 0 && waited < 250, `given ${Math.round(waited)} ms after the clock check ended, not a tick later`);
+    const star = () => click(page, '#next-list .row[data-id="tequatl-the-sunless"] [data-star]');
+    await star(); await settle(); await gone('unstarred');
+    await star(); await settle(); await back('starred again');
+    await click(page, '#next-list .row[data-id="tequatl-the-sunless"] [data-hide]'); await settle(); await gone('hidden');
+    await click(page, '#hidden-btn'); await settle();
+    await click(page, '#hidden-list [data-unhide="tequatl-the-sunless"]'); await settle();
+    await key(page, 'Escape', 'Escape', 27); await settle(); await back('shown again');
+    await click(page, '#reminders-btn'); await settle();
+    await click(page, '#reminders-on'); await settle();
+    await key(page, 'Escape', 'Escape', 27); await settle(); await gone('reminders off');
+    assert.equal((await saved(page, RSET)).on, false);
+    await click(page, '#reminders-btn'); await settle();
+    await click(page, '#reminders-on'); await settle();
+    await key(page, 'Escape', 'Escape', 27); await settle(); await back('reminders on again');
+    await click(page, '#next-list .row[data-id="defense-of-amnytas"] [data-star]');
+    await page.waitFor('window.__said.length === 2', 3000);
+    const t = await trayState(page);
+    assert.deepEqual([t.said[1].text, t.ids, t.title], ['Reminder: Defense of Amnytas starts at 7:00 PM, in 8 minutes.', ['defense-of-amnytas', 'tequatl-the-sunless'], `(2) ${TITLE}`]);
+    assert.equal(await page.eval("document.getElementById('reminders-dismiss-all').getClientRects().length > 0 && document.getElementById('reminders-more').hidden"), true, 'two notices: Dismiss all, and nothing more to show');
+    assert.deepEqual((await saved(page, PREFS)).hidden, ['kaineng-blackout'], 'Hidden is the reader\'s, untouched');
+  } finally { await page.close(); }
+});
+
+check('Reminders: Adjust: a correction (here Reset) updates the notice silently; a move of the lead or more keeps it and reminds again at its own time in the same notice; moved into the past it goes', async () => {
+  const id = 'shackles-of-the-ancients', T1 = utc('2026-10-26T01:10:00Z'); // its default start is 01:15 UTC, 8:15 PM in Chicago
+  const page = await openR({ at: T1 - 12000, prefs: { starred: [id] }, overrides: { [id]: { offsetMin: 70, setAt: 1 } }, clock: 'fail' });
+  const nudge = async (d) => { await click(page, `[data-adj-nudge="${id}:${d}"]`); await settle(); };
+  try {
+    await page.waitFor('(window.__said || []).length > 0', 4000);
+    let t = await trayState(page);
+    assert.equal(t.said[0].text, 'Reminder: Shackles of the Ancients (your adjusted time) starts at 8:10 PM, in less than a minute.');
+    assert.match(t.texts[0], /^Reminder Shackles of the Ancients \(your adjusted time\) Starts 8:10 PM/i);
+    await click(page, `[data-adjust="${id}"]`); await settle();
+    await click(page, `[data-adj-reset="${id}"]`); await settle(); // back to 8:15: five minutes later, a correction
+    t = await trayState(page);
+    assert.deepEqual([t.ids, t.starts, t.said.length], [[id], [T1 + 5 * MIN], 1], 'a correction: the notice moves, nothing is said');
+    assert.match(t.texts[0], /^Reminder Shackles of the Ancients \(time unverified\) Starts 8:15 PM/i, 'no longer the reader\'s own time');
+    await nudge(5); // 8:20: the lead later than the 8:10 announced, a new occurrence; its reminder time is 8:10
+    t = await trayState(page);
+    assert.deepEqual([t.ids, t.starts, t.said.length], [[id], [T1 + 10 * MIN], 1], 'rescheduled: the notice stays with the new start');
+    assert.match(t.texts[0], /\(your adjusted time\) Starts 8:20 PM/);
+    await page.waitFor('window.__said.length === 2', 15000);
+    await sleep(300);
+    t = await trayState(page);
+    assert.ok(t.said[1].wall >= T1, 'reminded again at its own reminder time, not before');
+    assert.deepEqual([t.said[1].text, t.ids, t.title], ['Reminder: Shackles of the Ancients (your adjusted time) starts at 8:20 PM, in 10 minutes.', [id], `(1) ${TITLE}`], 'the same notice');
+    assert.equal((await saved(page, RDONE))[id].start, T1 + 10 * MIN);
+    await nudge(-5); // 8:15: earlier and still ahead
+    t = await trayState(page);
+    assert.deepEqual([t.ids, t.starts, t.said.length], [[id], [T1 + 5 * MIN], 2], 'moved earlier: the notice follows, nothing is said');
+    await nudge(-5); // 8:10, which has passed: the next start is 10:10, a different occurrence
+    t = await trayState(page);
+    assert.deepEqual([t.shown, t.title, t.said.length], [false, TITLE, 2], 'moved into the past: the notice goes, silently');
+    assert.equal((await saved(page, 'gw2-timer:v1:overrides'))[id].offsetMin, 70, 'Adjust holds what the reader set, nothing else');
+  } finally { await page.close(); }
+});
+
+check('Reminders: a sleep past the start gives nothing; a sleep into the lead time gives one reminder at once with the true countdown; six hours asleep gives one batch for what is due now only', async () => {
+  let page = await openR({ at: utc('2026-10-25T23:40:00Z'), prefs: { starred: ['tequatl-the-sunless'] }, clock: 'fail' });
+  try {
+    await sleep(1500);
+    await jump(page, 21 * MIN); // 00:01: Tequatl has started
+    await sleep(2500);
+    const t = await trayState(page);
+    assert.deepEqual([t.shown, t.said.length], [false, 0], 'never late');
+    assert.equal(await page.eval(`localStorage.getItem('${RDONE}')`), null, 'and nothing claimed');
+    assert.ok((await cards(page)).includes('tequatl-the-sunless'), 'it is in Scheduled now');
+  } finally { await page.close(); }
+  page = await openR({ at: utc('2026-10-25T23:30:00Z'), prefs: { starred: ['tequatl-the-sunless'] }, clock: 'fail' });
+  try {
+    await sleep(1500);
+    await jump(page, 27 * MIN); // 23:57:01
+    await page.waitFor('(window.__said || []).length > 0', 3000); await sleep(200);
+    const t = await trayState(page);
+    assert.deepEqual([t.said.length, t.said[0].text], [1, 'Reminder: Tequatl the Sunless starts at 7:00 PM, in 3 minutes.']);
+    assert.match(t.texts[0], /· in (2m 5\d|3m 00)s /);
+  } finally { await page.close(); }
+  page = await openR({ at: utc('2026-10-25T17:30:00Z'), prefs: { starred: [...FOUR, 'claw-of-jormag', 'shadow-behemoth', 'fire-elemental'] }, clock: 'fail' });
+  try {
+    await sleep(1500);
+    await jump(page, 6 * 60 * MIN + 20 * MIN - 1500); // 23:50:00: the starts during the sleep have passed
+    await page.waitFor('(window.__said || []).length > 0', 3000); await sleep(1200);
+    const t = await trayState(page);
+    assert.deepEqual(t.said.map((s) => s.text), ['Reminders: Admiral Taidha Covington and 3 more starred events start within 10 minutes.'], 'one batch');
+    assert.deepEqual(Object.keys(await saved(page, RDONE)).sort(), [...FOUR].sort(), 'only what is due now');
+  } finally { await page.close(); }
+});
+
+check('Reminders: with storage blocked, or failing to save, a reminder still comes once in the tab and never repeats, and the dialog says settings are not being saved', async () => {
+  let page = await open({ at: utc('2026-10-25T23:52:00Z'), clock: 'fail', init: [BLOCK_STORAGE, LISTEN] });
+  try {
+    await click(page, '#next-list .row[data-id="tequatl-the-sunless"] [data-star]'); await settle();
+    await click(page, '#reminders-btn'); await settle();
+    await click(page, '#reminders-on');
+    await page.waitFor('(window.__said || []).length > 0', 3000);
+    assert.equal(await page.eval("document.getElementById('reminders-unsaved').hidden"), false);
+    assert.equal(await text(page, '#reminders-unsaved'), 'Your browser is not saving settings, so reminders last until you close this tab.');
+    await key(page, 'Escape', 'Escape', 27); await sleep(2500);
+    const t = await trayState(page);
+    assert.deepEqual([t.said.length, t.ids], [1, ['tequatl-the-sunless']], 'storage blocked: given once, not repeated');
+    assert.deepEqual(unexpected(page, ALLOW), []);
+  } finally { await page.close(); }
+  page = await openR({ at: utc('2026-10-25T23:52:00Z'), prefs: { starred: ['tequatl-the-sunless'] }, clock: 'fail', init: [FAIL_WRITES] });
+  try {
+    await page.waitFor('(window.__said || []).length > 0', 3000); await sleep(2500);
+    const t = await trayState(page);
+    assert.deepEqual([t.said.length, t.ids], [1, ['tequatl-the-sunless']], 'writes failing: given once, not repeated');
+    assert.equal(await page.eval(`localStorage.getItem('${RDONE}')`), null);
+    await click(page, '#reminders-btn'); await settle();
+    assert.equal(await page.eval("document.getElementById('reminders-unsaved').hidden"), false);
+    assert.deepEqual(unexpected(page, ALLOW), []);
+  } finally { await page.close(); }
+  page = await openR({ at: utc('2026-10-25T23:52:00Z'), reminders: null, clock: 'fail', init: [FAIL_WRITES] });
+  try {
+    await click(page, '#reminders-btn'); await settle();
+    assert.equal(await page.eval("document.getElementById('reminders-unsaved').hidden"), true, 'nothing to say before a setting is changed');
+    await click(page, '#reminders-on'); await settle();
+    assert.deepEqual(await page.eval("[document.getElementById('reminders-unsaved').hidden, document.getElementById('reminders-btn').textContent]"), [false, 'Reminders: 10 min'], 'the setting works in this tab, and the dialog says it is not saved');
+  } finally { await page.close(); }
+});
+
+check('Reminders: damaged saved reminder data is ignored: junk settings mean off, junk records are dropped, and what is saved afterwards is clean', async () => {
+  let page = await openR({ at: utc('2026-10-25T23:52:00Z'), prefs: { starred: ['tequatl-the-sunless'] }, reminders: { on: 'yes', lead: 7, notify: 1 }, clock: 'fail' });
+  try {
+    await sleep(2000);
+    assert.deepEqual([(await trayState(page)).shown, await text(page, '#reminders-btn')], [false, 'Reminders: off']);
+  } finally { await page.close(); }
+  // A start two days ahead would silence Tequatl for two days; with an unknown id, __proto__ and text for a number.
+  const junk = `{"tequatl-the-sunless":{"start":${T0 + 2 * DAY},"at":1,"by":"x"},"no-such-event":{"start":${T0},"at":1},"__proto__":{"start":${T0},"at":1},"kaineng-blackout":{"start":"soon","at":1}}`;
+  page = await openR({ at: utc('2026-10-25T23:52:00Z'), prefs: { starred: ['tequatl-the-sunless', 'kaineng-blackout'] }, records: junk, clock: 'fail' });
+  try {
+    await page.waitFor('(window.__said || []).length > 0', 4000); await sleep(800);
+    assert.deepEqual((await trayState(page)).ids, ['kaineng-blackout', 'tequatl-the-sunless']);
+    assert.deepEqual((await trayState(page)).said.map((x) => x.text), ['Reminders: Kaineng Blackout and 1 more starred event start within 10 minutes.']);
+    const rec = await saved(page, RDONE);
+    assert.deepEqual(Object.keys(rec).sort(), ['kaineng-blackout', 'tequatl-the-sunless']);
+    assert.ok(Object.values(rec).every((r) => r.start === T0 && Number.isFinite(r.at) && typeof r.by === 'string' && Object.keys(r).length === 3), JSON.stringify(rec));
+    assert.deepEqual(unexpected(page, ALLOW), []);
+  } finally { await page.close(); }
+});
+
+check('Reminders: the tray and dialog at 320, 360, 390, 768 and 1440 px in both themes: inside the window, no sideways scroll, one notice on phones and three wider, 36 px controls on phones, contrast of 4.5:1, and the page scrolls clear of the tray', async () => {
+  for (const theme of ['dark', 'light']) {
+    for (const [width, height, mobile] of [[320, 568, true], [360, 740, true], [390, 844, true], [768, 1024, false], [1440, 900, false]]) {
+      const page = await openR({ at: T0 - 10 * MIN - 1500, width, height, mobile, prefs: { starred: FOUR, theme }, clock: 'fail' });
+      const at = `${width} ${theme}`;
+      try {
+        await page.waitFor("!document.getElementById('reminders-tray').hidden", 5000); await settle();
+        const box = () => page.eval("(() => { const t = document.getElementById('reminders-tray').getBoundingClientRect(); return { left: t.left, right: t.right, top: t.top, bottom: t.bottom, height: t.height, page: document.documentElement.scrollWidth, innerH: innerHeight }; })()");
+        let r = await box();
+        assert.ok(r.left >= 0 && r.right <= width && r.bottom <= r.innerH && r.page <= width, `${at}: ${JSON.stringify(r)}`);
+        const t = await trayState(page);
+        assert.deepEqual([t.ids.length, t.more], width <= 640 ? [1, '+3 more'] : [3, 'Show 1 more'], at);
+        if (width <= 640) assert.ok(r.height <= 170, `${at}: the tray takes ${r.height} px of ${height}`);
+        // Where "+3 more" and Dismiss all sit, whatever the fonts. On a phone: inside the notice, on its row of
+        // buttons when all four fit there, else on a line of their own below them, never past its edge.
+        // Wider: under the list, as in v0.2.1's layout of the tray. (Pixel limits fail on Ubuntu's fonts in CI.)
+        const g = await page.eval(`(() => { const foot = document.getElementById('reminders-foot'), li = document.querySelector('.rm-notice'), row = li.querySelector('.rm-actions');
+          const b = (el) => el.getBoundingClientRect(), copy = b(row.querySelector('[data-copy]')), dis = b(row.querySelector('[data-rm-dismiss]')), f = b(foot), n = b(li);
+          return { inNotice: li.contains(foot), underList: foot.parentElement.id === 'reminders-tray', need: copy.width + dis.width + f.width + 2 * (parseFloat(getComputedStyle(row).columnGap) || 0),
+            room: b(row).width, sameRow: f.top < copy.bottom && f.bottom > copy.top, below: f.top >= copy.bottom, inside: f.left >= n.left && f.right <= n.right && f.bottom <= n.bottom,
+            extra: b(document.getElementById('reminders-tray')).height - n.height, label: document.getElementById('reminders-more').getAttribute('aria-label') }; })()`);
+        if (width <= 640) {
+          assert.ok(g.inNotice && g.inside && g.extra <= 13, `${at}: inside the notice, nothing under it: ${JSON.stringify(g)}`);
+          assert.equal(g.label, '+3 more reminders', at);
+          if (Math.abs(g.need - g.room) >= 1) assert.ok(g.need < g.room ? g.sameRow : g.below, `${at}: ${JSON.stringify(g)}`);
+          // With Windows' fonts, where the layout was measured: one row from 360 px (a 111 px tray), two lines at 320.
+          if (process.platform === 'win32') assert.equal(g.sameRow, width >= 360, `${at} on Windows: ${JSON.stringify(g)}`);
+        } else assert.ok(g.underList && !g.inNotice && g.label === null, `${at}: ${JSON.stringify(g)}`);
+        if (mobile) assert.deepEqual(await page.eval("[...document.querySelectorAll('#reminders-tray button, #reminders-tray a')].filter((b) => b.getClientRects().length && b.getBoundingClientRect().height < 36).map((b) => b.textContent)"), [], at);
+        assert.deepEqual(await lowContrast(page, '#reminders-tray *'), [], at);
+        // The page can be scrolled clear of the tray: at the bottom, the footer ends above it.
+        await page.eval('scrollTo(0, document.documentElement.scrollHeight)'); await settle();
+        assert.equal(await page.eval("document.querySelector('.site-footer').getBoundingClientRect().bottom <= document.getElementById('reminders-tray').getBoundingClientRect().top + 0.5"), true, `${at}: footer clear of the tray`);
+        // All four shown: still inside the window (it scrolls inside itself when it must).
+        await click(page, '#reminders-more'); await settle();
+        r = await box();
+        assert.ok(r.top >= 0 && r.bottom <= r.innerH && r.page <= width, `${at} expanded: ${JSON.stringify(r)}`);
+        // The dialog: inside the window, no sideways scroll, readable, and its options big enough to tap.
+        await click(page, '#reminders-btn'); await settle();
+        const d = await page.eval("(() => { const d = document.getElementById('reminders-dialog'), b = d.getBoundingClientRect(); return { left: b.left, right: b.right, inner: d.scrollWidth <= d.clientWidth, options: [...d.querySelectorAll('.rm-option')].map((o) => o.getBoundingClientRect().height) }; })()");
+        assert.ok(d.left >= 0 && d.right <= width && d.inner, `${at} dialog: ${JSON.stringify(d)}`);
+        if (mobile) assert.ok(d.options.every((x) => x >= 36), `${at}: ${d.options}`);
+        assert.deepEqual(await lowContrast(page, '#reminders-dialog *'), [], `${at} dialog`);
+        assert.ok((await sideways(page, width))[0] <= width, `${at}: no sideways scroll`);
+        if (SHOTS) await page.screenshot(join(SHOTS, `reminders-${width}-${theme}.png`));
+      } finally { await page.close(); }
+    }
+  }
+});
+
+check('Reminders: keyboard and screen readers: the tray is a named region and not live; Dismiss moves focus to the next notice, the last one to Coming up; the dialog works from the keyboard', async () => {
+  const page = await openR({ at: T0 - 10 * MIN - 1500, prefs: { starred: ['tequatl-the-sunless', 'kaineng-blackout'] }, reminders: { on: true, lead: 10, notify: false }, clock: 'fail' });
+  try {
+    await page.waitFor("!document.getElementById('reminders-tray').hidden", 5000); await settle();
+    assert.equal(await page.eval("document.querySelectorAll('#reminders-tray[aria-live], #reminders-tray [aria-live], #reminders-tray [role=\"status\"], #reminders-tray [role=\"alert\"]').length"), 0, 'the tray is not a live region');
+    assert.deepEqual(await page.eval("[document.getElementById('reminders-announce').getAttribute('role'), getComputedStyle(document.getElementById('reminders-announce')).position]"), ['status', 'absolute'], 'announcements in a polite, visually hidden status');
+    await page.send('Accessibility.enable');
+    const { nodes } = await page.send('Accessibility.getFullAXTree', {});
+    assert.ok(nodes.some((n) => !n.ignored && n.role && n.role.value === 'region' && n.name && n.name.value === 'Reminders'), 'a region named Reminders');
+    assert.equal(await page.eval("document.querySelector('#reminders-tray a.event-link').getAttribute('aria-haspopup')"), 'dialog', 'the name opens its details');
+    await page.eval("document.querySelector('[data-rm-dismiss=\"kaineng-blackout\"]').focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.equal(await page.eval("document.activeElement.getAttribute('aria-label')"), 'Dismiss the reminder for Tequatl the Sunless', 'focus moves to the next notice');
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.equal(await page.eval('document.activeElement.id'), 'coming-title', 'the last one: focus to Coming up');
+    // The dialog from the keyboard: Space turns reminders off, an arrow key picks 15 minutes, Escape returns.
+    await page.eval("document.getElementById('reminders-btn').focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.equal(await page.eval("document.getElementById('reminders-dialog').open"), true);
+    await page.eval("document.getElementById('reminders-on').focus()");
+    await key(page, ' ', 'Space', 32); await settle();
+    assert.equal((await saved(page, RSET)).on, false);
+    await key(page, 'Tab', 'Tab', 9);
+    assert.equal(await page.eval("document.activeElement.name + ':' + document.activeElement.value"), 'reminders-lead:10', 'Tab reaches the chosen lead');
+    await key(page, 'ArrowRight', 'ArrowRight', 39); await settle();
+    assert.deepEqual(await saved(page, RSET), { on: false, lead: 15, notify: false });
+    await key(page, 'Escape', 'Escape', 27); await settle();
+    assert.deepEqual(await page.eval("[document.activeElement.id, document.getElementById('reminders-btn').textContent]"), ['reminders-btn', 'Reminders: off']);
+    const ax = (await page.send('Accessibility.getFullAXTree', {})).nodes;
+    assert.ok(ax.some((n) => n.role && n.role.value === 'button' && n.name && n.name.value === 'Reminders: off'), 'the button says the state');
+  } finally { await page.close(); }
+});
+
+check('Reminders: on a phone no control is hidden behind the tray when it takes focus, and a reminder never takes focus itself', async () => {
+  const page = await openR({ at: T0 - 10 * MIN - 1500, width: 390, height: 844, mobile: true, prefs: { starred: ['tequatl-the-sunless'] }, clock: 'fail' });
+  try {
+    await page.waitFor("!document.getElementById('reminders-tray').hidden", 5000); await settle();
+    assert.equal(await page.eval("document.getElementById('reminders-tray').contains(document.activeElement)"), false, 'a reminder does not take focus');
+    assert.deepEqual([(await trayState(page)).more, await page.eval("document.getElementById('reminders-foot').hidden")], ['', true], 'one notice: nothing more to show');
+    await click(page, '#filters-toggle'); await settle();
+    await page.eval("document.activeElement.blur(); scrollTo(0, 0)");
+    const hidden = [];
+    for (let i = 0; i < 140; i++) {
+      await key(page, 'Tab', 'Tab', 9);
+      const r = await page.eval(`(() => { const a = document.activeElement, t = document.getElementById('reminders-tray'); if (!a || a === document.body) return null;
+        if (t.contains(a)) return 'tray'; const b = a.getBoundingClientRect(), tr = t.getBoundingClientRect();
+        return b.bottom > tr.top + 1 && b.top < tr.bottom ? (a.getAttribute('aria-label') || a.textContent || a.id).slice(0, 40) + ' ' + Math.round(b.bottom) + ' > ' + Math.round(tr.top) : null; })()`);
+      if (r && r !== 'tray') hidden.push(r);
+    }
+    assert.deepEqual(hidden, [], 'focused controls behind the tray');
+  } finally { await page.close(); }
+});
+
+check('Reminders: on a phone "+3 more" and Dismiss all end the first notice\'s row of buttons: named for what they do, in reading order, focus kept when the tray is redrawn or the window widens; wider, they go back under the list', async () => {
+  const page = await openR({ at: T0 - 10 * MIN - 1500, width: 390, height: 844, mobile: true, prefs: { starred: FOUR }, clock: 'fail' });
+  const order = () => page.eval("[...document.querySelectorAll('#reminders-tray a, #reminders-tray button')].filter((b) => b.getClientRects().length).map((b) => b.getAttribute('aria-label') || b.textContent)");
+  const where = () => page.eval("(() => { const p = document.getElementById('reminders-foot').parentElement, n = p.closest('.rm-notice'); return n ? 'notice ' + n.dataset.id : p.id; })()");
+  const focused = () => page.eval("document.activeElement.id || document.activeElement.getAttribute('aria-label') || document.activeElement.textContent");
+  const state = async () => { const t = await trayState(page); return [t.ids.length, t.more, await where(), await focused()]; };
+  const more = (attr) => page.eval(`document.getElementById('reminders-more').getAttribute('${attr}')`);
+  try {
+    await page.emulateMedia([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+    await page.waitFor("!document.getElementById('reminders-tray').hidden", 5000); await settle();
+    assert.equal(await page.eval("getComputedStyle(document.querySelector('.rm-notice')).animationName"), 'none', 'reduced motion: no fade');
+    assert.deepEqual(await order(), ['Admiral Taidha Covington', 'Copy waypoint for Admiral Taidha Covington: [&BKgBAAA=]', 'Dismiss the reminder for Admiral Taidha Covington', '+3 more reminders', 'Dismiss all'], 'reading and Tab order');
+    await page.send('Accessibility.enable');
+    const ax = (await page.send('Accessibility.getFullAXTree', {})).nodes.find((n) => !n.ignored && n.role && n.role.value === 'button' && n.name && n.name.value === '+3 more reminders');
+    assert.ok(ax && ax.properties.some((p) => p.name === 'expanded' && p.value.value === false), 'a button named "+3 more reminders", collapsed');
+    // From the keyboard: the tray is redrawn around the button, which keeps focus.
+    await page.eval("document.getElementById('reminders-more').focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.deepEqual([...await state(), await more('aria-expanded'), await more('aria-label')], [4, 'Show fewer', 'notice admiral-taidha-covington', 'reminders-more', 'true', null], 'all four; "Show fewer" is named by its text');
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.deepEqual(await state(), [1, '+3 more', 'notice admiral-taidha-covington', 'reminders-more'], 'folded again');
+    // The window widens past 640 px with focus on the button: it goes back under the list and keeps focus; and back.
+    await page.viewport(1024, 844, false); await settle();
+    assert.deepEqual([...await state(), await more('aria-label')], [3, 'Show 1 more', 'reminders-tray', 'reminders-more', null], 'wider: three notices, the buttons under the list');
+    await page.viewport(390, 844, true); await settle();
+    assert.deepEqual(await state(), [1, '+3 more', 'notice admiral-taidha-covington', 'reminders-more'], 'a phone again');
+    // Dismiss: focus to the next notice's Dismiss; the tray's buttons move to that notice's row.
+    await page.eval("document.querySelector('[data-rm-dismiss=\"admiral-taidha-covington\"]').focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.deepEqual(await state(), [1, '+2 more', 'notice defense-of-amnytas', 'Dismiss the reminder for Defense of Amnytas']);
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    assert.deepEqual([...await state(), await more('aria-label')], [1, '+1 more', 'notice kaineng-blackout', 'Dismiss the reminder for Kaineng Blackout', '+1 more reminder'], 'two left: still on the row');
+    await page.eval("document.getElementById('reminders-dismiss-all').focus()");
+    await key(page, 'Enter', 'Enter', 13); await settle();
+    const t = await trayState(page);
+    assert.deepEqual([t.shown, t.title, await where(), await focused()], [false, TITLE, 'reminders-tray', 'coming-title'], 'Dismiss all: the tray goes, focus to Coming up');
+    assert.deepEqual(unexpected(page, ALLOW), []);
+  } finally { await page.close(); }
+});
+
+check('Reminders: a new notice fades in, but not with reduced motion', async () => {
+  for (const [reduce, want] of [[false, 'rm-in'], [true, 'none']]) {
+    const page = await openR({ at: utc('2026-10-25T23:52:00Z'), prefs: { starred: ['tequatl-the-sunless'] }, clock: 'fail' });
+    try {
+      if (reduce) await page.emulateMedia([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+      await page.waitFor("!document.getElementById('reminders-tray').hidden", 4000);
+      assert.equal(await page.eval("getComputedStyle(document.querySelector('.rm-notice')).animationName"), want, `reduced motion ${reduce}`);
+    } finally { await page.close(); }
+  }
+});
+
+check('Reminders: the dialog lists the starred events soonest reminder first, with the state of each; a notice and its announcement say when a time is unverified', async () => {
+  const page = await openR({ at: utc('2026-10-26T01:51:00Z'), prefs: { starred: ['tequatl-the-sunless', 'depths-of-cruelty', 'claw-of-jormag'], hidden: ['claw-of-jormag'] }, clock: 'fail' });
+  try {
+    await page.waitFor('(window.__said || []).length > 0', 4000); await settle();
+    const t = await trayState(page);
+    assert.equal(t.said[0].text, 'Reminder: Depths of Cruelty (time unverified) starts at 9:00 PM, in 9 minutes.');
+    assert.match(t.texts[0], /^Reminder Depths of Cruelty \(time unverified\) Starts 9:00 PM \(02:00 UTC\) · in 8m 5\ds/i);
+    await click(page, '#reminders-btn'); await settle();
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('#reminders-list li')].map((li) => li.textContent)"), [
+      'Depths of Cruelty (time unverified): starts 9:00 PM (02:00 UTC); reminder given.',
+      'Claw of Jormag: starts 9:30 PM (02:30 UTC); hidden, so no reminder.',
+      'Tequatl the Sunless: starts 10:00 PM (03:00 UTC); reminder at 9:50 PM.']);
+    await click(page, '#reminders-dialog [data-close]'); await settle();
+    await click(page, '#utc-btn'); await settle(); // UTC off: the tray follows
+    assert.match((await trayState(page)).texts[0], /Starts 9:00 PM · in 8m/);
+  } finally { await page.close(); }
+  // The list is rebuilt when a time in it passes: at 7:00 PM Tequatl's next start becomes 10:00 PM.
+  const passing = await openR({ at: T0 - 6000, prefs: { starred: ['tequatl-the-sunless'] }, reminders: null, clock: 'fail' });
+  try {
+    await click(passing, '#reminders-btn'); await settle();
+    assert.equal(await text(passing, '#reminders-list li'), 'Tequatl the Sunless: starts 7:00 PM (00:00 UTC); no reminder while reminders are off.');
+    await passing.eval("window.__li = document.querySelector('#reminders-list li')");
+    await sleep(1500);
+    assert.equal(await passing.eval("window.__li === document.querySelector('#reminders-list li')"), true, 'not rebuilt every second');
+    await passing.waitFor("document.querySelector('#reminders-list li').textContent === 'Tequatl the Sunless: starts 10:00 PM (03:00 UTC); no reminder while reminders are off.'", 9000);
+  } finally { await passing.close(); }
+  // In London 00:00 UTC is the next local day: the notice and the list say tomorrow.
+  const london = await openR({ at: utc('2026-10-25T23:52:00Z'), tz: 'Europe/London', prefs: { starred: ['tequatl-the-sunless'] }, clock: 'fail' });
+  try {
+    await london.waitFor('(window.__said || []).length > 0', 4000); await settle();
+    const t = await trayState(london);
+    assert.equal(t.said[0].text, 'Reminder: Tequatl the Sunless starts at 12:00 AM, in 8 minutes.');
+    assert.match(t.texts[0], /^Reminder Tequatl the Sunless Starts tomorrow 12:00 AM \(00:00 UTC\) · in 7m 5\ds/i);
+    await click(london, '#reminders-btn'); await settle();
+    assert.equal(await text(london, '#reminders-list li'), 'Tequatl the Sunless: starts tomorrow 12:00 AM (00:00 UTC); reminder given.');
+  } finally { await london.close(); }
+  const none = await openR({ at: utc('2026-10-26T01:51:00Z'), clock: 'fail' });
+  try {
+    await click(none, '#reminders-btn'); await settle();
+    assert.deepEqual(await none.eval("[...document.querySelectorAll('#reminders-list li')].map((li) => li.textContent)"), ["No starred events yet. Use the star (☆) by an event's name."]);
+  } finally { await none.close(); }
+});
+
+check('Reminders: a longer lead that reaches an event reminds it once, at once; a shorter one repeats nothing; another open tab follows the change', async () => {
+  const page = await openR({ at: utc('2026-10-25T23:48:00Z'), prefs: { starred: ['tequatl-the-sunless'] }, clock: 'fail' });
+  const other = await openR({ at: utc('2026-10-25T23:48:01Z'), keepStorage: true, reminders: null, clock: 'fail' });
+  try {
+    await sleep(1500);
+    assert.deepEqual([(await trayState(page)).shown, (await trayState(other)).shown], [false, false], '12 minutes away with a 10 minute lead');
+    await click(page, '#reminders-btn'); await settle();
+    await click(page, '[name="reminders-lead"][value="15"]');
+    await other.waitFor("document.getElementById('reminders-btn').textContent === 'Reminders: 15 min'", 3000);
+    await sleep(1500);
+    // Either tab may give it (the other one followed the setting at once): one notice and one announcement in all.
+    let a = await trayState(page), b = await trayState(other);
+    assert.deepEqual(a.said.concat(b.said).map((x) => x.text), ['Reminder: Tequatl the Sunless starts at 7:00 PM, in 12 minutes.']);
+    assert.equal(a.ids.length + b.ids.length, 1, 'one notice in all');
+    await click(page, '[name="reminders-lead"][value="5"]'); await sleep(1500);
+    await key(page, 'Escape', 'Escape', 27); await settle();
+    a = await trayState(page); b = await trayState(other);
+    assert.deepEqual([a.said.length + b.said.length, a.ids.concat(b.ids)], [1, ['tequatl-the-sunless']], 'a shorter lead repeats nothing, and the notice stays');
+    assert.deepEqual(await saved(page, RSET), { on: true, lead: 5, notify: false });
+    assert.equal(await text(other, '#reminders-btn'), 'Reminders: 5 min');
+  } finally { await page.close(); await other.close(); }
+});
+
 check('desktop screenshot for visual review', async () => {
   if (!SHOTS) return;
   const page = await open({ at: utc('2026-10-25T23:50:00Z') });
@@ -769,7 +2132,7 @@ try {
   }
 } finally {
   await chrome.close();
-  server.close(); dated.close();
+  server.close(); dated.close(); skewed.close();
 }
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

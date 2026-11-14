@@ -24,6 +24,7 @@ const { recordEvidence, deltaMinutes } = await import('../tools/verify.mjs');
 const { report } = await import('../tools/verification-report.mjs');
 const { checkWaypoints } = await import('../tools/check-waypoints.mjs');
 const { SITE_FILES } = await import('../tools/build.mjs');
+const Reminders = createRequire(import.meta.url)('../js/reminders.js');
 const { renderEventIndex, applyEventIndex, currentEventIndex, cadence, START: EVENT_INDEX_START } = await import('../tools/lib/event-index.mjs');
 
 let passed = 0, failed = 0;
@@ -704,8 +705,19 @@ test(`the tagline, About, README and every asset say v${VERSION}, the newest ver
   assert.ok(html.includes(`<h2 id="about-title">GW2 Timer v${VERSION}</h2>`));
   assert.match(file('README.md'), new RegExp(`^# GW2 Timer v${VERSION.replace(/\./g, '\\.')}\\n`));
   const assets = [...html.matchAll(/(?:src|href)="((?:js\/[^"]+\.js|style\.css)[^"]*)"/g)].map((m) => m[1]);
-  assert.equal(assets.length, 7);
+  assert.equal(assets.length, 10); // the stylesheet and nine scripts (search.js since v0.3.0 Phase C, link.js since Phase D, reminders.js since Phase E)
   for (const a of assets) assert.ok(a.endsWith(`?v=${VERSION}`), a);
+});
+test('the header, footer and About have Share and a Buy me a coffee link that opens a new tab, as FFXI Timer has', () => {
+  const coffee = html.split('<a href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">').length - 1;
+  const coffeeBtn = html.split('<a class="btn small" href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">').length - 1;
+  assert.equal(coffee + coffeeBtn, 3, 'header, footer and About');
+  assert.equal(html.split('buymeacoffee.com').length - 1, 4, 'the three links and the About text, nothing else');
+  assert.equal(html.split(' data-share').length - 1, 3, 'a Share in the header, footer and About');
+  assert.match(html, /<nav class="share-links" aria-label="Share and support"><button type="button" class="link-btn" data-share /, 'the header pair is a named nav');
+  // Share passes the canonical address (link.js), the one in the canonical tag.
+  assert.ok(html.includes(`<link rel="canonical" href="${CANONICAL}">`));
+  assert.ok(file('js/link.js').includes(`const CANONICAL = '${CANONICAL}';`));
 });
 test('the page loads the schedule data with ?r= set to the dataset revision', () => {
   assert.ok(html.includes(`<script defer src="events-data.js?r=${DATA.meta.datasetRevision}"></script>`));
@@ -798,7 +810,9 @@ test('headings: one h1 first, and no level is skipped anywhere in the page', () 
 test('links: local files exist, every #fragment has its target, and RadMage Labs links use canonical addresses, not GitHub Pages copies', () => {
   const refs = [...html.matchAll(/\s(?:href|src)="([^"]+)"/g)].map((m) => m[1]);
   for (const r of refs.filter((x) => !/^(?:https?:|data:|#)/.test(x))) assert.ok(existsSync(join(ROOT, r.replace(/[?#].*$/, ''))), r);
-  for (const r of refs.filter((x) => x.startsWith('#'))) assert.ok(html.includes(`id="${r.slice(1)}"`), r);
+  // An in-page anchor has its target; a link to one event (#event/<id>, since v0.3.0) names an id the data has.
+  for (const r of refs.filter((x) => x.startsWith('#') && !x.startsWith('#event/'))) assert.ok(html.includes(`id="${r.slice(1)}"`), r);
+  for (const r of refs.filter((x) => x.startsWith('#event/'))) assert.ok(EV.has(r.slice('#event/'.length)), r);
   const labs = refs.filter((x) => x.startsWith('https://radmagelabs.com/') && !x.startsWith('https://radmagelabs.com/assets/'));
   assert.ok(labs.length >= 4, labs.join(' '));
   for (const r of labs) assert.ok([CANONICAL, 'https://radmagelabs.com/', 'https://radmagelabs.com/ffxi/', 'https://radmagelabs.com/ffxiv/', 'https://radmagelabs.com/d4/'].includes(r), r);
@@ -808,7 +822,7 @@ test('links: local files exist, every #fragment has its target, and RadMage Labs
 test('loading: the stylesheet, then the scripts deferred in the head in order, app.js holding the first paint, then the theme script; none in the body', () => {
   const head = html.slice(0, html.indexOf('</head>')), body = html.slice(html.indexOf('<body'));
   const scripts = [...head.matchAll(/<script ((?:[a-z]+(?:="[^"]*")? )*)src="([^"?]+)[^"]*"><\/script>/g)].map((m) => `${m[1].trim()} ${m[2]}`.trim());
-  assert.deepEqual(scripts, ['defer events-data.js', 'defer js/schedule.js', 'defer js/store.js', 'defer js/news.js', 'defer js/clock.js', 'defer blocking="render" js/app.js', 'js/theme-boot.js']);
+  assert.deepEqual(scripts, ['defer events-data.js', 'defer js/schedule.js', 'defer js/store.js', 'defer js/news.js', 'defer js/clock.js', 'defer js/search.js', 'defer js/link.js', 'defer js/reminders.js', 'defer blocking="render" js/app.js', 'js/theme-boot.js']);
   assert.ok(head.indexOf('rel="stylesheet"') < head.indexOf('<script defer'), 'stylesheet first');
   assert.ok(head.indexOf('http-equiv="Content-Security-Policy"') < head.indexOf('rel="stylesheet"'), 'the CSP comes before anything loads');
   assert.ok(!/<script[^>]*\ssrc=/.test(body), 'no script in the body');
@@ -823,7 +837,8 @@ test('the page holds exactly the event index made from events-data.js', () => {
 });
 test('the event index names every event once, under its kind and region, with its map and how often it starts', () => {
   const block = currentEventIndex(html);
-  const items = [...block.matchAll(/<li><span class="index-name">([^<]*)<\/span> <span class="index-where">([^<]*)<\/span><\/li>/g)].map((m) => [unescapeHtml(m[1]), unescapeHtml(m[2])]);
+  const items = [...block.matchAll(/<li><a class="index-name event-link" href="#event\/([a-z0-9-]+)" aria-haspopup="dialog">([^<]*)<\/a> <span class="index-where">([^<]*)<\/span><\/li>/g)]
+    .map((m) => { assert.equal(EV.get(m[1]).name, unescapeHtml(m[2]), `${m[1]} links to its own event`); return [unescapeHtml(m[2]), unescapeHtml(m[3])]; });
   assert.equal(items.length, DATA.events.length);
   assert.equal(new Set(items.map((i) => i[0])).size, items.length, 'no name twice');
   const expected = [];
@@ -833,7 +848,9 @@ test('the event index names every event once, under its kind and region, with it
   const n = (k) => DATA.events.filter((e) => e.kind === k).length;
   assert.ok(block.includes(`<span class="hint">${n('world-boss')} world bosses and ${n('meta')} meta events</span>`));
   assert.ok(block.includes(`World bosses (${n('world-boss')})</h3>`) && block.includes(`Meta events (${n('meta')})</h3>`));
-  assert.ok(!/<a\s/.test(block), 'plain text, no links');
+  // Since v0.3.0 each name links to its own details (#event/<id>), and nothing else in the index is a link.
+  assert.equal((block.match(/<a\s/g) || []).length, DATA.events.length);
+  assert.ok(!/href="(?!#event\/)/.test(block), 'no link leaves the page');
 });
 test('how often an event starts reads from its schedule', () => {
   assert.equal(cadence({ type: 'every', periodMin: 120, offsetMin: 5, windowMin: 15 }), 'every 2 hours');
@@ -849,7 +866,9 @@ test('the event index follows the data: an event added or removed shows up or dr
   d.events.push({ ...copy(EV.get('drakkar')), id: 'test-boss', name: 'Test <Boss> & Co', map: 'Test Map', region: 'voe', schedule: { type: 'every', periodMin: 60, offsetMin: 0, windowMin: 10 } });
   const out = renderEventIndex(d);
   assert.ok(!out.includes('The Shatterer'), 'removed');
-  assert.ok(out.includes('<h4>Visions of Eternity</h4>\n            <ul>\n              <li><span class="index-name">Test &lt;Boss&gt; &amp; Co</span> <span class="index-where">Test Map · every hour</span></li>'), 'added under its kind and region');
+  assert.ok(out.includes('<h4>Visions of Eternity</h4>\n            <ul>\n              <li><a class="index-name event-link" href="#event/test-boss" aria-haspopup="dialog">Test &lt;Boss&gt; &amp; Co</a> <span class="index-where">Test Map · every hour</span></li>'), 'added under its kind and region');
+  // An id that could break out of the link's attribute is refused, never written.
+  for (const id of ['x" onclick="y', 'Upper', 'a b', '', '../x', 5]) assert.throws(() => renderEventIndex({ ...d, events: [{ ...d.events[0], id }] }), /not a usable event id/, String(id));
   assert.ok(out.includes('15 world bosses and 20 meta events'));
   assert.throws(() => renderEventIndex({ ...d, events: [{ ...d.events[0], kind: 'raid' }] }), /unknown kind/);
   assert.throws(() => renderEventIndex({ ...d, events: [{ ...d.events[0], region: 'nowhere' }] }), /unknown region/);
@@ -862,7 +881,7 @@ test('build-events --check refuses a page whose event index is stale, and the bu
     const paths = { source: join(dir, 's.json'), patches: join(dir, 'p.json'), lock: join(dir, 'l.json'), output: join(dir, 'e.js'), page: join(dir, 'index.html') };
     writeFileSync(paths.source, file('data/schedule.source.json')); writeFileSync(paths.patches, file('data/patches.json'));
     writeFileSync(paths.lock, file('data/schedule.lock.json')); writeFileSync(paths.output, file('events-data.js'));
-    writeFileSync(paths.page, html.replace(/\n *<li><span class="index-name">The Shatterer<\/span>[^\n]*/, ''));
+    writeFileSync(paths.page, html.replace(/\n *<li><a class="index-name[^"]*" href="#event\/the-shatterer"[^\n]*/, ''));
     const r = buildEvents({ check: true, paths, log: () => {} });
     assert.equal(r.ok, false);
     assert.match(r.errors.join('\n'), /event index in index\.html is out of date/);
@@ -881,7 +900,8 @@ test('the only network calls in the code are the news feed and the same-origin c
     for (const m of src.matchAll(/\bfetch\(([^,)]+)/g)) calls.push(`${f}: ${m[1].trim()}`);
     assert.ok(!/XMLHttpRequest|WebSocket|sendBeacon|EventSource|import\(/.test(src), f);
     const urls = [...src.matchAll(/https?:\/\/[a-z0-9.-]+/gi)].map((m) => m[0]);
-    for (const u of urls) assert.ok(['https://www.guildwars2.com', 'https://wiki.guildwars2.com'].includes(u), `${f}: ${u}`);
+    // radmagelabs.com is the page's own canonical address, which js/link.js writes into links to an event; nothing is requested from it.
+    for (const u of urls) assert.ok(['https://www.guildwars2.com', 'https://wiki.guildwars2.com', 'https://radmagelabs.com'].includes(u), `${f}: ${u}`);
   }
   assert.deepEqual(calls.sort(), ['app.js: News.FEED_URL', 'app.js: url']);
 });
@@ -920,12 +940,104 @@ test('README counts match the data: 15 world bosses, 20 meta-events, the four ad
 
 // ---- Time zones: tests/tz.mjs once per zone ----
 
-for (const tz of ['America/Chicago', 'Europe/London', 'Asia/Kolkata', 'Australia/Lord_Howe', 'UTC']) {
+const ZONES = ['America/Chicago', 'Europe/London', 'Asia/Kolkata', 'Australia/Lord_Howe', 'UTC'];
+for (const tz of ZONES) {
   test(`time-zone checks pass in ${tz}`, () => {
     const r = spawnSync(process.execPath, [join(ROOT, 'tests', 'tz.mjs')], { env: { ...process.env, TZ: tz }, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stdout + r.stderr);
   });
 }
+
+// ---- The foundation modules of v0.3.0: each has its own test file, which also runs alone ----
+// Reminders run once per zone: every rule there compares UTC instants, so each zone must give the same result.
+
+const moduleCounts = [];
+for (const [name, zones] of [['search', [null]], ['link', [null]], ['reminders', ZONES]]) {
+  for (const tz of zones) {
+    test(`js/${name}.js: tests/${name}.mjs passes${tz ? ` in ${tz}` : ''}`, () => {
+      const r = spawnSync(process.execPath, [join(ROOT, 'tests', `${name}.mjs`)], { env: tz ? { ...process.env, TZ: tz } : process.env, encoding: 'utf8' });
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      const m = /(\d+) passed, 0 failed/.exec(r.stdout);
+      assert.ok(m && Number(m[1]) > 0, r.stdout);
+      moduleCounts.push(`${name}${tz ? ` (${tz})` : ''} ${m[1]}`);
+    });
+  }
+}
+test('the foundation modules are published with the site and the page loads each: search.js (Phase C), link.js (Phase D), reminders.js (Phase E)', () => {
+  const global = (f) => `GW2${f.slice(3, 4).toUpperCase()}${f.slice(4, -3)}`;
+  for (const f of ['js/search.js', 'js/link.js', 'js/reminders.js']) {
+    assert.ok(SITE_FILES.includes(f), f);
+    assert.ok(file('index.html').includes(`<script defer src="${f}?v=`), `index.html loads ${f}`);
+    assert.ok(file('js/app.js').includes(`window.${global(f)}`), `app.js uses ${global(f)}`);
+  }
+});
+// ---- v0.3.0 Phase E: reminders on the page ----
+
+test('reminders stay on the page: no browser notification, permission request, service worker, push, sound or calendar file anywhere in the site', () => {
+  for (const f of readdirSync(join(ROOT, 'js'))) {
+    assert.ok(!/\bNotification\b|requestPermission|showNotification|serviceWorker|PushManager|\bAudio\b|AudioContext|\.play\(\)|text\/calendar|BEGIN:VCALENDAR/.test(file(`js/${f}`)), f);
+  }
+  assert.ok(!/rel="manifest"|serviceWorker|<audio/.test(html), 'no manifest, worker or sound in the page');
+  // The dialog says what a reminder is and is not, and promises nothing with the page closed.
+  const dlg = html.slice(html.indexOf('<dialog id="reminders-dialog"'), html.indexOf('</dialog>', html.indexOf('<dialog id="reminders-dialog"')));
+  assert.ok(dlg.includes('They work only while this page is open in a tab. Nothing can remind you when the page or the browser is closed, or while your device sleeps.'));
+  assert.ok(dlg.includes('It is not a notification from your browser or your computer.'));
+  assert.ok(!/type="checkbox"[^>]*notif|notify/i.test(dlg), 'no notification option before Phase F');
+  assert.deepEqual([...dlg.matchAll(/name="reminders-lead" value="(\d+)"/g)].map((m) => Number(m[1])), Reminders.LEADS, 'the leads offered are the module\'s');
+});
+test('reminder settings and records live under their own two keys, never inside prefs, and are checked on every read', () => {
+  const app = file('js/app.js');
+  // Settings: read through R.sanitize, written whole. Records: read and written only through the two helpers the claim is given.
+  assert.ok(app.includes("let rset = R.sanitize(Store.read(storage, 'reminders'));"));
+  assert.deepEqual([...app.matchAll(/Store\.read\(storage, '(remind[a-z]+)'\)/g)].map((m) => m[1]).sort(), ['reminded', 'reminders', 'reminders']);
+  assert.deepEqual([...app.matchAll(/Store\.write\(storage, '(remind[a-z]+)'/g)].map((m) => m[1]).sort(), ['reminded', 'reminders']);
+  assert.ok(app.includes("const readRecords = () => Store.read(storage, 'reminded');") && app.includes("const writeRecords = (records) => Store.write(storage, 'reminded', records);"));
+  assert.ok(app.includes('const saved = R.prune(readRecords(), IDS, now);') && app.includes('R.merge(R.prune(readRecords(), IDS, now), mem)'), 'saved records are pruned wherever they are read');
+  assert.ok(!/prefs\.(remind|lead|notify)/.test(app), 'nothing about reminders in prefs');
+  // Prefs keep their v0.2.1 shape, so a rollback reads them unchanged and never sees the reminder keys.
+  const p = Store.sanitizePrefs({ reminders: { on: true }, reminded: {}, lead: 10, starred: ['tequatl-the-sunless'] }, DATA.events.map((e) => e.id), DATA.regions.map((r) => r.id));
+  assert.deepEqual(Object.keys(p).sort(), ['aheadMin', 'compact', 'filter', 'hidden', 'news', 'newsExpanded', 'regions', 'showUtc', 'starred', 'theme']);
+  assert.deepEqual(Reminders.sanitize(null), { on: false, lead: 10, notify: false }, 'off, ten minutes, until the reader says otherwise');
+});
+test('reminders are checked once a tick after the lists are drawn, and delivery waits for the clock: 8 s at most, at load and after a wake or a clock change', () => {
+  const app = file('js/app.js');
+  assert.ok(app.includes('    render(Boolean(resumed));\n    checkReminders();\n    timer = setTimeout(tick, 1000 - (nowMs() % 1000) + 5);'), 'after render, before the next tick is set');
+  assert.ok(app.includes('const CLOCK_HOLD_MS = 8000;'));
+  assert.ok(app.includes('let holdUntil = /^https?:$/.test(location.protocol) ? performance.now() + CLOCK_HOLD_MS : 0;'), 'held from load when a clock check will run; never from a file');
+  assert.ok(app.includes("if (resumed) checkClock(resumed === 'clock-jump' ? 5000 : 60000, true);"), 'held again while the clock is rechecked after a wake or a clock change');
+  assert.ok(app.includes('if (hold) holdUntil = lastCheck + CLOCK_HOLD_MS;') && app.includes('if (holdUntil) { holdUntil = 0; checkReminders(); }'), 'the hold ends with the check');
+  assert.ok(app.includes('setInterval(() => checkClock(60000), 6 * 3600000);'), 'the routine recheck holds nothing');
+  assert.ok(app.includes('if (!rset.on || holding()) return;'));
+  // One claim at a time per event, with this tab's id, its memory, storage, Web Locks and a real wait.
+  assert.ok(app.includes('R.claim({ item, now, by: TAB, mem, read: readRecords, write: writeRecords, locks: navigator.locks, wait, eventIds: IDS })'));
+  assert.ok(app.includes('R.decide(R.due(ctx).filter((it) => !claiming.has(it.id)), mem);'));
+  assert.equal(app.split('say(').length - 1, 2, 'one place announces: say() and its one call, in deliver()');
+});
+test('the address changes only for a link to one event: one pushState with the event fragment, and back or replaceState only to take an event fragment out', () => {
+  const app = file('js/app.js');
+  assert.deepEqual([...app.matchAll(/history\.pushState\((.*?)\);/g)].map((m) => m[1]), ["{ gw2Event: r.id }, '', Link.fragment(r.id)"]);
+  assert.deepEqual([...app.matchAll(/history\.replaceState\((.*?)\);/g)].map((m) => m[1]), ["null, '', location.pathname + location.search"]);
+  assert.equal(app.split('history.back()').length - 1, 1);
+  assert.ok(app.includes('if (history.state && history.state.gw2Event === id) history.back(); else dropFragment();'), 'back only to the entry this page added');
+  assert.ok(!/location\.(href|hash|search|pathname)\s*=(?!=)|location\.(assign|replace)\(|history\.go\(/.test(app), 'nothing else moves the address');
+  // A link names an event and nothing else: Copy link writes Link.make(id), never the current address.
+  assert.ok(app.includes('url = Link.make(e.id)') && !/copyText\(location/.test(app));
+  // The link's own text never reaches the page: what is shown comes from the dataset or fixed sentences.
+  assert.ok(!/decodeURIComponent|location\.hash\)?\s*[,;)]\s*$|textContent\s*=\s*location/m.test(app.replace(/Link\.parse\(location\.hash, IDS\)/g, '')), 'location.hash is read only through Link.parse');
+});
+test('the search query is never saved: app.js keeps it in memory only, out of prefs, storage and the address', () => {
+  const app = file('js/app.js');
+  // Every write to storage goes through Store.write with one of the known keys, none of them the query.
+  assert.deepEqual([...new Set([...app.matchAll(/Store\.write\(storage, '([a-z]+)'/g)].map((m) => m[1]))].sort(), ['news', 'overrides', 'prefs', 'reminded', 'reminders']);
+  assert.ok(!/prefs\.(query|search|find)\b/.test(app), 'no query in prefs');
+  assert.equal(app.split('localStorage').length - 1, 1, 'localStorage is named once, where the storage handle is taken');
+  assert.ok(app.includes('try { return window.localStorage; }'));
+  assert.ok(!/sessionStorage|indexedDB|document\.cookie|location\.(hash|search)\s*=/.test(app), 'no other storage');
+  assert.ok(!/(push|replace)State\([^)]*query/.test(app), 'the query never goes into the address');
+  const p = Store.sanitizePrefs({ query: 'wurm', search: 'wurm', find: 'wurm' }, DATA.events.map((e) => e.id), DATA.regions.map((r) => r.id));
+  assert.ok(!('query' in p) && !('search' in p) && !('find' in p), 'a query smuggled into saved prefs is dropped');
+});
+console.log(`module tests: ${moduleCounts.join(', ')}`);
 
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

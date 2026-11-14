@@ -12,9 +12,16 @@ const KINDS = [
   { id: 'meta', title: 'Meta events', one: 'meta event', many: 'meta events' },
 ];
 
-// Everything generated here is element text (no attribute holds data), so &, < and > are enough.
+// Everything generated here is element text, so &, < and > are enough; the one attribute that holds
+// data is the link to an event, and its id is checked to be plain lower-case letters, digits and dashes.
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
 export const escapeHtml = (s) => String(s).replace(/[&<>]/g, (c) => ESC[c]);
+const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** The page's link to one event (js/link.js reads it): "#event/<id>". */
+export const eventHref = (id) => {
+  if (typeof id !== 'string' || !ID.test(id)) throw new Error(`event index: ${JSON.stringify(id)} is not a usable event id`);
+  return `#event/${id}`;
+};
 
 /** How often an event starts, from its schedule: "every 2 hours", "6 times a day". */
 export function cadence(schedule) {
@@ -61,7 +68,7 @@ export function renderEventIndex(data) {
       out.push(`            <h4>${escapeHtml(r.name)}</h4>`);
       out.push('            <ul>');
       for (const e of list) {
-        out.push(`              <li><span class="index-name">${escapeHtml(e.name)}</span> <span class="index-where">${escapeHtml(e.map)} · ${escapeHtml(cadence(e.schedule))}</span></li>`);
+        out.push(`              <li><a class="index-name event-link" href="${eventHref(e.id)}" aria-haspopup="dialog">${escapeHtml(e.name)}</a> <span class="index-where">${escapeHtml(e.map)} · ${escapeHtml(cadence(e.schedule))}</span></li>`);
       }
       out.push('            </ul>');
       out.push('          </div>');

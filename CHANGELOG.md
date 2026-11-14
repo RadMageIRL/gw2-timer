@@ -4,6 +4,33 @@ Every version of GW2 Timer and what changed in it, newest first. Dates are the d
 
 The schedule data has its own revision numbers (r1, r2, ...), listed under "Schedule data" below. A revision is either a **schedule change** (a start time, cycle or event added or removed) or **metadata only** (a label, note or verification status changed; no time moved).
 
+## v0.3.0 (2026-11-14)
+
+Reminders for starred events, a Find field, a details view and link for every event, and Share. Settings saved by earlier versions carry over unchanged, and the schedule data is still r1.
+
+Added
+- Reminders: a notice on the page, with a count in the tab's title, 5, 10 or 15 minutes before a starred event starts. They are off until you turn them on with the Reminders button in the filters. A notice shows the start in your time with a countdown, has Copy waypoint and Dismiss, and says when a time is unverified or is your own adjusted time. Several events due together make one announcement. On a phone the notices show one at a time, with "+3 more" and Dismiss all beside the notice's buttons where there is room.
+- What reminders cannot do, said in the Reminders dialog, in About and in the README: they work only while the page is open; they are not notifications from your browser or your computer; a background tab can be about a minute late and a sleeping tab cannot remind you; a reminder is never shown after its event has started; with several tabs open one of them gives each reminder; and the page's two addresses keep separate settings.
+- Find: type part of an event, map or region name to narrow Scheduled now and Coming up. A match that is not in your lists is named, with the reason (hidden, filtered out, or starting later than the span shown) and its next start. A search is never saved.
+- Event details: every event's name opens a small view with where it is, its next start or how long its window stays open, how often it runs, how sure its time is, and why it is not in your lists when it is not.
+- Links to one event: Copy link in the details gives an address such as `#event/tequatl-the-sunless`. A link names the event and nothing else, and opening one changes none of your settings. Back closes the details.
+- Share and Buy me a coffee, as on FFXI Timer: in a line under the header's tagline, in the footer, and in a Share and support section in About. Share always passes https://radmagelabs.com/gw2-timer/, whichever address the page was opened at, and nothing of yours. Where the device has a share sheet it opens that; otherwise, or if the sheet fails, it copies the link. Closing the sheet does nothing, and Share in About closes About so you see that the link was copied. Buy me a coffee opens buymeacoffee.com in a new tab, so reminders keep running in this one.
+
+Changed
+- On a phone the filters fold under one Filters button beside Find, so the events start higher on the screen. A line under it says what is narrowing the lists.
+- The names in Events this timer covers are links to each event's details.
+- With Show set to Starred and nothing starred, both lists say how to star an event.
+- The weekly reset countdown no longer breaks across two lines on narrow screens.
+
+Accessibility
+- A reminder is announced once, politely, and never takes focus; the notice area is a named region that is not read out as it counts down. When a notice is dismissed, focus moves to the next one, or to Coming up.
+- The page keeps room below its footer for the reminder notices, and a control that takes focus is scrolled clear of them.
+- The Find status speaks once per pause in typing, not per letter. The event details are a modal dialog named by the event, and closing them returns focus to the name that opened them.
+
+Security and privacy
+- Nothing new leaves the browser: reminders, Find and links make no request, and the page's content security policy is unchanged. A link's own text is never written into the page.
+- Reminder settings and the record of reminders already given are saved in this browser only, apart from your other settings, so going back to an earlier version loses nothing.
+
 ## v0.2.1 (2026-11-08)
 
 The page no longer jumps as it loads, its title says Guild Wars 2, and it lists every event it covers. Nothing about the schedule or your settings changes.

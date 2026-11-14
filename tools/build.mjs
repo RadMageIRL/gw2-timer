@@ -15,6 +15,9 @@ import { buildEvents } from './build-events.mjs';
 export const SITE_FILES = [
   'index.html', 'style.css', 'events-data.js', '.nojekyll',
   'js/theme-boot.js', 'js/schedule.js', 'js/store.js', 'js/news.js', 'js/clock.js', 'js/app.js',
+  // The foundation modules of v0.3.0 (search, links to one event, reminders). Published with the site;
+  // the page loads each one from the release phase that first uses it.
+  'js/search.js', 'js/link.js', 'js/reminders.js',
 ];
 
 export function build(outDir = join(ROOT, 'dist')) {

@@ -90,11 +90,20 @@ button, input, select { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
-.brand { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
+.brand { min-width: 0; }
+.brand-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
 .brand h1 { margin: 0; font: 600 21px/1.2 var(--serif); letter-spacing: 0.02em; white-space: nowrap; }
 .brand .tag { color: var(--text-faint); font-size: 12px; }
 /* Underlined, so the link stands out from the tagline by more than its color. */
 .brand .tag a { color: var(--text-dim); text-decoration: underline; text-underline-offset: 2px; }
+/* Share and Buy me a coffee: in the header under the tagline, in the footer, and in About. In the header
+   they are a line of their own (a block under .brand-line), so the brand is no wider than before and the
+   clock does not wrap below it. */
+.brand .share-links { color: var(--text-faint); font-size: 12px; }
+.share-links a { color: var(--text-dim); text-decoration: underline; text-underline-offset: 2px; }
+.share-links .link-btn { min-height: 0; padding: 0; font-size: inherit; text-underline-offset: 2px; }
+.about-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.about-actions .btn { color: var(--text); } /* the button like the link beside it (dialog a) */
 .clock { margin-left: auto; text-align: right; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .clock .now { font-size: 19px; font-weight: 600; }
 .clock .sub { color: var(--text-faint); font-size: 12px; }
@@ -135,10 +144,12 @@ main {
   list-style: none; margin: 0; padding: 10px 14px;
   display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 18px;
 }
-.strip-list li { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: baseline; min-width: 0; }
-.strip-list .label { color: var(--text-faint); font-size: 12px; grid-column: 1 / -1; }
+/* A countdown never breaks inside itself ("in 13h" / "22m"): when it does not fit beside the value,
+   it moves under it whole. */
+.strip-list li { display: flex; flex-wrap: wrap; column-gap: 8px; align-items: baseline; min-width: 0; }
+.strip-list .label { color: var(--text-faint); font-size: 12px; flex: 0 0 100%; }
 .strip-list .value { font-weight: 600; }
-.strip-list .sub { color: var(--text-dim); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.strip-list .sub { color: var(--text-dim); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .strip-list .phase-day .value, .strip-list .phase-dawn .value { color: var(--day); }
 .strip-list .phase-night .value, .strip-list .phase-dusk .value { color: var(--night); }
 
@@ -169,6 +180,33 @@ main {
   min-height: 30px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--line-strong);
   background: var(--surface-2); color: var(--text);
 }
+.filters-body { display: grid; gap: 10px; }
+
+/* Find: the first line of the filters. On phones it shares its line with the Filters button. */
+
+.find-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.find-box { position: relative; flex: 0 1 340px; min-width: 0; }
+.find-box input {
+  width: 100%; min-height: 32px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line-strong);
+  background: var(--surface-2); color: var(--text); font-size: 14px;
+}
+.find-box input::placeholder { color: var(--text-faint); opacity: 1; }
+/* The page's own Clear button replaces the browser's small cross, which a keyboard cannot reach. */
+.find-box input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
+.find-box input:not(:placeholder-shown) { padding-right: 62px; }
+/* Inside the field, so showing it moves nothing. */
+.find-clear {
+  position: absolute; top: 0; right: 0; bottom: 0; display: flex; align-items: center; padding: 0 10px;
+  border: 0; border-radius: 0 7px 7px 0; background: none; color: var(--text-dim); font-size: 13px;
+  text-decoration: underline; cursor: pointer;
+}
+.find-clear[hidden] { display: none; }
+.find-status { margin-left: 74px; color: var(--text-dim); font-size: 13px; }
+.find-status:not(:empty) { margin-top: 8px; }
+.find-status p { margin: 0; }
+.find-status ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+.find-status .name { color: var(--text); font-weight: 600; }
+.filters-toggle, .filters-summary { display: none; }
 
 /* Happening now: cards. The active card breathes in its own color, as in D4 Tracker. */
 
@@ -320,6 +358,7 @@ main {
 .index-region h4 { margin: 8px 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
 .index-region ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .index-name { color: var(--text); }
+.index-region li { padding: 1px 0; }
 .index-where { display: block; color: var(--text-faint); font-size: 12.5px; }
 
 /* Footer, dialogs, toast */
@@ -344,11 +383,81 @@ dialog h3 { margin: 14px 0 4px; font-size: 14px; }
 dialog p, dialog li { font-size: 13.5px; color: var(--text-dim); }
 dialog a { color: var(--text); }
 .dialog-close { float: right; margin: -4px -6px 0 8px; }
+/* Links to one event: an event's name opens its details. Underlined faintly, so they read as names
+   first; the padding widens what a finger can hit without moving the line. */
+.event-link { color: inherit; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; padding: 3px 0; }
+.event-link:hover { text-decoration-color: currentColor; }
+.link-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.link-notice[hidden] { display: none; }
+.link-notice .link-btn { color: var(--warn); }
+
+/* The details of one event (#event/<id>) */
+.event-dialog { width: min(560px, calc(100vw - 24px)); }
+.event-dialog h2:focus { outline: none; }
+.event-dialog .badges { margin: 0 0 10px; }
+.ed-when { margin: 0 0 10px; color: var(--text); font-size: 15px; font-variant-numeric: tabular-nums; }
+.ed-when strong { font-weight: 700; }
+.ed-left { white-space: nowrap; }
+.ed-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 10px; font-size: 13.5px; }
+.ed-facts dt { color: var(--text-faint); }
+.ed-facts dd { margin: 0; color: var(--text-dim); }
+.event-dialog .ed-live, .event-dialog .note { margin: 0 0 8px; font-size: 12.5px; color: var(--text-faint); }
+.event-dialog .ed-why { margin: 0 0 8px; padding: 8px 10px; border: 1px dashed var(--line-strong); border-radius: 8px; font-size: 13px; }
+.event-dialog .ed-why strong { color: var(--text); }
+.ed-actions { margin: 0 0 12px; }
+.ed-star.on span { color: var(--star); }
+.event-dialog .ed-status { margin: 10px 0 0; min-height: 1.45em; font-size: 13px; color: var(--text-dim); }
+.ed-linkbox { display: grid; gap: 4px; margin-top: 6px; font-size: 12.5px; color: var(--text-dim); }
+.ed-linkbox[hidden] { display: none; }
+.ed-linkbox input { width: 100%; min-height: 32px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font-size: 13px; }
 .hidden-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .hidden-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
+/* Reminders: the settings dialog, and this tab's notices fixed at the bottom of the window. While the
+   tray is up, app.js sets --tray-space to the room it takes, so the page can be scrolled clear of it and
+   a control that takes focus is scrolled into view above it. */
+.rm-settings { display: grid; gap: 8px; margin: 10px 0 8px; }
+.rm-option { display: flex; align-items: center; gap: 8px; min-height: 30px; font-size: 14px; color: var(--text); cursor: pointer; }
+.rm-option input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--focus); }
+.rm-leads { display: flex; flex-wrap: wrap; gap: 0 18px; margin: 0; padding: 4px 12px 6px; border: 1px solid var(--line); border-radius: 8px; }
+.rm-leads legend { padding: 0 4px; font-size: 12.5px; color: var(--text-faint); }
+dialog .rm-unsaved { margin: 4px 0 0; color: var(--warn); }
+.rm-list, .rm-limits { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.rm-list .name { color: var(--text); font-weight: 600; }
+.rm-list .rm-none { list-style: none; margin-left: -18px; }
+
+html { scroll-padding-bottom: var(--tray-space, 0px); }
+body { padding-bottom: var(--tray-space, 0px); }
+.rm-tray {
+  position: fixed; right: 12px; bottom: 12px; z-index: 5;
+  width: min(500px, calc(100vw - 24px)); max-height: min(70vh, 460px); overflow-y: auto;
+  padding: 6px; border: 1px solid var(--line-strong); border-radius: 12px;
+  background: var(--surface); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+.rm-tray[hidden] { display: none; }
+.rm-notices { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rm-notice {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name name" "when actions";
+  align-items: center; gap: 2px 10px; padding: 6px 10px 7px;
+  border: 1px solid var(--line); border-left: 3px solid var(--star); border-radius: 8px; background: var(--surface-2);
+}
+/* A new notice fades in. It does not move: a notice that slid in would overflow the tray for a moment. */
+.rm-notice.is-new { animation: rm-in 0.3s ease-out; }
+@keyframes rm-in { from { opacity: 0; } to { opacity: 1; } }
+.rm-name { grid-area: name; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.rm-label { color: var(--text-faint); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.rm-note { color: var(--warn); font-size: 12.5px; font-weight: 400; }
+.rm-when { grid-area: when; margin: 0; color: var(--text-dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+.rm-when strong { color: var(--text); }
+.rm-left { color: var(--soon); font-weight: 600; white-space: nowrap; }
+.rm-actions { grid-area: actions; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.rm-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; padding: 2px 4px 0; }
+.rm-foot[hidden], .rm-foot [hidden] { display: none; }
+.rm-foot #reminders-dismiss-all { margin-left: auto; }
+@media (prefers-reduced-motion: reduce) { .rm-notice.is-new { animation: none; } }
+
 .toast {
-  position: fixed; left: 50%; bottom: 18px; transform: translate(-50%, 20px);
+  position: fixed; left: 50%; bottom: calc(18px + var(--tray-space, 0px)); transform: translate(-50%, 20px); z-index: 6;
   max-width: calc(100vw - 24px); padding: 9px 14px; border-radius: 8px;
   background: var(--surface-2); border: 1px solid var(--line-strong); font-size: 13px;
   opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s;
@@ -359,7 +468,10 @@ dialog a { color: var(--text); }
 /* Phones and touch screens: every control at least 36 px tall */
 
 @media (max-width: 640px), (pointer: coarse) {
-  .btn, .btn.small, .seg-btn, .chip, .link-btn, .field select, .field input { min-height: 36px; }
+  .btn, .btn.small, .seg-btn, .chip, .link-btn, .field select, .field input, .find-box input, .ed-linkbox input { min-height: 36px; }
+  .rm-option { min-height: 36px; }
+  .share-links .link-btn, .share-links a { display: inline-flex; align-items: center; min-height: 36px; }
+  .event-link { padding: 8px 0; } /* name links: 36 px to tap, like every control here, with no change to the line */
   .star-btn { min-width: 36px; min-height: 36px; }
   .news-list a { padding: 6px 0; }
   .news:is([data-status="idle"], [data-status="loading"]) .news-list:empty { min-height: calc(3 * (1.45em + 12px)); }
@@ -370,9 +482,23 @@ dialog a { color: var(--text); }
 @media (max-width: 640px) {
   .news:is([data-status="idle"], [data-status="loading"]) .news-list:empty { min-height: calc(3 * (2.9em + 12px)); }
   .ctl-line { grid-template-columns: 1fr; gap: 4px; }
+  /* The filters fold under one button, so the events come up the screen; Find stays out, beside it. */
+  .controls { padding: 8px 12px; gap: 10px; }
+  .find-line { grid-template-columns: auto minmax(0, 1fr); gap: 10px; }
+  .find-box { flex: 1 1 auto; }
+  .find-box input { font-size: 16px; } /* below 16 px, phone browsers zoom the page into the field */
+  .filters-toggle { display: inline-flex; flex: none; }
+  .filters-toggle::after { content: "\25BE"; content: "\25BE" / ""; color: var(--text-faint); }
+  .filters-toggle[aria-expanded="true"]::after { content: "\25B4"; content: "\25B4" / ""; }
+  .controls:not(.is-open) .filters-body { display: none; }
+  .controls:not(.is-open) .filters-summary:not(:empty) { display: block; margin: 6px 0 0; color: var(--text-faint); font-size: 12.5px; }
+  .controls.is-open .filters-body { padding-bottom: 4px; }
+  .find-status { margin-left: 0; }
   .notes-body { padding: 0 14px 14px; }
   .notes-facts, .notes-key { grid-template-columns: 1fr; gap: 0 0; }
   .notes-facts dd, .notes-key dd { margin-bottom: 6px; }
+  .ed-facts { grid-template-columns: 1fr; gap: 0; }
+  .ed-facts dd { margin-bottom: 6px; }
   .topbar { padding: 10px 14px; }
   main { padding: 12px 12px 24px; gap: 14px; }
   .clock { margin-left: 0; text-align: left; }
@@ -384,4 +510,11 @@ dialog a { color: var(--text); }
   .row .actions .adjust { width: auto; }
   .compact .row { grid-template-columns: minmax(0, 1fr) auto; }
   .compact .row .when { grid-column: 1 / -1; }
+  /* One notice across the bottom; its buttons under the text. With several, app.js puts "+3 more" and
+     Dismiss all at the end of that row; where they do not fit, they wrap onto a line of their own. */
+  .rm-tray { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); width: auto; padding: 5px; }
+  .rm-notice { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "when" "actions"; gap: 2px; padding: 6px 8px; }
+  .rm-actions { justify-content: flex-start; margin-top: 4px; row-gap: 2px; }
+  .rm-actions .btn.small { padding: 0 8px; } /* room for all four on one row at 360 px, in a wider font too */
+  .rm-actions > .rm-foot { flex-wrap: nowrap; column-gap: 10px; margin-left: auto; padding: 0; }
 }

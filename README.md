@@ -1,4 +1,4 @@
-# GW2 Timer v0.2.1
+# GW2 Timer v0.3.0
 
 Guild Wars 2 Boss & Meta Timers. A Guild Wars 2 timer that shows what is inside its scheduled window right now, what starts next, and when, in your local time. It is an unofficial fansite, made by [RadMage Labs](https://radmagelabs.com/).
 
@@ -6,7 +6,7 @@ Guild Wars 2 Boss & Meta Timers. A Guild Wars 2 timer that shows what is inside 
 
 ![GW2 Timer in the dark theme: the day and night strip for Tyria, Cantha and Castora with the daily and weekly reset countdowns, the three newest headlines from ArenaNet, the filters, Scheduled now cards for the events inside their scheduled windows, and the start of the Coming up list in local time with UTC alongside](screenshots/gw2-timer.png)
 
-It is a plain HTML page with no build step and no server. Every time is worked out in the browser from a schedule kept in this repository. Settings, stars and adjustments stay in that browser's local storage. Two requests leave the page: a clock check to its own address, and the news panel's headlines from guildwars2.com, which can be turned off.
+It is a plain HTML page with no build step and no server. Every time is worked out in the browser from a schedule kept in this repository. Settings, stars, adjustments and reminder choices stay in that browser's local storage. Two requests leave the page: a clock check to its own address, and the news panel's headlines from guildwars2.com, which can be turned off.
 
 ## What it shows
 
@@ -30,7 +30,16 @@ From the top of the page down:
 
 **Your view**
 - Stars (starred events are tinted and list first without hiding the rest), Hide with a list to bring events back
-- Filters for world bosses, meta events or starred, region chips, a compact mode with one line per start, and dark, light or system themes
+- Filters for world bosses, meta events or starred, region chips, a compact mode with one line per start, and dark, light or system themes. On a phone the filters fold under one button, so the events start higher on the screen
+- Find: type part of an event, map or region name to narrow both lists. When a match is not in your lists, the page names it, says why (hidden, filtered out, or starting later than the span shown) and when it next starts. The search is never saved
+
+**One event**
+- Every event's name opens its details: where it is, its next start or how long its window stays open, how often it runs, how sure the time is, and why it is not in your lists when it is not
+- Copy link gives an address for that one event (`.../gw2-timer/#event/tequatl-the-sunless`). A link names the event and nothing else: it carries none of your settings, and opening one changes none
+
+**Reminders**
+- Off until you turn them on. Then a notice appears at the bottom of the page, with a count in the tab's title, 5, 10 or 15 minutes before a starred event starts
+- See [Reminders and their limits](#reminders-and-their-limits) below for what they cannot do
 
 **Schedule notes**
 - A closed section at the bottom with the schedule revision, the review dates, how many times are documented, confirmed in game, disputed or unverified, and which events have uncertain times
@@ -38,9 +47,26 @@ From the top of the page down:
 **Events this timer covers**
 - A closed section under Schedule notes that lists every world boss and meta-event the timer follows, by region, with its map and how often it starts. It is part of the page itself, so it reads without JavaScript
 
+**Share and support**
+- Share, under the header's tagline, in the footer and in About, passes https://radmagelabs.com/gw2-timer/ to your device's share sheet, or copies it where there is none. It carries nothing of yours
+- Buy me a coffee opens [buymeacoffee.com/radmageirl](https://buymeacoffee.com/radmageirl) in a new tab, so reminders keep running in this one
+
 ## Scheduled, not live
 
 Every time is a scheduled start. Guild Wars 2 has no public live event feed, so a map can run early, run late, fail or close. "Scheduled now" means the scheduled window is open, not that the fight is on in your map.
+
+## Reminders and their limits
+
+Reminders are a convenience for a page you keep open while you play. They are not a notification service, and nothing here promises that a reminder will reach you.
+
+- **Off by default.** Turn them on with the Reminders button in the filters, and pick 5, 10 or 15 minutes. They follow the events you have starred, unless you have hidden them.
+- **Only while the page is open.** Nothing can remind you when the page or the browser is closed, or while your device sleeps.
+- **Not an operating-system notification.** A reminder is a notice on the page and a count in the tab's title. Your browser and your computer show nothing outside the page, so you have to be able to see the tab.
+- **Sleeping and throttled tabs.** Browsers slow down tabs in the background: a reminder there, or in a window covered by your game, can be up to about a minute late. Browsers also put tabs they think are unused to sleep (Edge's sleeping tabs, Chrome's Memory Saver), and a sleeping tab cannot remind you at all. A browser window you can see, for example on a second monitor, stays on time; your browser's "always keep these sites active" list keeps the tab awake.
+- **Never late.** A reminder that would arrive after its event has started is not shown, and missed reminders are not replayed after a sleep.
+- **Several tabs.** With the page open in more than one tab, each reminder is given once, by one of them. The notice may be in a tab you are not looking at.
+- **Two addresses, two sets of settings.** radmagelabs.com/gw2-timer and radmageirl.github.io/gw2-timer are separate sites to your browser, each with its own saved settings. Reminders turned on at one are not on at the other, and with both open each gives its own reminder.
+- **Scheduled times.** A reminder follows the times the page shows. For an event marked Unverified, or one you have adjusted, the reminder says so.
 
 ## Accuracy
 
