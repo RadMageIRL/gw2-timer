@@ -18,6 +18,8 @@ export const SITE_FILES = [
   // The foundation modules of v0.3.0 (search, links to one event, reminders). Published with the site;
   // the page loads each one from the release phase that first uses it.
   'js/search.js', 'js/link.js', 'js/reminders.js',
+  // v0.4.0: calendar files (Add to calendar).
+  'js/ics.js',
 ];
 
 export function build(outDir = join(ROOT, 'dist')) {

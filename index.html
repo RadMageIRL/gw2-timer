@@ -17,6 +17,7 @@
   <script defer src="js/search.js?v=0.3.0"></script>
   <script defer src="js/link.js?v=0.3.0"></script>
   <script defer src="js/reminders.js?v=0.3.0"></script>
+  <script defer src="js/ics.js?v=0.3.0"></script>
   <script defer blocking="render" src="js/app.js?v=0.3.0"></script>
   <script src="js/theme-boot.js?v=0.3.0"></script>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23101114'/%3E%3Ccircle cx='32' cy='34' r='19' fill='none' stroke='%23d9a441' stroke-width='5'/%3E%3Cpath d='M32 34V22M32 34l9 6' stroke='%23e9e4da' stroke-width='5' stroke-linecap='round'/%3E%3Crect x='26' y='6' width='12' height='7' rx='2' fill='%23d9a441'/%3E%3C/svg%3E">
@@ -121,6 +122,7 @@
           <button type="button" class="btn small" id="utc-btn" aria-pressed="true">UTC</button>
           <button type="button" class="btn small" id="hidden-btn" aria-haspopup="dialog">Hidden (0)</button>
           <button type="button" class="btn small" id="reminders-btn" aria-haspopup="dialog">Reminders: off</button>
+          <button type="button" class="btn small" id="calendar-btn" aria-haspopup="dialog" title="Scheduled starts as a calendar file">Calendar</button>
         </div>
       </div>
     </section>
@@ -352,6 +354,57 @@
       <li>With this page open in more than one tab, each reminder is given once, by one of them, so the notice may be in a tab you are not looking at.</li>
       <li>This page has two addresses, radmagelabs.com and radmageirl.github.io. Your browser keeps their settings apart, so reminders turned on at one are not on at the other.</li>
       <li>Reminders follow the times this page shows. For an event marked Unverified, or one you have adjusted, the reminder says so.</li>
+    </ul>
+    <p class="sr-only" role="status" data-announce></p>
+  </dialog>
+
+  <!-- Scheduled starts as a calendar file (.ics), written in this browser by js/ics.js. Filled in by app.js;
+       opened from the Calendar button by the filters or from an event's details. Nothing here is saved. -->
+  <dialog id="calendar-dialog" class="cal-dialog" aria-labelledby="calendar-title" aria-describedby="calendar-intro">
+    <div class="dialog-close"><button type="button" class="btn small" data-close>Close</button></div>
+    <h2 id="calendar-title">Add to calendar</h2>
+    <p id="calendar-intro">A calendar file (.ics) with the scheduled starts you choose, for Google Calendar, Outlook, Apple Calendar and others. This page makes the file itself; nothing is sent anywhere.</p>
+    <fieldset class="cal-group">
+      <legend>Events</legend>
+      <label class="rm-option" id="calendar-one-option" hidden><input type="radio" name="calendar-scope" value="one"> <span id="calendar-one-name">This event</span></label>
+      <label class="rm-option"><input type="radio" name="calendar-scope" value="starred"> <span id="calendar-starred-label">Starred events</span></label>
+      <label class="rm-option"><input type="radio" name="calendar-scope" value="choose"> Choose events</label>
+    </fieldset>
+    <div class="cal-pick" id="calendar-pick" hidden>
+      <p class="cal-pick-tools"><button type="button" class="link-btn" id="calendar-pick-all">Select all</button> <button type="button" class="link-btn" id="calendar-pick-none">Clear</button></p>
+      <div id="calendar-pick-list"></div>
+    </div>
+    <div class="cal-fields">
+      <label class="field">Starts
+        <select id="calendar-span">
+          <option value="next">Next start only</option>
+          <option value="24h">Next 24 hours</option>
+          <option value="3d">Next 3 days</option>
+          <option value="7d">Next 7 days</option>
+          <option value="30d">Next 30 days</option>
+        </select>
+      </label>
+      <label class="field">Calendar alarm
+        <select id="calendar-alarm">
+          <option value="0">None</option>
+          <option value="5">5 minutes before</option>
+          <option value="10">10 minutes before</option>
+          <option value="15">15 minutes before</option>
+        </select>
+      </label>
+    </div>
+    <p class="cal-summary" id="calendar-summary" role="status"></p>
+    <p class="cal-uncertain" id="calendar-uncertain" hidden></p>
+    <p class="cal-actions"><button type="button" class="btn" id="calendar-download">Download calendar file</button></p>
+    <p class="cal-done" id="calendar-done" role="status"></p>
+    <h3>Good to know</h3>
+    <ul class="rm-limits">
+      <li>Each start is its own entry, written in UTC, the game's own time, so your calendar shows it in your time zone, before and after a daylight-saving change.</li>
+      <li>Scheduled, not live: a map can run early, late, fail or close. An unverified time, or one you set with Adjust, says so in the entry's title.</li>
+      <li>The file does not update itself when a game schedule changes or when you change Adjust. Download a new file then; entries you imported before stay in your calendar until you delete them.</li>
+      <li>Importing a file again works differently in each calendar app, and may add a second copy of entries you already have.</li>
+      <li>Whether a file's alarm is used depends on your calendar app; some use their own default reminder instead. If your phone's calendar app cannot open the file, import it on your calendar's website.</li>
+      <li>A file holds at most 500 entries.</li>
     </ul>
     <p class="sr-only" role="status" data-announce></p>
   </dialog>

@@ -1,10 +1,10 @@
 // GW2 Timer page. Reads the generated dataset (events-data.js) and the pure helpers in schedule.js,
-// store.js, news.js, clock.js, search.js, link.js and reminders.js; everything here is display and input. The DOM is built
+// store.js, news.js, clock.js, search.js, link.js, reminders.js and ics.js; everything here is display and input. The DOM is built
 // with createElement only: no outside text is ever parsed as HTML.
 (function () {
   'use strict';
 
-  const S = window.GW2Schedule, Store = window.GW2Store, News = window.GW2News, Clock = window.GW2Clock, Search = window.GW2Search, Link = window.GW2Link, R = window.GW2Reminders, DATA = window.GW2_DATA;
+  const S = window.GW2Schedule, Store = window.GW2Store, News = window.GW2News, Clock = window.GW2Clock, Search = window.GW2Search, Link = window.GW2Link, R = window.GW2Reminders, Ics = window.GW2Ics, DATA = window.GW2_DATA;
   const $ = (id) => document.getElementById(id);
   const storage = (() => { try { return window.localStorage; } catch (e) { return null; } })();
 
@@ -258,6 +258,7 @@
     const listed = new Set(nowItems.concat(nextItems).map((i) => i.event.id));
     renderFind(now, all, listed);
     renderEventDialog(now, listed);
+    syncCalendar();
   }
 
   // ---- Find: what the query matches, and why a match has no row ----
@@ -413,7 +414,8 @@
           h('span', { 'aria-hidden': 'true', text: on ? '★' : '☆' }), ' Star'),
         h('button', { type: 'button', class: 'btn small copy', 'data-copy': e.id, 'data-fkey': 'dlg:copy', 'aria-label': `Copy waypoint for ${e.name}: ${e.waypoint.chat}`, title: `${e.waypoint.name} ${e.waypoint.chat}`, text: 'Copy waypoint' }),
         h('a', { class: 'btn small', href: wikiUrl(e), target: '_blank', rel: 'noopener noreferrer', 'aria-label': `${e.name} on the Guild Wars 2 Wiki (opens a new tab)`, text: 'Wiki' }),
-        h('button', { type: 'button', class: 'btn small', 'data-copy-link': e.id, 'data-fkey': 'dlg:link', 'aria-label': `Copy a link to ${e.name}`, text: 'Copy link' }));
+        h('button', { type: 'button', class: 'btn small', 'data-copy-link': e.id, 'data-fkey': 'dlg:link', 'aria-label': `Copy a link to ${e.name}`, text: 'Copy link' }),
+        h('button', { type: 'button', class: 'btn small', 'data-calendar': e.id, 'data-fkey': 'dlg:calendar', 'aria-haspopup': 'dialog', 'aria-label': `Add to calendar: ${e.name}`, text: 'Add to calendar' }));
   }
 
   /** Rebuilds the open dialog only when what it says changes; its countdown ticks through data-until. */
@@ -596,9 +598,10 @@
     const more = items.length - 1;
     return `Reminders: ${name} and ${more} more starred ${more === 1 ? 'event start' : 'events start'} within ${rset.lead} minutes.`;
   }
-  /** One polite announcement. With a dialog open, the page behind it is out of reach: it is said in the dialog. */
+  /** One polite announcement. With a dialog open, the page behind it is out of reach: it is said in the dialog,
+   *  the top one when two are open (Add to calendar over an event's details, the only pair that can be). */
   function say(msg) {
-    const open = document.querySelector('dialog[open]');
+    const opened = document.querySelectorAll('dialog[open]'), open = opened[opened.length - 1];
     const target = (open && open.querySelector('[data-announce]')) || $('reminders-announce');
     for (const el of document.querySelectorAll('[data-announce]')) if (el !== target) el.textContent = '';
     target.textContent = msg;
@@ -709,6 +712,127 @@
   window.addEventListener('storage', (ev) => {
     if (ev.key === Store.PREFIX + 'reminders') { rset = R.sanitize(Store.read(storage, 'reminders')); syncReminders(); listKey = ''; checkReminders(); }
     else if (ev.key === Store.PREFIX + 'reminded') listKey = '';
+  });
+
+  // ---- Add to calendar: scheduled starts as an .ics file, written in this browser by js/ics.js ----
+  // The file holds explicit starts from the same engine and the same Adjust times as the lists, in UTC. It
+  // leaves the page only as a download: no request, nothing saved. The choices last while the page is open.
+
+  const calDialog = $('calendar-dialog');
+  const cal = { one: null, scope: 'starred', span: 'next', alarm: 0, picked: new Set(), opener: null, key: '' };
+
+  function calendarEvents() {
+    const all = effective();
+    if (cal.scope === 'one') return all.filter((e) => e.id === cal.one);
+    if (cal.scope === 'starred') return all.filter((e) => prefs.starred.includes(e.id));
+    return all.filter((e) => cal.picked.has(e.id));
+  }
+  /** "today at 7:00 PM (00:00 UTC)", "tomorrow at ...", a weekday within the week, else the date. */
+  function calWhen(ms, now) {
+    const f = formats(), u = utcText(ms) ? ` (${utcText(ms)})` : '';
+    const day = S.localDayKey(ms) === S.localDayKey(now) ? 'today' : S.dayLabel(ms, now) === 'Tomorrow' ? 'tomorrow' : ms - now < 6 * S.DAY ? S.dayLabel(ms, now) : f.newsDay.format(ms);
+    return `${day} at ${f.time.format(ms)}${u}`;
+  }
+  function calSummary(p, events, now) {
+    if (!p.ok) {
+      if (p.reason === 'empty') return cal.scope === 'starred' ? 'No events are starred yet. Star one with the star (☆) by its name, or choose events here.' : 'Choose at least one event.';
+      if (p.reason === 'too-many') return `That would be ${p.count} entries, more than the ${Ics.MAX_ENTRIES} one file holds. Choose fewer events or a shorter time.`;
+      return 'No file can be made from these choices.';
+    }
+    const first = p.entries[0], last = p.entries[p.entries.length - 1];
+    if (p.count === 1) return `1 entry: ${first.event.name}, ${calWhen(first.start, now)}.`;
+    const what = events.length === 1 ? events[0].name : `${events.length} events`;
+    return `${p.count} entries for ${what}, from ${calWhen(first.start, now)} to ${calWhen(last.start, now)}, your time (${formats().zone}).`;
+  }
+
+  /** The dialog's state and summary. The summary is redone when a choice changes, and when the minute does (starts are on whole minutes). */
+  function syncCalendar(force) {
+    if (!calDialog.open && !force) return;
+    const now = nowMs(), events = calendarEvents();
+    const key = [cal.scope, cal.one, cal.span, cal.alarm, events.map((e) => e.id).join(), JSON.stringify(overrides), prefs.showUtc, formats().zone, Math.floor(now / S.MIN)].join('|');
+    if (!force && key === cal.key) return;
+    cal.key = key;
+    for (const r of calDialog.querySelectorAll('[name="calendar-scope"]')) r.checked = r.value === cal.scope;
+    $('calendar-one-option').hidden = !cal.one;
+    $('calendar-one-name').textContent = cal.one ? `This event: ${BY_ID.get(cal.one).name}` : 'This event';
+    $('calendar-starred-label').textContent = `Starred events (${prefs.starred.length})`;
+    $('calendar-pick').hidden = cal.scope !== 'choose';
+    $('calendar-span').value = cal.span;
+    $('calendar-alarm').value = String(cal.alarm);
+    const p = Ics.plan({ events, engine: S, now, span: cal.span });
+    const summary = calSummary(p, events, now);
+    if ($('calendar-summary').textContent !== summary) $('calendar-summary').textContent = summary;
+    const marked = p.ok ? [...new Set(p.entries.map((it) => it.event))].filter((e) => Ics.note(e)) : [];
+    $('calendar-uncertain').hidden = !marked.length;
+    $('calendar-uncertain').textContent = marked.length ? `Marked in the entry titles: ${marked.map((e) => `${e.name} (${Ics.note(e)})`).join(', ')}.` : '';
+    $('calendar-download').disabled = !p.ok;
+  }
+
+  /** Every event, by kind, with a box to tick; an unverified or adjusted one says so. Drawn when the dialog opens. */
+  function renderCalendarPick() {
+    const eff = new Map(effective().map((e) => [e.id, e]));
+    const group = (kind, title) => h('fieldset', { class: 'cal-kind' }, h('legend', { text: title }),
+      ...EVENTS.filter((e) => e.kind === kind).map((e) => {
+        const n = Ics.note(eff.get(e.id));
+        // The name and its mark are one piece of text, so a long name wraps with its mark instead of beside it.
+        return h('label', { class: 'rm-option' }, h('input', { type: 'checkbox', 'data-cal-pick': e.id, checked: cal.picked.has(e.id) }),
+          h('span', {}, e.name, n ? h('span', { class: 'cal-note', text: ` (${n})` }) : null));
+      }));
+    $('calendar-pick-list').replaceChildren(group('world-boss', 'World bosses'), group('meta', 'Meta events'));
+  }
+
+  function openCalendar(oneId) {
+    const el = document.activeElement;
+    cal.opener = { el, fkey: el && el.getAttribute ? el.getAttribute('data-fkey') : null };
+    cal.one = oneId && BY_ID.has(oneId) ? oneId : null;
+    cal.scope = cal.one ? 'one' : prefs.starred.length ? 'starred' : 'choose';
+    $('calendar-done').textContent = '';
+    renderCalendarPick();
+    syncCalendar(true);
+    calDialog.showModal();
+  }
+
+  function downloadCalendar() {
+    const now = nowMs(), events = calendarEvents();
+    const r = Ics.build({ events, engine: S, now, span: cal.span, alarmMin: cal.alarm, meta: DATA.meta, link: Link.make });
+    if (!r.ok) { syncCalendar(true); return; }
+    const name = Ics.filename({ scope: cal.scope, span: cal.span, events });
+    try {
+      const url = URL.createObjectURL(new Blob([r.text], { type: 'text/calendar;charset=utf-8' }));
+      const a = h('a', { href: url, download: name, hidden: true });
+      calDialog.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      $('calendar-done').textContent = `Downloading ${name} (${r.count} ${r.count === 1 ? 'entry' : 'entries'}). Open it with your calendar, or import it on your calendar's website.`;
+    } catch (e) {
+      $('calendar-done').textContent = 'This browser could not save the file.';
+    }
+  }
+
+  calDialog.addEventListener('change', (ev) => {
+    const t = ev.target;
+    if (t.name === 'calendar-scope' && t.checked) cal.scope = t.value;
+    else if (t.hasAttribute('data-cal-pick')) { if (t.checked) cal.picked.add(t.getAttribute('data-cal-pick')); else cal.picked.delete(t.getAttribute('data-cal-pick')); }
+    else if (t.id === 'calendar-span' && Object.prototype.hasOwnProperty.call(Ics.SPANS, t.value)) cal.span = t.value;
+    else if (t.id === 'calendar-alarm' && Ics.ALARMS.includes(Number(t.value))) cal.alarm = Number(t.value);
+    else return;
+    $('calendar-done').textContent = '';
+    syncCalendar(true);
+  });
+  function pickAll(on) {
+    cal.picked = new Set(on ? EVENTS.map((e) => e.id) : []);
+    for (const b of calDialog.querySelectorAll('[data-cal-pick]')) b.checked = on;
+    $('calendar-done').textContent = '';
+    syncCalendar(true);
+  }
+  // Focus goes back to what opened the dialog: the Calendar button, or Add to calendar in an event's details
+  // (drawn again by then if the details changed meanwhile).
+  calDialog.addEventListener('close', () => {
+    const from = cal.opener;
+    cal.opener = null; cal.key = '';
+    const back = from && (shownEl(from.el) || (from.fkey && shownEl(document.querySelector(`[data-fkey="${CSS.escape(from.fkey)}"]`))));
+    if (back) back.focus();
   });
 
   // ---- Controls ----
@@ -855,7 +979,12 @@
       const open = !$('filters').classList.contains('is-open');
       $('filters').classList.toggle('is-open', open);
       t.setAttribute('aria-expanded', String(open));
-    } else if (a('data-share') !== null) {
+    } else if (a('data-calendar')) openCalendar(a('data-calendar'));
+    else if (t.id === 'calendar-btn') openCalendar(null);
+    else if (t.id === 'calendar-download') downloadCalendar();
+    else if (t.id === 'calendar-pick-all') pickAll(true);
+    else if (t.id === 'calendar-pick-none') pickAll(false);
+    else if (a('data-share') !== null) {
       // About's Share closes About first: a toast behind a modal dialog is neither seen nor read.
       const d = t.closest('dialog');
       if (d) d.close();

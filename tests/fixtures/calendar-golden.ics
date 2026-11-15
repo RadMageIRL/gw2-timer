@@ -1,0 +1,75 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//RadMage Labs//GW2 Timer//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:GW2 Timer
+BEGIN:VEVENT
+UID:tequatl-the-sunless-20261026T000000Z@gw2-timer.radmagelabs.com
+DTSTAMP:20261025T235000Z
+DTSTART:20261026T000000Z
+DTEND:20261026T003000Z
+SUMMARY:GW2: Tequatl the Sunless
+LOCATION:Sparkfly Fen (Guild Wars 2)
+DESCRIPTION:Scheduled start of the Guild Wars 2 world boss Tequatl the Sunl
+ ess\, in Sparkfly Fen.\nIts scheduled window is 30 minutes. Scheduled\, no
+ t live: the game has no public live-event feed\, so a map can run early\, 
+ late\, fail or close.\nWaypoint: Splintered Coast Waypoint [&BNABAAA=]\nGW
+ 2 Timer schedule r1\, checked against game updates through 2026-11-10.\nDe
+ tails: https://radmagelabs.com/gw2-timer/#event/tequatl-the-sunless
+URL:https://radmagelabs.com/gw2-timer/#event/tequatl-the-sunless
+TRANSP:TRANSPARENT
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:GW2: Tequatl the Sunless starts in 10 minutes
+TRIGGER:-PT10M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:secrets-of-the-weald-20261026T014500Z@gw2-timer.radmagelabs.com
+DTSTAMP:20261025T235000Z
+DTSTART:20261026T014500Z
+DTEND:20261026T022000Z
+SUMMARY:GW2: Secrets of the Weald (your adjusted time)
+LOCATION:Starlit Weald (Guild Wars 2)
+DESCRIPTION:Scheduled start of the Guild Wars 2 meta event Secrets of the W
+ eald\, in Starlit Weald.\nIts scheduled window is 35 minutes. Scheduled\, 
+ not live: the game has no public live-event feed\, so a map can run early
+ \, late\, fail or close.\nThis start is the time you set with Adjust in GW
+ 2 Timer\, not the default schedule.\nUnverified: sources disagree on this 
+ time.\nWaypoint: Priory Expedition Waypoint [&BJ4PAAA=]\nGW2 Timer schedul
+ e r1\, checked against game updates through 2026-11-10.\nDetails: https://
+ radmagelabs.com/gw2-timer/#event/secrets-of-the-weald
+URL:https://radmagelabs.com/gw2-timer/#event/secrets-of-the-weald
+STATUS:TENTATIVE
+TRANSP:TRANSPARENT
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:GW2: Secrets of the Weald starts in 10 minutes
+TRIGGER:-PT10M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:depths-of-cruelty-20261026T020000Z@gw2-timer.radmagelabs.com
+DTSTAMP:20261025T235000Z
+DTSTART:20261026T020000Z
+DTEND:20261026T023000Z
+SUMMARY:GW2: Depths of Cruelty (time unverified)
+LOCATION:Leyspring Hollows (Guild Wars 2)
+DESCRIPTION:Scheduled start of the Guild Wars 2 meta event Depths of Cruelt
+ y\, in Leyspring Hollows.\nIts scheduled window is 30 minutes. Scheduled\,
+  not live: the game has no public live-event feed\, so a map can run early
+ \, late\, fail or close.\nUnverified: new or thinly sourced\, and not yet 
+ checked in game.\nWaypoint: Hall of Assemblage Waypoint [&BDYQAAA=]\nGW2 T
+ imer schedule r1\, checked against game updates through 2026-11-10.\nDetai
+ ls: https://radmagelabs.com/gw2-timer/#event/depths-of-cruelty
+URL:https://radmagelabs.com/gw2-timer/#event/depths-of-cruelty
+STATUS:TENTATIVE
+TRANSP:TRANSPARENT
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:GW2: Depths of Cruelty starts in 10 minutes
+TRIGGER:-PT10M
+END:VALARM
+END:VEVENT
+END:VCALENDAR

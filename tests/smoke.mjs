@@ -4,7 +4,8 @@
 //
 //   node tests/smoke.mjs [--dir dist] [--only <part of a check name>] [--shots <folder>]
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
@@ -1404,7 +1405,7 @@ check('Link: screen readers and keyboard: a modal named by the event and describ
     for (let i = 0; i < 14; i++) { await key(page, 'Tab', 'Tab', 9); where.push(await page.eval("(() => { const a = document.activeElement; return !a || a === document.body ? 'browser' : document.getElementById('event-dialog').contains(a) ? 'dialog' : 'page:' + (a.id || a.className); })()")); }
     assert.ok(!where.some((w) => w.startsWith('page:')) && where.filter((w) => w === 'dialog').length >= 10, where.join(','));
     const names = await page.eval("[...document.querySelectorAll('#event-dialog button, #event-dialog a')].map((b) => b.getAttribute('aria-label') || b.textContent.trim())");
-    assert.deepEqual(names, ['Close', 'Star Tequatl the Sunless', 'Copy waypoint for Tequatl the Sunless: [&BNABAAA=]', 'Tequatl the Sunless on the Guild Wars 2 Wiki (opens a new tab)', 'Copy a link to Tequatl the Sunless']);
+    assert.deepEqual(names, ['Close', 'Star Tequatl the Sunless', 'Copy waypoint for Tequatl the Sunless: [&BNABAAA=]', 'Tequatl the Sunless on the Guild Wars 2 Wiki (opens a new tab)', 'Copy a link to Tequatl the Sunless', 'Add to calendar: Tequatl the Sunless']);
     assert.ok(!(await page.eval("[...document.querySelectorAll('#event-dialog *')].filter((n) => n.childElementCount === 0).map((n) => n.textContent).join(' ')")).includes('★'), 'the star glyph stays out of the names');
     await key(page, 'Escape', 'Escape', 27);
     await page.waitFor("!document.getElementById('event-dialog').open");
@@ -2251,6 +2252,294 @@ check('Reminders: a longer lead that reaches an event reminds it once, at once; 
     assert.deepEqual(await saved(page, RSET), { on: true, lead: 5, notify: false });
     assert.equal(await text(other, '#reminders-btn'), 'Reminders: 5 min');
   } finally { await page.close(); await other.close(); }
+});
+
+// ---- v0.4.0 Phase B: Add to calendar ----
+
+const CAL = 'Calendar: ';
+// Files go to a folder of their own per check; Chrome writes "<name>.crdownload" first, then renames it.
+const DL_ROOT = mkdtempSync(join(tmpdir(), 'gw2-timer-downloads-'));
+async function downloadsTo(page) {
+  const dir = mkdtempSync(join(DL_ROOT, 'p-'));
+  await page.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dir, eventsEnabled: true });
+  return dir;
+}
+async function downloaded(dir, timeout = 6000) {
+  const until = Date.now() + timeout;
+  while (Date.now() < until) {
+    const done = readdirSync(dir).filter((f) => !f.endsWith('.crdownload'));
+    if (done.length && !readdirSync(dir).some((f) => f.endsWith('.crdownload'))) return done.map((f) => ({ name: f, text: readFileSync(join(dir, f), 'utf8') }));
+    await sleep(100);
+  }
+  return [];
+}
+// Every Blob the page turns into a URL, with its type and text: what was handed to the download.
+const BLOBS = `(() => { window.__blobs = []; const make = URL.createObjectURL.bind(URL);
+  URL.createObjectURL = (b) => { const rec = { type: b.type, size: b.size, text: null }; window.__blobs.push(rec); b.text().then((t) => { rec.text = t; }); return make(b); }; })();`;
+/** The entries of a calendar file: start, end, title, id and alarm triggers (a reader of its own, as in tests/ics.mjs). */
+function entries(text) {
+  assert.ok(text.endsWith('\r\n') && !/\r(?!\n)|(?<!\r)\n/.test(text), 'CRLF lines');
+  assert.ok(text.split('\r\n').every((l) => Buffer.byteLength(l) <= 75), 'folded at 75 octets');
+  const lines = text.replace(/\r\n[ \t]/g, '').split('\r\n'), out = [];
+  const t = (v) => Date.UTC(+v.slice(0, 4), +v.slice(4, 6) - 1, +v.slice(6, 8), +v.slice(9, 11), +v.slice(11, 13), +v.slice(13, 15));
+  let cur = null;
+  for (const l of lines) {
+    if (l === 'BEGIN:VEVENT') cur = { alarms: [] };
+    else if (l === 'END:VEVENT') { out.push(cur); cur = null; }
+    else if (cur) {
+      const [k, ...v] = l.split(':'), val = v.join(':');
+      if (k === 'DTSTART') { assert.match(val, /^\d{8}T\d{6}Z$/); cur.start = t(val); }
+      else if (k === 'DTEND') cur.end = t(val);
+      else if (k === 'SUMMARY') cur.title = val.replace(/\\([\\;,])/g, '$1');
+      else if (k === 'UID') cur.uid = val;
+      else if (k === 'TRIGGER') cur.alarms.push(val);
+      else if (k === 'RRULE' || k === 'TZID') throw new Error(`${k} in the file`);
+    }
+  }
+  return out;
+}
+/** What the engine itself gives for the same choice: the starts the file must hold. */
+function engineStarts(events, now, span) {
+  if (span === 'next') return events.map((e) => S.nextStart(e.schedule, now)).sort((a, b) => a - b);
+  return S.upcoming(events, now, ICS.SPANS[span]).map((i) => i.start).sort((a, b) => a - b);
+}
+const ICS = createRequire(import.meta.url)(join(DIR, 'js', 'ics.js'));
+const calState = (page) => page.eval(`(() => { const d = document.getElementById('calendar-dialog'), q = (s) => d.querySelector(s);
+  return { open: d.open, scope: (q('[name="calendar-scope"]:checked') || {}).value || '', one: !q('#calendar-one-option').hidden ? q('#calendar-one-name').textContent : '',
+    starred: q('#calendar-starred-label').textContent, pick: !q('#calendar-pick').hidden, span: q('#calendar-span').value, alarm: q('#calendar-alarm').value,
+    summary: q('#calendar-summary').textContent, marked: q('#calendar-uncertain').hidden ? '' : q('#calendar-uncertain').textContent,
+    disabled: q('#calendar-download').disabled, done: q('#calendar-done').textContent }; })()`);
+const choose = (page, sel, value) => page.eval(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('change', { bubbles: true })); return el.value; })()`);
+const storageNow = (page) => page.eval('JSON.stringify(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)]))');
+// Opens with the keyboard (focus, then Enter), as a person does. A click from a script gives the page no user
+// activation, and Chrome then groups a dialog opened by it with the one below it, so one Escape closes both.
+const activate = async (page, sel) => { await page.eval(`document.querySelector(${JSON.stringify(sel)}).focus()`); await key(page, 'Enter', 'Enter', 13); };
+const offSite = (page) => page.requests.filter((u) => !/^(http:\/\/127\.0\.0\.1:\d+\/|blob:http:\/\/127\.0\.0\.1:\d+\/|data:)/.test(u) && u !== FEED_URL);
+
+check(`${CAL}Add to calendar in an event's details downloads its next start: the start the details show, in UTC, with its window, as a text/calendar file; Escape goes back to the details`, async () => {
+  const at = utc('2026-10-25T23:50:00Z');
+  const page = await openLink('#event/tequatl-the-sunless', { at, beforeLoad: BLOBS });
+  try {
+    const dir = await downloadsTo(page), before = await storageNow(page), url = await page.eval('location.href');
+    assert.match(await text(page, '#event-dialog-when'), /^Next scheduled start: 7:00 PM \(00:00 UTC\)/);
+    await activate(page, '#event-dialog [data-calendar]');
+    await page.waitFor("document.getElementById('calendar-dialog').open");
+    const s = await calState(page);
+    assert.deepEqual([s.scope, s.one, s.span, s.alarm, s.pick, s.disabled], ['one', 'This event: Tequatl the Sunless', 'next', '0', false, false]);
+    assert.equal(s.summary, '1 entry: Tequatl the Sunless, today at 7:00 PM (00:00 UTC).');
+    assert.equal(s.marked, '');
+    await click(page, '#calendar-download');
+    const files = await downloaded(dir);
+    assert.deepEqual(files.map((f) => f.name), ['gw2-timer-tequatl-the-sunless.ics']);
+    const es = entries(files[0].text), now = await pageNow(page);
+    assert.deepEqual(es.map((x) => x.start), engineStarts([EV.get('tequatl-the-sunless')], now, 'next'));
+    assert.deepEqual([es[0].start, es[0].end - es[0].start, es[0].title, es[0].alarms], [utc('2026-10-26T00:00:00Z'), 30 * MIN, 'GW2: Tequatl the Sunless', []]);
+    assert.equal(es[0].uid, 'tequatl-the-sunless-20261026T000000Z@gw2-timer.radmagelabs.com');
+    const blobs = await page.eval('window.__blobs');
+    assert.deepEqual(blobs.map((b) => [b.type, b.text]), [['text/calendar;charset=utf-8', files[0].text]], 'the file is the Blob the page made');
+    assert.match((await calState(page)).done, /^Downloading gw2-timer-tequatl-the-sunless\.ics \(1 entry\)\. /);
+    await key(page, 'Escape', 'Escape', 27);
+    await page.waitFor("!document.getElementById('calendar-dialog').open");
+    assert.equal(await page.eval("document.getElementById('event-dialog').open"), true, 'the details stay open');
+    assert.equal(await page.eval("document.activeElement.getAttribute('data-fkey')"), 'dlg:calendar', 'focus is back on Add to calendar');
+    assert.deepEqual([await storageNow(page), await page.eval('location.href')], [before, url], 'nothing saved, the address unchanged');
+    assert.deepEqual(offSite(page), [], 'no request left the site');
+    assert.deepEqual(unexpected(page), []);
+  } finally { await page.close(); }
+});
+
+check(`${CAL}the Calendar button exports the starred events for a chosen span with an alarm: every start the engine gives, an adjusted one at the reader's time and marked`, async () => {
+  const at = utc('2026-10-25T23:50:00Z');
+  const prefs = { ...SAVED, filter: 'all', regions: DATA.regions.map((r) => r.id), hidden: [], starred: ['tequatl-the-sunless', 'claw-of-jormag', 'secrets-of-the-weald'] };
+  const page = await open({ at, seed: { [PREFS]: prefs, 'gw2-timer:v1:overrides': { 'secrets-of-the-weald': { offsetMin: 105, setAt: 0 } } }, init: [BLOBS] });
+  try {
+    const dir = await downloadsTo(page);
+    await click(page, '#calendar-btn');
+    await page.waitFor("document.getElementById('calendar-dialog').open");
+    let s = await calState(page);
+    assert.deepEqual([s.scope, s.one, s.starred, s.span, s.pick], ['starred', '', 'Starred events (3)', 'next', false]);
+    await choose(page, '#calendar-span', '24h'); await choose(page, '#calendar-alarm', '10');
+    s = await calState(page);
+    const now = await pageNow(page);
+    const evs = ['tequatl-the-sunless', 'claw-of-jormag', 'secrets-of-the-weald'].map((id) => (id === 'secrets-of-the-weald' ? S.applyOverride(EV.get(id), 105) : EV.get(id)));
+    const want = engineStarts(evs, now, '24h');
+    assert.match(s.summary, new RegExp(`^${want.length} entries for 3 events, from today at 7:00 PM \\(00:00 UTC\\) to tomorrow at .+, your time \\(America/Chicago\\)\\.$`));
+    assert.equal(s.marked, 'Marked in the entry titles: Secrets of the Weald (your adjusted time).');
+    await click(page, '#calendar-download');
+    const files = await downloaded(dir);
+    assert.deepEqual(files.map((f) => f.name), ['gw2-timer-starred-next-24-hours.ics']);
+    const es = entries(files[0].text);
+    assert.deepEqual(es.map((x) => x.start), want);
+    assert.ok(es.every((x) => x.alarms.length === 1 && x.alarms[0] === '-PT10M'), '10 minutes before each');
+    const weald = es.filter((x) => x.uid.startsWith('secrets-of-the-weald-'));
+    assert.ok(weald.length === 12 && weald.every((x) => x.title === 'GW2: Secrets of the Weald (your adjusted time)' && new Date(x.start).getUTCMinutes() === 45), 'at the Adjust time, marked');
+    assert.ok(es.filter((x) => !x.uid.startsWith('secrets-')).every((x) => !/\(/.test(x.title)), 'documented events carry no mark');
+    assert.equal(new Set(es.map((x) => x.uid)).size, es.length, 'each start once');
+    assert.deepEqual(offSite(page), []);
+    assert.deepEqual(unexpected(page), []);
+  } finally { await page.close(); }
+});
+
+check(`${CAL}empty and oversized choices make no file: no stars, nothing chosen, all 35 events for 30 days; the reason is said and Download is off until the choice works`, async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z'), init: [BLOBS] });
+  try {
+    await click(page, '#calendar-btn');
+    await page.waitFor("document.getElementById('calendar-dialog').open");
+    let s = await calState(page);
+    assert.deepEqual([s.scope, s.starred, s.pick, s.summary, s.disabled], ['choose', 'Starred events (0)', true, 'Choose at least one event.', true], 'with nothing starred, choosing comes first');
+    assert.equal(await page.eval("document.querySelectorAll('#calendar-pick-list [data-cal-pick]').length"), 35);
+    await click(page, '[name="calendar-scope"][value="starred"]'); await settle();
+    s = await calState(page);
+    assert.deepEqual([s.scope, s.pick, s.disabled], ['starred', false, true]);
+    assert.match(s.summary, /^No events are starred yet\./);
+    await click(page, '[name="calendar-scope"][value="choose"]'); await click(page, '#calendar-pick-all'); await choose(page, '#calendar-span', '30d');
+    s = await calState(page);
+    const now = await pageNow(page), all = engineStarts(DATA.events, now, '30d').length;
+    assert.ok(all > 500);
+    assert.deepEqual([s.summary, s.disabled], [`That would be ${all} entries, more than the 500 one file holds. Choose fewer events or a shorter time.`, true]);
+    await click(page, '#calendar-download'); await settle();
+    assert.deepEqual(await page.eval('window.__blobs.length'), 0, 'a refused choice makes no file');
+    await choose(page, '#calendar-span', '24h');
+    s = await calState(page);
+    assert.equal(s.disabled, false);
+    assert.match(s.summary, new RegExp(`^${engineStarts(DATA.events, await pageNow(page), '24h').length} entries for 35 events, `));
+    assert.ok(s.marked.startsWith('Marked in the entry titles: '), s.marked);
+    for (const id of ['secrets-of-the-weald', 'shackles-of-the-ancients', 'depths-of-cruelty', 'nexus-of-eternity']) assert.ok(s.marked.includes(`${EV.get(id).name} (time unverified)`), id);
+    await click(page, '#calendar-pick-none');
+    assert.deepEqual([(await calState(page)).summary, (await calState(page)).disabled], ['Choose at least one event.', true]);
+    await click(page, `[data-cal-pick="drakkar"]`);
+    s = await calState(page);
+    assert.match(s.summary, /^12 entries for Drakkar, /);
+    assert.equal(s.disabled, false);
+    await click(page, `[data-cal-pick="drakkar"]`);
+    s = await calState(page);
+    assert.deepEqual([s.summary, s.disabled], ['Choose at least one event.', true], 'unticking the one event chosen leaves nothing chosen');
+    assert.deepEqual(unexpected(page), []);
+  } finally { await page.close(); }
+});
+
+check(`${CAL}the same choices give the same file in Chicago, London and Sydney, across the US and EU clock changes of March 2027: UTC starts from the engine, local times in the dialog`, async () => {
+  const files = [];
+  // 2027-03-27 20:00 UTC: 3:00 PM in Chicago (daylight time since March 14), 8:00 PM in London (summer time from
+  // 01:00 UTC on March 28), 7:00 AM on the 28th in Sydney (daylight time until April 4).
+  for (const [tz, first] of [['America/Chicago', 'today at 7:00 PM (00:00 UTC)'], ['Europe/London', 'tomorrow at 12:00 AM (00:00 UTC)'], ['Australia/Sydney', 'today at 11:00 AM (00:00 UTC)']]) {
+    const page = await openLink('#event/tequatl-the-sunless', { at: utc('2027-03-27T20:00:00Z'), tz });
+    try {
+      const dir = await downloadsTo(page);
+      await click(page, '#event-dialog [data-calendar]');
+      await page.waitFor("document.getElementById('calendar-dialog').open");
+      await choose(page, '#calendar-span', '7d');
+      const s = await calState(page);
+      assert.ok(s.summary.startsWith(`42 entries for Tequatl the Sunless, from ${first} to `), `${tz}: ${s.summary}`);
+      assert.ok(s.summary.endsWith(`, your time (${tz}).`), s.summary);
+      await click(page, '#calendar-download');
+      const [f] = await downloaded(dir);
+      assert.equal(f.name, 'gw2-timer-tequatl-the-sunless-next-7-days.ics');
+      assert.deepEqual(entries(f.text).map((x) => x.start), engineStarts([EV.get('tequatl-the-sunless')], await pageNow(page), '7d'));
+      files.push(f.text.replace(/DTSTAMP:\d{8}T\d{6}Z\r\n/g, ''));
+    } finally { await page.close(); }
+  }
+  assert.equal(files[1], files[0], 'London');
+  assert.equal(files[2], files[0], 'Sydney');
+  assert.ok(!/TZID|VTIMEZONE/.test(files[0]), 'no local time anywhere in the file');
+});
+
+check(`${CAL}what the dialog says follows the clock: when the next start passes while it is open, the summary moves to the following start; the details redrawn under it meanwhile, Escape still returns focus to their Add to calendar`, async () => {
+  const page = await openLink('#event/tequatl-the-sunless', { at: utc('2026-10-25T23:59:57Z') });
+  try {
+    await activate(page, '#event-dialog [data-calendar]');
+    await page.waitFor("document.getElementById('calendar-dialog').open");
+    await page.eval("document.querySelector('#event-dialog [data-calendar]').dataset.before = '1'");
+    assert.equal((await calState(page)).summary, '1 entry: Tequatl the Sunless, today at 7:00 PM (00:00 UTC).');
+    await page.waitFor("document.getElementById('calendar-summary').textContent === '1 entry: Tequatl the Sunless, today at 10:00 PM (03:00 UTC).'", 6000);
+    assert.ok(await pageNow(page) >= utc('2026-10-26T00:00:00Z'));
+    // Tequatl's window opened at 00:00, so its details were drawn again: the button that opened the dialog is gone.
+    assert.match(await text(page, '#event-dialog-when'), /^Scheduled now, until 7:30 PM/);
+    assert.equal(await page.eval("document.querySelector('#event-dialog [data-calendar]').dataset.before || ''"), '', 'a new button');
+    await key(page, 'Escape', 'Escape', 27);
+    await page.waitFor("!document.getElementById('calendar-dialog').open");
+    // The browser's own return goes to the old button, which is gone; the page's comes with the close event, which
+    // can arrive a frame later (Edge here, and Chrome on Linux as v0.3.0 found).
+    await page.waitFor("document.activeElement.getAttribute('data-fkey') === 'dlg:calendar'", 2000);
+    assert.equal(await page.eval("document.getElementById('event-dialog').open"), true, 'the details stay open');
+  } finally { await page.close(); }
+});
+
+check(`${CAL}keyboard and screen readers: a modal named Add to calendar, described by what it does; every choice has a name; the summary is a status; Tab stays inside; Escape returns focus to the Calendar button`, async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z'), seed: { [PREFS]: { ...SAVED, starred: ['drakkar'] } } });
+  try {
+    await page.send('Accessibility.enable');
+    const ax = async (sel) => {
+      const { root } = await page.send('DOM.getDocument', {});
+      const { nodeId } = await page.send('DOM.querySelector', { nodeId: root.nodeId, selector: sel });
+      const { nodes } = await page.send('Accessibility.getPartialAXTree', { nodeId, fetchRelatives: false });
+      const n = nodes[0], prop = (k) => ((n.properties || []).find((p) => p.name === k) || {}).value;
+      return { role: n.role && n.role.value, name: n.name && n.name.value, description: n.description && n.description.value, modal: prop('modal') && prop('modal').value, haspopup: prop('hasPopup') && prop('hasPopup').value };
+    };
+    const btn = await ax('#calendar-btn');
+    assert.deepEqual([btn.role, btn.name, btn.haspopup], ['button', 'Calendar', 'dialog']);
+    await page.eval("document.getElementById('calendar-btn').focus()");
+    await key(page, 'Enter', 'Enter', 13);
+    await page.waitFor("document.getElementById('calendar-dialog').open");
+    const d = await ax('#calendar-dialog');
+    assert.deepEqual([d.role, d.name, d.modal], ['dialog', 'Add to calendar', true]);
+    assert.match(d.description, /^A calendar file \(\.ics\) with the scheduled starts you choose/);
+    assert.equal((await ax('#calendar-summary')).role, 'status');
+    assert.equal((await ax('#calendar-done')).role, 'status');
+    await click(page, '[name="calendar-scope"][value="choose"]'); await settle();
+    const names = await page.eval(`(() => [...document.querySelectorAll('#calendar-dialog input, #calendar-dialog select, #calendar-dialog button')].filter((x) => x.getClientRects().length)
+      .map((x) => (x.labels && x.labels[0] ? x.labels[0].textContent : x.getAttribute('aria-label') || x.textContent).replace(/\\s+/g, ' ').trim()))()`);
+    assert.ok(names.every(Boolean), JSON.stringify(names));
+    for (const n of ['Close', 'Starred events (1)', 'Choose events', 'Select all', 'Clear', 'Drakkar', 'Secrets of the Weald (time unverified)', 'Download calendar file']) assert.ok(names.includes(n), n);
+    assert.ok(names.some((n) => /^Starts /.test(n)) && names.some((n) => /^Calendar alarm /.test(n)), 'the selects are named by their labels');
+    assert.deepEqual([(await ax('#calendar-pick-list fieldset')).role, (await ax('#calendar-pick-list fieldset')).name], ['group', 'World bosses']);
+    const where = [];
+    for (let i = 0; i < 50; i++) { await key(page, 'Tab', 'Tab', 9); where.push(await page.eval("(() => { const a = document.activeElement; return !a || a === document.body ? 'browser' : document.getElementById('calendar-dialog').contains(a) ? 'dialog' : 'page:' + (a.id || a.className); })()")); }
+    assert.ok(!where.some((w) => w.startsWith('page:')) && where.filter((w) => w === 'dialog').length >= 40, where.join(','));
+    await key(page, 'Escape', 'Escape', 27);
+    await page.waitFor("!document.getElementById('calendar-dialog').open");
+    assert.equal(await page.eval('document.activeElement.id'), 'calendar-btn');
+  } finally { await page.close(); }
+});
+
+check(`${CAL}a reminder that comes while Add to calendar is open over an event's details is said in Add to calendar, the dialog on top, once`, async () => {
+  const prefs = { ...SAVED, filter: 'all', hidden: [], regions: DATA.regions.map((r) => r.id), starred: ['tequatl-the-sunless'] };
+  const page = await openR({ at: T0 - 10 * MIN - 4000, clock: 'fail', prefs });
+  try {
+    await activate(page, '#next-list .row[data-id="defense-of-amnytas"] a.event-link');
+    await page.waitFor("document.getElementById('event-dialog').open");
+    await activate(page, '#event-dialog [data-calendar]');
+    await page.waitFor("document.getElementById('calendar-dialog').open");
+    assert.equal((await trayState(page)).said.length, 0, 'not due yet');
+    await page.waitFor('window.__said.length > 0', 8000);
+    await sleep(1200);
+    const said = (await trayState(page)).said;
+    assert.deepEqual(said.map((s) => [s.text, s.where]), [['Reminder: Tequatl the Sunless starts at 7:00 PM, in 10 minutes.', 'calendar-dialog']]);
+  } finally { await page.close(); }
+});
+
+check(`${CAL}the dialog and the Calendar button fit a 320, 360 and 390 px phone and a desktop, in both themes: inside the window, no sideways scroll, 36 px controls, readable text`, async () => {
+  for (const [width, height, mobile] of [[320, 568, true], [360, 740, true], [390, 844, true], [1280, 900, false]]) {
+    for (const theme of ['dark', 'light']) {
+      const page = await open({ at: utc('2026-10-25T23:50:00Z'), width, height, mobile, seed: { [PREFS]: { ...SAVED, theme, starred: ['drakkar', 'octovine'] } } });
+      try {
+        if (mobile) await click(page, '#filters-toggle');
+        const b = await page.eval("(() => { const r = document.getElementById('calendar-btn').getBoundingClientRect(); return { right: r.right, h: r.height, page: document.documentElement.scrollWidth }; })()");
+        assert.ok(b.right <= width && b.page <= width && (!mobile || b.h >= 36), `${width} ${theme}: Calendar button ${JSON.stringify(b)}`);
+        await click(page, '#calendar-btn');
+        await page.waitFor("document.getElementById('calendar-dialog').open");
+        await click(page, '[name="calendar-scope"][value="choose"]'); await click(page, '[data-cal-pick="secrets-of-the-weald"]'); await settle();
+        const r = await page.eval("(() => { const d = document.getElementById('calendar-dialog'), b = d.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, inner: d.scrollWidth <= d.clientWidth, page: document.documentElement.scrollWidth }; })()");
+        assert.ok(r.left >= 0 && r.right <= width && r.top >= 0 && r.bottom <= height && r.inner && r.page <= width, `${width} ${theme}: ${JSON.stringify(r)}`);
+        if (mobile) {
+          const small = await page.eval("[...document.querySelectorAll('#calendar-dialog button, #calendar-dialog select, #calendar-dialog label.rm-option')].filter((x) => x.getClientRects().length && x.getBoundingClientRect().height < 36).map((x) => x.textContent.trim().slice(0, 30))");
+          assert.deepEqual(small, [], `${width} ${theme}`);
+        }
+        assert.deepEqual(await lowContrast(page, '#calendar-dialog p, #calendar-dialog li, #calendar-dialog label, #calendar-dialog legend, #calendar-dialog span, #calendar-dialog h2, #calendar-dialog h3'), [], `${width} ${theme}`);
+        if (SHOTS && theme === 'dark' && [320, 1280].includes(width)) await page.screenshot(join(SHOTS, `calendar-${width}.png`));
+      } finally { await page.close(); }
+    }
+  }
 });
 
 check('desktop screenshot for visual review', async () => {

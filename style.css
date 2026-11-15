@@ -430,6 +430,24 @@ dialog .rm-unsaved { margin: 4px 0 0; color: var(--warn); }
 .rm-list .name { color: var(--text); font-weight: 600; }
 .rm-list .rm-none { list-style: none; margin-left: -18px; }
 
+/* Add to calendar: the choices for an .ics file (js/ics.js writes it). Like the Reminders dialog it keeps its
+   top edge, so it does not move under the pointer when choosing events changes its height. */
+.cal-dialog { margin-block: clamp(20px, 8vh, 80px) auto; max-height: calc(100vh - clamp(20px, 8vh, 80px) - 20px); }
+.cal-dialog [hidden] { display: none; }
+.cal-group { display: grid; gap: 2px; margin: 10px 0 8px; padding: 4px 12px 6px; border: 1px solid var(--line); border-radius: 8px; }
+.cal-group legend, .cal-kind legend { padding: 0 4px; font-size: 12.5px; color: var(--text-faint); }
+.cal-pick { margin: 0 0 8px; }
+dialog .cal-pick-tools { display: flex; gap: 14px; margin: 0 0 4px; }
+.cal-kind { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 0 14px; margin: 6px 0 0; padding: 4px 12px 6px; border: 1px solid var(--line); border-radius: 8px; }
+.cal-kind .rm-option { font-size: 13.5px; }
+.cal-note { color: var(--warn); font-size: 12.5px; }
+.cal-fields { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 8px 0; }
+dialog .cal-summary { margin: 10px 0 4px; color: var(--text); font-size: 14px; }
+dialog .cal-uncertain { margin: 0 0 6px; color: var(--warn); font-size: 13px; }
+.cal-actions { margin: 8px 0 4px; }
+.cal-actions .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+dialog .cal-done { margin: 0 0 6px; min-height: 1.45em; font-size: 13px; }
+
 /* While the tray is up, the scroll padding is its room and 24 px more (the min() is 0 when it is down). Firefox
    scrolls a control that takes focus only when less than a line of the root font shows, so one mostly in view
    stays put with up to its height less that line past this edge: a name link on a phone, up to 44 px, less an

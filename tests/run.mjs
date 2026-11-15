@@ -705,7 +705,7 @@ test(`the tagline, About, README and every asset say v${VERSION}, the newest ver
   assert.ok(html.includes(`<h2 id="about-title">GW2 Timer v${VERSION}</h2>`));
   assert.match(file('README.md'), new RegExp(`^# GW2 Timer v${VERSION.replace(/\./g, '\\.')}\\n`));
   const assets = [...html.matchAll(/(?:src|href)="((?:js\/[^"]+\.js|style\.css)[^"]*)"/g)].map((m) => m[1]);
-  assert.equal(assets.length, 10); // the stylesheet and nine scripts (search.js since v0.3.0 Phase C, link.js since Phase D, reminders.js since Phase E)
+  assert.equal(assets.length, 11); // the stylesheet and ten scripts (search.js since v0.3.0 Phase C, link.js since Phase D, reminders.js since Phase E, ics.js since v0.4.0 Phase B)
   for (const a of assets) assert.ok(a.endsWith(`?v=${VERSION}`), a);
 });
 test('the header, footer and About have Share and a Buy me a coffee link that opens a new tab, as FFXI Timer has', () => {
@@ -822,7 +822,7 @@ test('links: local files exist, every #fragment has its target, and RadMage Labs
 test('loading: the stylesheet, then the scripts deferred in the head in order, app.js holding the first paint, then the theme script; none in the body', () => {
   const head = html.slice(0, html.indexOf('</head>')), body = html.slice(html.indexOf('<body'));
   const scripts = [...head.matchAll(/<script ((?:[a-z]+(?:="[^"]*")? )*)src="([^"?]+)[^"]*"><\/script>/g)].map((m) => `${m[1].trim()} ${m[2]}`.trim());
-  assert.deepEqual(scripts, ['defer events-data.js', 'defer js/schedule.js', 'defer js/store.js', 'defer js/news.js', 'defer js/clock.js', 'defer js/search.js', 'defer js/link.js', 'defer js/reminders.js', 'defer blocking="render" js/app.js', 'js/theme-boot.js']);
+  assert.deepEqual(scripts, ['defer events-data.js', 'defer js/schedule.js', 'defer js/store.js', 'defer js/news.js', 'defer js/clock.js', 'defer js/search.js', 'defer js/link.js', 'defer js/reminders.js', 'defer js/ics.js', 'defer blocking="render" js/app.js', 'js/theme-boot.js']);
   assert.ok(head.indexOf('rel="stylesheet"') < head.indexOf('<script defer'), 'stylesheet first');
   assert.ok(head.indexOf('http-equiv="Content-Security-Policy"') < head.indexOf('rel="stylesheet"'), 'the CSP comes before anything loads');
   assert.ok(!/<script[^>]*\ssrc=/.test(body), 'no script in the body');
@@ -952,7 +952,8 @@ for (const tz of ZONES) {
 // Reminders run once per zone: every rule there compares UTC instants, so each zone must give the same result.
 
 const moduleCounts = [];
-for (const [name, zones] of [['search', [null]], ['link', [null]], ['reminders', ZONES]]) {
+// The calendar module too (v0.4.0 Phase B): its files are written in UTC, so every zone must give the same bytes.
+for (const [name, zones] of [['search', [null]], ['link', [null]], ['reminders', ZONES], ['ics', ZONES]]) {
   for (const tz of zones) {
     test(`js/${name}.js: tests/${name}.mjs passes${tz ? ` in ${tz}` : ''}`, () => {
       const r = spawnSync(process.execPath, [join(ROOT, 'tests', `${name}.mjs`)], { env: tz ? { ...process.env, TZ: tz } : process.env, encoding: 'utf8' });
@@ -963,9 +964,9 @@ for (const [name, zones] of [['search', [null]], ['link', [null]], ['reminders',
     });
   }
 }
-test('the foundation modules are published with the site and the page loads each: search.js (Phase C), link.js (Phase D), reminders.js (Phase E)', () => {
+test('the foundation modules are published with the site and the page loads each: search.js (Phase C), link.js (Phase D), reminders.js (Phase E), and ics.js (v0.4.0 Phase B)', () => {
   const global = (f) => `GW2${f.slice(3, 4).toUpperCase()}${f.slice(4, -3)}`;
-  for (const f of ['js/search.js', 'js/link.js', 'js/reminders.js']) {
+  for (const f of ['js/search.js', 'js/link.js', 'js/reminders.js', 'js/ics.js']) {
     assert.ok(SITE_FILES.includes(f), f);
     assert.ok(file('index.html').includes(`<script defer src="${f}?v=`), `index.html loads ${f}`);
     assert.ok(file('js/app.js').includes(`window.${global(f)}`), `app.js uses ${global(f)}`);
@@ -973,9 +974,10 @@ test('the foundation modules are published with the site and the page loads each
 });
 // ---- v0.3.0 Phase E: reminders on the page ----
 
-test('reminders stay on the page: no browser notification, permission request, service worker, push, sound or calendar file anywhere in the site', () => {
+// Calendar files came in with v0.4.0 Phase B; the next test keeps them to js/ics.js and a download.
+test('reminders stay on the page: no browser notification, permission request, service worker, push or sound anywhere in the site', () => {
   for (const f of readdirSync(join(ROOT, 'js'))) {
-    assert.ok(!/\bNotification\b|requestPermission|showNotification|serviceWorker|PushManager|\bAudio\b|AudioContext|\.play\(\)|text\/calendar|BEGIN:VCALENDAR/.test(file(`js/${f}`)), f);
+    assert.ok(!/\bNotification\b|requestPermission|showNotification|serviceWorker|PushManager|\bAudio\b|AudioContext|\.play\(\)/.test(file(`js/${f}`)), f);
   }
   assert.ok(!/rel="manifest"|serviceWorker|<audio/.test(html), 'no manifest, worker or sound in the page');
   // The dialog says what a reminder is and is not, and promises nothing with the page closed.
@@ -984,6 +986,34 @@ test('reminders stay on the page: no browser notification, permission request, s
   assert.ok(dlg.includes('It is not a notification from your browser or your computer.'));
   assert.ok(!/type="checkbox"[^>]*notif|notify/i.test(dlg), 'no notification option before Phase F');
   assert.deepEqual([...dlg.matchAll(/name="reminders-lead" value="(\d+)"/g)].map((m) => Number(m[1])), Reminders.LEADS, 'the leads offered are the module\'s');
+});
+// ---- v0.4.0 Phase B: Add to calendar ----
+
+test('calendar files come only from js/ics.js and leave the page only as a download: no request, no saved setting, no recurrence rule', () => {
+  const where = (re) => readdirSync(join(ROOT, 'js')).filter((f) => re.test(file(`js/${f}`))).sort();
+  assert.deepEqual(where(/BEGIN:VCALENDAR|BEGIN:VEVENT/), ['ics.js'], 'only the module writes calendar text');
+  assert.deepEqual(where(/text\/calendar/), ['app.js'], 'only the page makes the file');
+  const app = file('js/app.js'), ics = file('js/ics.js');
+  assert.ok(app.includes("new Blob([r.text], { type: 'text/calendar;charset=utf-8' })") && app.includes('URL.createObjectURL(') && app.includes('URL.revokeObjectURL(url)'), 'a Blob, downloaded, then let go');
+  assert.ok(!/fetch\(|navigator\.|\bopen\(/.test(ics), 'the module sends nothing');
+  assert.ok(!/RRULE|RDATE|VTIMEZONE|TZID/.test(ics), 'explicit UTC starts only');
+  const calCode = app.slice(app.indexOf('// ---- Add to calendar'), app.indexOf('// ---- Controls ----'));
+  assert.ok(calCode.length > 1000, 'the calendar section is where this test looks');
+  assert.ok(!/Store\.(read|write)|storage|prefs\.[a-zA-Z]+ =|savePrefs|saveOverrides|overrides\[[^\]]+\] =/.test(calCode), 'the calendar choices are not saved, and exporting changes no setting');
+  assert.ok(calCode.includes('Ics.build({ events, engine: S, now, span: cal.span, alarmMin: cal.alarm, meta: DATA.meta, link: Link.make })'), 'the same engine, the canonical links');
+  assert.ok(calCode.includes('const all = effective();'), "the events with the reader's Adjust times");
+});
+test("Add to calendar is in every event's details and by the filters, and its dialog says what a calendar file can and cannot do", () => {
+  assert.ok(html.includes('<button type="button" class="btn small" id="calendar-btn" aria-haspopup="dialog" title="Scheduled starts as a calendar file">Calendar</button>'));
+  assert.ok(file('js/app.js').includes("'data-calendar': e.id, 'data-fkey': 'dlg:calendar', 'aria-haspopup': 'dialog', 'aria-label': `Add to calendar: ${e.name}`, text: 'Add to calendar'"));
+  const dlg = html.slice(html.indexOf('<dialog id="calendar-dialog"'), html.indexOf('</dialog>', html.indexOf('<dialog id="calendar-dialog"')));
+  assert.ok(dlg.includes('aria-labelledby="calendar-title" aria-describedby="calendar-intro"'));
+  for (const said of ['nothing is sent anywhere', "written in UTC, the game's own time", 'Scheduled, not live', 'The file does not update itself when a game schedule changes or when you change Adjust.', 'Importing a file again works differently in each calendar app', "Whether a file's alarm is used depends on your calendar app", 'A file holds at most 500 entries.']) {
+    assert.ok(dlg.includes(said), said);
+  }
+  // No promise the page cannot keep: nothing checked how any one calendar app treats alarms or a second import.
+  assert.ok(!/instead of adding a copy|updates an entry|Google[^<]*(ignore|alarm)|ignore[^<]*alarm/i.test(dlg), "no promise about re-imports or one app's alarms");
+  assert.deepEqual([...dlg.matchAll(/name="calendar-scope" value="([a-z]+)"/g)].map((m) => m[1]), ['one', 'starred', 'choose']);
 });
 test('reminder settings and records live under their own two keys, never inside prefs, and are checked on every read', () => {
   const app = file('js/app.js');
