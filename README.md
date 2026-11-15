@@ -1,16 +1,18 @@
-# GW2 Timer v0.3.0
+# GW2 Timer v0.4.0
 
-Guild Wars 2 Boss & Meta Timers. A Guild Wars 2 timer that shows what is inside its scheduled window right now, what starts next, and when, in your local time. It is an unofficial fansite, made by [RadMage Labs](https://radmagelabs.com/).
+Guild Wars 2 Boss & Meta Timers. A Guild Wars 2 timer that shows what is inside its scheduled window right now, what starts next, and when, in your local time, with a Trading Post explorer beside it. It is an unofficial fansite, made by [RadMage Labs](https://radmagelabs.com/).
 
 **Use it: [radmagelabs.com/gw2-timer](https://radmagelabs.com/gw2-timer/)** (also at [radmageirl.github.io/gw2-timer](https://radmageirl.github.io/gw2-timer/))
 
-![GW2 Timer in the dark theme: the day and night strip for Tyria, Cantha and Castora with the daily and weekly reset countdowns, the three newest headlines from ArenaNet, the filters, Scheduled now cards for the events inside their scheduled windows, and the start of the Coming up list in local time with UTC alongside](screenshots/gw2-timer.png)
+![GW2 Timer in the dark theme: the Event Timers and Trading Post switch, the day and night strip for Tyria, Cantha and Castora with the daily and weekly reset countdowns, the three newest headlines from ArenaNet, the filters with Find, Reminders and Calendar, and Scheduled now cards for the events inside their scheduled windows](screenshots/gw2-timer.png)
 
-It is a plain HTML page with no build step and no server. Every time is worked out in the browser from a schedule kept in this repository. Settings, stars, adjustments and reminder choices stay in that browser's local storage. Two requests leave the page: a clock check to its own address, and the news panel's headlines from guildwars2.com, which can be turned off.
+It is a plain HTML page with no build step and no server. Every time is worked out in the browser from a schedule kept in this repository. Settings, stars, adjustments, reminder choices and Trading Post favorites stay in that browser's local storage. Two requests leave the timer: a clock check to its own address, and the news panel's headlines from guildwars2.com, which can be turned off. The Trading Post, only once you open it, also asks ArenaNet's public API (api.guildwars2.com) for prices and item details and loads item icons from render.guildwars2.com. No key, account or cookie is sent. A calendar file you download is made in the page itself; it is not fetched from anywhere.
 
 ## What it shows
 
-From the top of the page down:
+The switch at the top of the page has two modes, **Event Timers** (the default) and **Trading Post**. Switching does not reload the page: each mode keeps its place, and the timer and its reminders keep running while the Trading Post is shown.
+
+Event Timers, from the top of the page down:
 
 **Clocks and resets**
 - Your local time and UTC, day and night for Tyria, Cantha and Castora, and countdowns to the daily reset (00:00 UTC) and the weekly reset (Monday 07:30 UTC)
@@ -41,6 +43,10 @@ From the top of the page down:
 - Off until you turn them on. Then a notice appears at the bottom of the page, with a count in the tab's title, 5, 10 or 15 minutes before a starred event starts
 - See [Reminders and their limits](#reminders-and-their-limits) below for what they cannot do
 
+**Add to calendar**
+- Download a calendar file (.ics) for Google Calendar, Outlook, Apple Calendar and others: one event's next start from its details, or your starred events or events you choose, for the next start or the next 24 hours, 3, 7 or 30 days, with an optional alarm 5, 10 or 15 minutes before
+- Each start is its own entry in UTC, so your calendar shows your local time on both sides of a daylight-saving change. Unverified and adjusted times say so in the entry's title. The file is made in your browser and never updates itself: download a new one after a schedule change. Whether an alarm is used, and what importing a file again does, depends on your calendar app
+
 **Schedule notes**
 - A closed section at the bottom with the schedule revision, the review dates, how many times are documented, confirmed in game, disputed or unverified, and which events have uncertain times
 
@@ -50,6 +56,20 @@ From the top of the page down:
 **Share and support**
 - Share, under the header's tagline, in the footer and in About, passes https://radmagelabs.com/gw2-timer/ to your device's share sheet, or copies it where there is none. It carries nothing of yours
 - Buy me a coffee opens [buymeacoffee.com/radmageirl](https://buymeacoffee.com/radmageirl) in a new tab, so reminders keep running in this one
+
+## Trading Post
+
+The Trading Post mode (`#market` links straight to it) searches the items on the game's Trading Post and shows what ArenaNet's public API says about their prices. It needs no account and no API key.
+
+- **Search** by name (every word, any order, accents ignored) or item id, and filter by type, rarity or your favorites. The list holds the 27,983 items that had a Trading Post price on November 15, 2026. It is updated by hand, so items added to the game since then cannot be found until the next update; the page says when the list was made.
+- **Prices** come from the API when you search: the highest buy order and the lowest sell listing, with how many units are wanted and listed, the spread between them, and a potential margin after fees. Every price says when it was fetched; prices over 5 minutes old are marked stale and over an hour old, old. When the API does not answer, or answers with something the page cannot read, the row says so and no price is shown in its place. Nothing is ever estimated from a missing price.
+- **Sorting** by a price says which items it ranks. Up to 1,000 matches, it loads every match's price first; over 1,000, it ranks only the prices loaded so far and says so. **Load whole market** asks for every price (140 requests, paced to stay inside the API's limits) only when you choose it, with progress and Cancel, and says whether the load was complete or partial. Only a complete load is called the whole market.
+- **Item details** (`#market/item/<id>`): both prices, what selling now to the highest buy order or listing at the lowest sell listing would give you after fees, the potential margin, the order book, the chat code and a link to the item.
+- **Favorites**: star items to keep them at hand. They are saved in your browser as item ids; prices are never saved.
+
+### Fees and margins are estimates
+
+The Trading Post takes a 5% listing fee and a 10% exchange fee, each at least 1 copper, as the Guild Wars 2 Wiki documents them. How a fraction of a copper is rounded is not published, so the page rounds to the nearest copper and calls every result after fees an estimate. A margin is potential, not profit: it assumes your buy order fills at the highest buy order and your listing sells at the lowest sell listing, before anyone undercuts you, and neither is certain. At a price of a few copper the two 1 copper minimums can take all of it, and the page says so.
 
 ## Scheduled, not live
 
@@ -105,7 +125,10 @@ Node 22 or newer, no dependencies:
 node tests/run.mjs           # unit tests, data rules and house checks
 node tools/build.mjs         # builds dist/ (the files the site serves)
 node tests/smoke.mjs         # browser tests on dist/ (needs Chrome)
+node tools/build-items.mjs --check   # the Trading Post item list and its lock agree
 ```
+
+The browser tests answer every request to ArenaNet's API themselves, from fixed data; no test needs the live API.
 
 ## Data
 
@@ -115,11 +138,15 @@ The build refuses a schedule change that has no supporting evidence. It also req
 
 The same command writes the Events this timer covers list in `index.html` from that data, so the list always matches what the timer tracks. `node tools/build-events.mjs --check` (run by the tests and the release build) fails when either file is out of date.
 
+`data/tp-items.json` is the Trading Post item list (id, name, type, rarity and level; no prices), and `data/tp-items.lock.json` records when it was made, from which game build, how many items, and its SHA-256. `node tools/build-items.mjs` makes it from ArenaNet's API. It is refreshed by hand and committed after review, never by a workflow (see `docs/MAINTENANCE.md`).
+
 ## Sources
 
 - Schedule facts were checked against the [Guild Wars 2 Wiki](https://wiki.guildwars2.com/)'s event timer data and World boss page. Nothing was copied; the times are restated in my own format.
 - They were also compared with [qjv/event-timers](https://github.com/qjv/event-timers).
 - Waypoint codes come from the official [Guild Wars 2 API](https://wiki.guildwars2.com/wiki/API:Main).
+- Item names, ids and icons, and every price, come from the same API. Item names, ids and icons are ArenaNet's.
+- The Trading Post fees are as the Guild Wars 2 Wiki's Trading Post page documents them.
 - Schedule changes come from ArenaNet's game update notes and news.
 
 ## Notice
@@ -130,4 +157,4 @@ GW2 Timer is an unofficial fansite, not affiliated with or endorsed by ArenaNet 
 
 ## License
 
-The code is MIT licensed ([LICENSE](LICENSE)). Event names and other game content belong to ArenaNet.
+The code is MIT licensed ([LICENSE](LICENSE)). Event names, item names and icons, and other game content belong to ArenaNet.

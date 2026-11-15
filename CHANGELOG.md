@@ -4,6 +4,28 @@ Every version of GW2 Timer and what changed in it, newest first. Dates are the d
 
 The schedule data has its own revision numbers (r1, r2, ...), listed under "Schedule data" below. A revision is either a **schedule change** (a start time, cycle or event added or removed) or **metadata only** (a label, note or verification status changed; no time moved).
 
+## v0.4.0 (unreleased)
+
+A Trading Post explorer beside the timer, and Add to calendar. Settings saved by earlier versions carry over unchanged, and the schedule data is still r1.
+
+Added
+- Trading Post: a second mode beside Event Timers, chosen with the switch at the top of the page. Switching does not reload the page; each mode keeps its search, filters, sort and place, and the timer and its reminders keep running while the Trading Post is shown. `#market` links straight to it. Event Timers is still what opens by default.
+- Search the 27,983 items that had a Trading Post price on November 15, 2026, by name or id, and filter by type, rarity or favorites. The list is updated by hand, so items added to the game since then cannot be found until the next update; the page says when the list was made.
+- Prices from ArenaNet's public API, asked for when you search: the highest buy order and lowest sell listing with their quantities, the spread, and a potential margin after the 5% listing fee and 10% exchange fee. Every price says when it was fetched, and stale and old prices are marked in their rows. A row with no price says why: not on the Trading Post, still loading, waiting because the API asked for fewer requests, or not loaded with the API's error. No price is ever estimated.
+- Price sorts say which items they rank. Over 1,000 matches they rank only the prices loaded so far. Load whole market, only when you choose it, asks for every price (140 requests) with progress and Cancel, and says whether the load was complete or partial; only a complete one is called the whole market.
+- Item details: both prices, what selling now or listing at the lowest price would give you after fees, the potential margin, the order book, the chat code, and a link to the item (`#market/item/<id>`). Results after fees are estimates: how a fraction of a copper is rounded is not published.
+- Favorites: star items to keep them at hand, saved in this browser as item ids.
+- Add to calendar: a calendar file (.ics) of scheduled starts, from an event's details (its next start) or from the new Calendar button by the filters (starred or chosen events, for the next start or the next 24 hours, 3, 7 or 30 days), with an optional alarm 5, 10 or 15 minutes before. Every start is its own entry in UTC from the timer's own schedule, so daylight saving cannot move it; unverified times and times set with Adjust are marked in the entry's title. The file does not update itself, and whether its alarm is used, or what importing it again does, depends on the calendar app; the dialog says so.
+
+Accessibility
+- The mode switch is a labeled group of two buttons that say which one is pressed. Back and Forward follow each switch, and a skip link goes to the item search when the Trading Post is shown.
+- Prices, quantities and losses are read out in words ("17 silver 10 copper", "a loss of 87 copper"), and a row's price state is said in words, not only by color.
+- Item details are a dialog named by the item; Escape and Back close it and return focus.
+
+Security and privacy
+- The Trading Post asks ArenaNet's API (api.guildwars2.com) for prices and item details, and loads icons from render.guildwars2.com, only after you open it. The timer makes neither request. The page's content security policy adds exactly those two addresses.
+- No account, no API key, no cookies: the Trading Post's requests carry nothing of yours. Prices are kept only while the page is open and are never saved. A calendar file is made in this browser; nothing about it is sent anywhere.
+
 ## v0.3.0 (2026-11-14)
 
 Reminders for starred events, a Find field, a details view and link for every event, and Share. Settings saved by earlier versions carry over unchanged, and the schedule data is still r1.

@@ -6,20 +6,20 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://render.guildwars2.com; connect-src 'self' https://www.guildwars2.com https://api.guildwars2.com; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="dark light">
-  <link rel="stylesheet" href="style.css?v=0.3.0">
+  <link rel="stylesheet" href="style.css?v=0.4.0">
   <!-- The scripts download together and run in order once the page is parsed. app.js holds the
        first paint until it has filled the page in, so the page does not jump as it loads. -->
   <script defer src="events-data.js?r=1"></script>
-  <script defer src="js/schedule.js?v=0.3.0"></script>
-  <script defer src="js/store.js?v=0.3.0"></script>
-  <script defer src="js/news.js?v=0.3.0"></script>
-  <script defer src="js/clock.js?v=0.3.0"></script>
-  <script defer src="js/search.js?v=0.3.0"></script>
-  <script defer src="js/link.js?v=0.3.0"></script>
-  <script defer src="js/reminders.js?v=0.3.0"></script>
-  <script defer src="js/ics.js?v=0.3.0"></script>
-  <script defer blocking="render" src="js/app.js?v=0.3.0"></script>
-  <script src="js/theme-boot.js?v=0.3.0"></script>
+  <script defer src="js/schedule.js?v=0.4.0"></script>
+  <script defer src="js/store.js?v=0.4.0"></script>
+  <script defer src="js/news.js?v=0.4.0"></script>
+  <script defer src="js/clock.js?v=0.4.0"></script>
+  <script defer src="js/search.js?v=0.4.0"></script>
+  <script defer src="js/link.js?v=0.4.0"></script>
+  <script defer src="js/reminders.js?v=0.4.0"></script>
+  <script defer src="js/ics.js?v=0.4.0"></script>
+  <script defer blocking="render" src="js/app.js?v=0.4.0"></script>
+  <script src="js/theme-boot.js?v=0.4.0"></script>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23101114'/%3E%3Ccircle cx='32' cy='34' r='19' fill='none' stroke='%23d9a441' stroke-width='5'/%3E%3Cpath d='M32 34V22M32 34l9 6' stroke='%23e9e4da' stroke-width='5' stroke-linecap='round'/%3E%3Crect x='26' y='6' width='12' height='7' rx='2' fill='%23d9a441'/%3E%3C/svg%3E">
   <title>GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers</title>
   <meta name="description" content="Guild Wars 2 world boss and meta-event timer: what is scheduled now and next in your local time, day and night cycles, resets and waypoints. Unofficial fansite.">
@@ -46,7 +46,7 @@
     <div class="brand">
       <div class="brand-line">
         <h1>GW2 Timer</h1>
-        <span class="tag">v0.3.0 · Guild Wars 2 Boss &amp; Meta Timers · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
+        <span class="tag">v0.4.0 · Guild Wars 2 Boss &amp; Meta Timers · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
       </div>
       <nav class="share-links" aria-label="Share and support"><button type="button" class="link-btn" data-share title="Share https://radmagelabs.com/gw2-timer/">share</button> · <a href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">buy me a coffee<span class="sr-only"> (opens a new tab)</span></a></nav>
     </div>
@@ -364,7 +364,7 @@
 
   <dialog id="about" aria-labelledby="about-title">
     <div class="dialog-close"><button type="button" class="btn small" data-close>Close</button></div>
-    <h2 id="about-title">GW2 Timer v0.3.0</h2>
+    <h2 id="about-title">GW2 Timer v0.4.0</h2>
     <p>A Guild Wars 2 timer for world bosses and meta-events: what is in its scheduled window now, what starts next, in your local time. Unofficial fansite, not affiliated with ArenaNet or NCSOFT.</p>
     <h3>Scheduled, not live</h3>
     <p>Every time here is a scheduled start. The game publishes no live state for events, so a map can run early, late, fail, or close. "Scheduled now" means the scheduled window is open, not that the fight is on in your map.</p>
@@ -378,10 +378,12 @@
     <p>Sources: the Guild Wars 2 Wiki's event timer data, ArenaNet's game update notes and news, and the official Guild Wars 2 API for waypoint codes. Times were also compared with an independent community schedule (qjv/event-timers).</p>
     <h3>Reminders</h3>
     <p>Reminders are off until you turn them on with the Reminders button by the filters. Then a notice appears on this page, with a count in the tab's title, 5, 10 or 15 minutes before a starred event starts. A reminder is not a notification from your browser or your computer, and it comes only while this page is open: a closed page, a sleeping device, or a tab your browser has put to sleep cannot remind you, and a background tab can be about a minute late. A reminder that would come after its event has started is not shown. With several tabs open, one of them gives each reminder. The page's two addresses (radmagelabs.com and radmageirl.github.io) keep separate settings.</p>
+    <h3>Add to calendar</h3>
+    <p>The Calendar button by the filters, or Add to calendar in an event's details, makes a calendar file (.ics) of the scheduled starts you choose, for the next start or up to 30 days, with an alarm if you want one. Each start is written in UTC, so your calendar shows it in your time zone. The file is made in this browser and never updates itself; if a schedule changes, download a new one. Whether a file's alarm is used, and what importing a file again does, depends on your calendar app.</p>
     <h3>Trading Post</h3>
     <p>The Trading Post mode searches the items sold on the game's Trading Post (the item list is updated by hand, so the newest items can be missing) and shows each one's highest buy order and lowest sell listing, fetched from ArenaNet's public API when you search. It needs no account and no API key. A price sort says which items it covers; it ranks the whole market only after you choose Load whole market. Proceeds and margins after fees are estimates, not profits: an order has not filled until it does. Nothing here is a live feed of the game: the API itself can be a few minutes behind.</p>
     <h3>Privacy</h3>
-    <p>Settings, stars, adjustments, reminder choices and Trading Post favorites are saved in this browser only. A search you type is not saved at all, and a link to an event or an item carries its name or id and nothing of yours. Two things leave the timer: the clock check asks this site's own address for the time, and the news panel loads headlines from guildwars2.com, so ArenaNet sees that request. You can turn news off. The Trading Post, once you open it, also asks ArenaNet's API (api.guildwars2.com) for prices and item details, and loads item icons from render.guildwars2.com, so ArenaNet sees those requests; nothing of yours is sent with them. The timer makes neither request.</p>
+    <p>Settings, stars, adjustments, reminder choices and Trading Post favorites are saved in this browser only. A calendar file is made in this browser and saved by your browser like any download; nothing about it is sent anywhere or saved here. A search you type is not saved at all, and a link to an event or an item carries its name or id and nothing of yours. Two things leave the timer: the clock check asks this site's own address for the time, and the news panel loads headlines from guildwars2.com, so ArenaNet sees that request. You can turn news off. The Trading Post, once you open it, also asks ArenaNet's API (api.guildwars2.com) for prices and item details, and loads item icons from render.guildwars2.com, so ArenaNet sees those requests; nothing of yours is sent with them. The timer makes neither request.</p>
     <h3>Share and support</h3>
     <p>Share passes this timer's address, https://radmagelabs.com/gw2-timer/, to your device's share sheet, or copies it where there is none. It carries nothing of yours. If the timer helps you, you can buy me a coffee; the link opens buymeacoffee.com in a new tab, so reminders keep running in this one.</p>
     <p class="about-actions"><button type="button" class="btn small" data-share>Share</button> <a class="btn small" href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (opens a new tab)</span></a></p>

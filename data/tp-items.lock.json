@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "asOf": "2026-11-15T12:36:57Z",
+  "asOf": "2026-11-15T23:34:27Z",
   "build": 210361,
   "lang": "en",
   "source": "api.guildwars2.com: the ids in /v2/commerce/prices, named by /v2/items (English)",
@@ -9,5 +9,5 @@
   "noItemRecord": 26,
   "emptyName": 0,
   "bytes": 1136734,
-  "sha256": "676b8184b3c179d8a3739811426decb05f9153a541bfdb184b3d89f8b8610bca"
+  "sha256": "92cd32b03719dcb63ae3f2981596c5a26dcf8e9a44e9de9c7f78f6ee0152caca"
 }

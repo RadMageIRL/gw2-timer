@@ -15,3 +15,7 @@ data file is included here) and compared with qjv/event-timers (MIT; nothing fro
 
 The news panel loads headlines from ArenaNet's official feed at runtime and links to the posts;
 no ArenaNet text is stored in this repository.
+
+The Trading Post item list (data/tp-items.json) holds item ids, names, types, rarities and levels
+from the official Guild Wars 2 API. They are ArenaNet's game content and are not covered by the MIT
+License. Prices and item icons are loaded from ArenaNet's API at runtime and are not stored here.

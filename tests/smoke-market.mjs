@@ -32,6 +32,11 @@ export function marketChecks(h) {
   const BOOK = new Map(SAMPLE.listings.map((l) => [l.id, l]));
   const priceOf = (id) => PRICE.get(id) || synthPrice(id);
   const FAV = 'gw2-timer:v1:tp-favorites';
+  // The committed list's own figures (its count, the requests a whole-market load takes, its date), so a reviewed
+  // refresh of the list needs no check rewritten.
+  const COUNT = CAT.count.toLocaleString('en-US'), REQS = Math.ceil(CAT.count / 200);
+  const ASOF = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(CAT.asOf));
+  const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const AT = utc('2026-11-15T13:00:00Z');
   // Problems a check may provoke on purpose: refused requests show up as failed loads.
   const NET = [/^failed: net::ERR_/, /^HTTP (429|500|503|400) https:\/\/api\.guildwars2\.com/, /^log: Failed to load resource/, /^log: Access to fetch at 'https:\/\/api\.guildwars2\.com\/.* has been blocked by CORS policy/];
@@ -195,7 +200,7 @@ export function marketChecks(h) {
       assert.match(await text(page, '#tp-empty'), /at least 2 letters/);
       await typeTp(page, 'zzqqxx');
       assert.match(await text(page, '#tp-empty'), /No item in the list matches/);
-      assert.match(await text(page, '#tp-asof'), /^Item list as of Nov 15, 2026: 27,983 items/);
+      assert.match(await text(page, '#tp-asof'), new RegExp(`^Item list as of ${esc(ASOF)}: ${COUNT} items`));
       assert.deepEqual(unexpected(page), []);
     } finally { await page.close(); }
   });
@@ -292,7 +297,7 @@ export function marketChecks(h) {
       assert.equal(await page.eval("document.querySelectorAll('#tp-results .tp-row').length"), 50);
       // With nothing typed, a price sort ranks the whole list, among the loaded prices only.
       await typeTp(page, ''); await idle(page);
-      assert.match(await text(page, '#tp-scope'), /^Ranked by lowest sell listing, high to low, among only the \d+ of 27,983 matching items whose prices are loaded\. Not a ranking of every match, or of the whole market\./);
+      assert.match(await text(page, '#tp-scope'), new RegExp(`^Ranked by lowest sell listing, high to low, among only the \\d+ of ${COUNT} matching items whose prices are loaded\\. Not a ranking of every match, or of the whole market\\.`));
       assert.deepEqual(unexpected(page), []);
     } finally { await page.close(); }
   });
@@ -309,7 +314,7 @@ export function marketChecks(h) {
       await click(page, '#tp-whole-btn'); await settle();
       assert.deepEqual(await box(), [false, 'true']);
       const ex = await text(page, '#tp-whole-explain');
-      assert.match(ex, /27,983 items, 140 requests of 200 \(Phase A measured about 142 for the whole Trading Post\)/);
+      assert.match(ex, new RegExp(`${COUNT} items, ${REQS} requests of 200 \\(Phase A measured about 142 for the whole Trading Post\\)`));
       assert.match(ex, /kept only while this page is open, and nothing is saved/);
       assert.equal(page.apiRequests.length, 0, 'still nothing before Load');
       assert.equal(await page.eval("document.activeElement.id"), 'tp-whole-start');
@@ -319,7 +324,7 @@ export function marketChecks(h) {
       assert.equal(await page.eval("document.getElementById('tp-whole-progress').hidden"), false);
       assert.equal(await page.eval("document.getElementById('tp-whole-confirm').hidden"), true, 'the explanation folds away while it loads');
       await click(page, '#tp-whole-cancel');
-      await page.waitFor("/^Cancelled after \\d+ of 140 requests\\./.test(document.getElementById('tp-whole-status').textContent)", 10000);
+      await page.waitFor(`/^Cancelled after \\d+ of ${REQS} requests\\./.test(document.getElementById('tp-whole-status').textContent)`, 10000);
       const atCancel = page.apiRequests.length;
       await sleep(1500);
       assert.ok(page.apiRequests.length <= atCancel, 'nothing more after Cancel');
@@ -328,9 +333,9 @@ export function marketChecks(h) {
       mode = 'partial';
       await click(page, '#tp-whole-btn'); await click(page, '#tp-whole-start');
       await page.waitFor("/^Partly loaded/.test(document.getElementById('tp-whole-status').textContent)", 90000);
-      assert.match(await text(page, '#tp-whole-status'), /^Partly loaded \(.+\): \d+ of 140 requests failed \(ArenaNet's API refused the request\)\. [\d,]+ items have a price; price sorts are partial\. Load again to try the rest\.$/);
+      assert.match(await text(page, '#tp-whole-status'), new RegExp(`^Partly loaded \\(.+\\): \\d+ of ${REQS} requests failed \\(ArenaNet's API refused the request\\)\\. [\\d,]+ items have a price; price sorts are partial\\. Load again to try the rest\\.$`));
       await select(page, 'tp-sort', 'sell-desc'); await idle(page);
-      assert.match(await text(page, '#tp-scope'), /among only the [\d,]+ of 27,983 matching items whose prices are loaded\. Not a ranking of every match, or of the whole market\./);
+      assert.match(await text(page, '#tp-scope'), new RegExp(`among only the [\\d,]+ of ${COUNT} matching items whose prices are loaded\\. Not a ranking of every match, or of the whole market\\.`));
       assert.ok(page.apiMaxLive <= 4, `at most 4 requests in flight (${page.apiMaxLive})`);
       // A complete load: the whole market, ranked.
       mode = 'ok';
@@ -338,7 +343,7 @@ export function marketChecks(h) {
       await page.waitFor("/^Whole market loaded/.test(document.getElementById('tp-whole-status').textContent)", 90000);
       assert.match(await text(page, '#tp-whole-status'), /^Whole market loaded \(.+\): prices for every item in the list\. It can be loaded again from .+\.$/);
       await idle(page);
-      assert.equal(await text(page, '#tp-scope'), 'Ranked by lowest sell listing, high to low, across the whole market: all 27,983 items in the item list, from the whole-market load. ' + (() => { const w = expectedSort('', 'sell', 'desc'); return `${w.noSide.toLocaleString('en-US')} items with no sell listings come after the ranked ones.`; })());
+      assert.equal(await text(page, '#tp-scope'), `Ranked by lowest sell listing, high to low, across the whole market: all ${COUNT} items in the item list, from the whole-market load. ` + (() => { const w = expectedSort('', 'sell', 'desc'); return `${w.noSide.toLocaleString('en-US')} items with no sell listings come after the ranked ones.`; })());
       assert.deepEqual(await shownIds(page), expectedSort('', 'sell', 'desc').order.slice(0, 50).map((i) => CAT.ids[i]), 'the top of the whole market');
       assert.equal(await page.eval("document.getElementById('tp-whole-btn').hidden"), true, 'not again for 5 minutes');
       const batches = page.apiRequests.filter((u) => /commerce\/prices/.test(u)).map((u) => new URL(u).searchParams.get('ids').split(',').length);
@@ -573,7 +578,7 @@ export function marketChecks(h) {
       await page.eval("document.querySelector('#tp-item-dialog [data-close]').click()"); await sleep(300);
       assert.deepEqual(await page.eval("[location.hash, document.getElementById('market-view').hidden]"), ['#market', false], 'closing a linked item keeps the Trading Post');
     } finally { await page.close(); }
-    for (const [hash, said] of [['#market/item/999999999', /not in the Trading Post item list \(as of Nov 15, 2026\)\. Nothing of yours was changed\./], ['#market/item/<b>x</b>', /could not be read\. Nothing of yours was changed\./]]) {
+    for (const [hash, said] of [['#market/item/999999999', new RegExp(`not in the Trading Post item list \\(as of ${esc(ASOF)}\\)\\. Nothing of yours was changed\\.`)], ['#market/item/<b>x</b>', /could not be read\. Nothing of yours was changed\./]]) {
       page = await open({ at: AT, api: api(), url: BASE + hash, wait: false });
       try {
         await market(page);
