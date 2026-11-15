@@ -1346,6 +1346,7 @@ check('Link: opened directly, closing drops the event from the address in place:
     const h0 = await page.eval('history.length');
     await click(page, '#event-dialog [data-close]'); await settle();
     assert.deepEqual([(await dlg(page)).open, (await dlg(page)).hash, await page.eval('history.length')], [false, '', h0]);
+    assert.equal(await page.eval('document.activeElement === document.body'), true, 'opened from a link, the details had no opener: focus stays where the browser leaves it');
     await page.reload(); await page.waitFor("document.querySelectorAll('#next-list .row').length > 0");
     assert.equal((await dlg(page)).open, false);
     // A click with Ctrl, or not with the main button, is left to the browser (a new tab); a plain one opens the details.
@@ -1411,6 +1412,64 @@ check('Link: screen readers and keyboard: a modal named by the event and describ
   } finally { await page.close(); }
 });
 
+check('Link: a close event that comes after the details were opened again (Back then Forward at once; Chrome on Linux sends it late) leaves them open with their event, and Escape still clears the address and returns focus to the name', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z') });
+  try {
+    const h0 = await page.eval('history.length');
+    const sel = '#next-list .row[data-id="tequatl-the-sunless"] a.event-link';
+    await page.eval(`document.querySelector('${sel}').focus()`);
+    await key(page, 'Enter', 'Enter', 13);
+    await page.waitFor("document.getElementById('event-dialog').open");
+    const nameKey = await page.eval(`document.querySelector('${sel}').getAttribute('data-fkey')`);
+    // What Back and then Forward do (each runs the page's hashchange handler), in one task, so the close event
+    // of the first can only come after the second has opened the details again.
+    const between = await page.eval(`(() => { const st = history.state;
+      history.replaceState(null, '', location.pathname + location.search); dispatchEvent(new HashChangeEvent('hashchange'));
+      const closed = !document.getElementById('event-dialog').open;
+      history.replaceState(st, '', '#event/tequatl-the-sunless'); dispatchEvent(new HashChangeEvent('hashchange'));
+      return closed; })()`);
+    assert.equal(between, true, 'Back closed the details in between');
+    await sleep(400);
+    const d = await dlg(page);
+    assert.deepEqual([d.open, d.hash, d.title], [true, '#event/tequatl-the-sunless', 'Tequatl the Sunless'], 'still open, with its event and address');
+    // Starring rebuilds the lists behind the dialog, so the name is found again, not just refocused.
+    await click(page, '#event-dialog [data-star]'); await settle();
+    await key(page, 'Escape', 'Escape', 27);
+    await page.waitFor("!document.getElementById('event-dialog').open && location.hash === ''", 3000);
+    assert.equal(await page.eval('history.length'), h0 + 1, 'closing added no entry');
+    assert.equal(await page.eval('document.activeElement.getAttribute("data-fkey")'), nameKey, 'focus back on the name');
+  } finally { await page.close(); }
+});
+
+check('Link: when its event leaves the lists while the details are open (unstarred under Show: Starred), closing them puts focus on the Coming up heading, never nowhere', async () => {
+  const page = await open({ at: utc('2026-10-25T23:50:00Z'), seed: { [PREFS]: { filter: 'starred', starred: ['tequatl-the-sunless'] } } });
+  try {
+    const sel = '#next-list .row[data-id="tequatl-the-sunless"] a.event-link';
+    await page.eval(`document.querySelector('${sel}').focus()`);
+    await key(page, 'Enter', 'Enter', 13);
+    await page.waitFor("document.getElementById('event-dialog').open");
+    await click(page, '#event-dialog [data-star]'); await settle();
+    assert.equal(await page.eval(`document.querySelectorAll('#next-list [data-id="tequatl-the-sunless"], #now-list [data-id="tequatl-the-sunless"]').length`), 0, 'it left the lists');
+    await key(page, 'Escape', 'Escape', 27);
+    await page.waitFor("!document.getElementById('event-dialog').open && location.hash === ''", 3000);
+    assert.equal(await page.eval('document.activeElement.id'), 'coming-title');
+  } finally { await page.close(); }
+});
+
+check('Link: when its start comes while the details are open, closing them puts focus on its name in Scheduled now', async () => {
+  const page = await open({ at: utc('2026-10-25T23:59:57Z') });
+  try {
+    const sel = '#next-list .row[data-id="tequatl-the-sunless"] a.event-link';
+    await page.eval(`document.querySelector('${sel}').focus()`);
+    await key(page, 'Enter', 'Enter', 13);
+    await page.waitFor("document.getElementById('event-dialog').open");
+    await page.waitFor(`Boolean(document.querySelector('#now-list [data-fkey="now:tequatl-the-sunless:name"]')) && !document.querySelector('#next-list .row[data-id="tequatl-the-sunless"]')`, 8000);
+    await key(page, 'Escape', 'Escape', 27);
+    await page.waitFor("!document.getElementById('event-dialog').open && location.hash === ''", 3000);
+    assert.equal(await page.eval('document.activeElement.getAttribute("data-fkey")'), 'now:tequatl-the-sunless:name');
+  } finally { await page.close(); }
+});
+
 check('Link: the details fit a 320, 360 and 390 px phone and a desktop: no sideways scroll, 36 px controls, name links big enough to tap', async () => {
   for (const [width, height, mobile] of [[320, 568, true], [360, 740, true], [390, 844, true], [1280, 900, false]]) {
     const page = await openLink('#event/claw-of-jormag', { at: utc('2026-10-25T23:50:00Z'), width, height, mobile, prefs: SAVED });
@@ -1423,6 +1482,18 @@ check('Link: the details fit a 320, 360 and 390 px phone and a desktop: no sidew
         await click(page, '#event-dialog [data-close]'); await settle();
         const names = await page.eval("[...document.querySelectorAll('#next-list a.event-link, #now-list a.event-link')].map((a) => a.getBoundingClientRect().height)");
         assert.ok(names.length > 3 && names.every((x) => x >= 36), `${width}: name links ${JSON.stringify(names.slice(0, 4))} px tall to tap`);
+        // Whatever the font: a link's height is its font's glyph box plus its padding. Times New Roman and Arial (on
+        // Ubuntu, their twins Liberation Serif and Sans) have about the shortest boxes of the common fonts; CI's
+        // Ubuntu gave 35 px with a fixed 8 px of padding.
+        const tight = await page.eval(`(() => { const links = [...document.querySelectorAll('#next-list a.event-link, #now-list a.event-link')], out = {};
+          for (const f of ['"Times New Roman", "Liberation Serif"', 'Arial, "Liberation Sans"']) { for (const a of links) a.style.fontFamily = f; out[f] = Math.min(...links.map((a) => a.getBoundingClientRect().height)); }
+          for (const a of links) a.style.fontFamily = ''; return out; })()`);
+        assert.ok(Object.values(tight).every((x) => x >= 36), `${width}: name links in a font with short glyph boxes: ${JSON.stringify(tight)}`);
+        // In a Coming up row the name is a flex item, as tall as its line and its padding: it makes the row no
+        // taller than the star beside it.
+        const rows = await page.eval(`[...document.querySelectorAll('#next-list .line1')].map((l) => { const a = l.querySelector('a.event-link'), s = l.querySelector('[data-star]'), rg = document.createRange(); rg.selectNodeContents(a);
+          return [new Set([...rg.getClientRects()].map((x) => Math.round(x.bottom))).size, Math.round(a.getBoundingClientRect().height - s.getBoundingClientRect().height)]; }).filter(([n]) => n === 1).map(([, d]) => d)`);
+        assert.ok(rows.length > 3 && rows.every((d) => d <= 2), `${width}: one-line names in Coming up taller than their star by ${JSON.stringify(rows.slice(0, 4))} px`);
       }
     } finally { await page.close(); }
   }
@@ -1537,8 +1608,12 @@ check('Reminders: turned on with a starred event inside its lead time, it is rem
     assert.equal(await page.eval("window.__card === document.querySelector('.rm-notice')"), true, 'the notice is not rebuilt as it counts down');
     assert.equal(await page.eval('JSON.stringify(window.__writes) === window.__w'), true, 'nothing is written while it ticks');
     assert.equal((await trayState(page)).said.length, 1, 'nothing more is said');
-    const shift = await page.eval("new Promise((ok) => { let s = 0; new PerformanceObserver((l) => { for (const e of l.getEntries()) if (e.startTime > window.__shiftFrom) s += e.value; }).observe({ type: 'layout-shift', buffered: true }); setTimeout(() => ok(s), 50); })");
-    assert.ok(shift < 0.001, `layout shift ${shift} when the reminder came`);
+    // The reminder's arrival moves nothing on the page or in the tray. What is inside the Reminders dialog may
+    // reflow as the reader turns reminders on: its list's line for the event changes, and in a wider font (CI's
+    // DejaVu Sans) "...; no reminder while reminders are off." takes two lines where "...; reminder given."
+    // takes one. That is the reader's own action, and the dialog itself stays put (its own check, below).
+    const shift = await page.eval("new Promise((ok) => { const d = document.getElementById('reminders-dialog'); let s = 0; new PerformanceObserver((l) => { for (const e of l.getEntries()) if (e.startTime > window.__shiftFrom && !e.sources.every((x) => x.node && d.contains(x.node))) s += e.value; }).observe({ type: 'layout-shift', buffered: true }); setTimeout(() => ok(s), 50); })");
+    assert.ok(shift < 0.001, `layout shift ${shift} outside the dialog when the reminder came`);
     // Copy waypoint works from the notice.
     await page.eval(CLIP(false)); await click(page, '#reminders-tray [data-copy]'); await settle();
     assert.equal(await page.eval('window.__copied'), '[&BNABAAA=]');
@@ -1559,6 +1634,22 @@ check('Reminders: turned on with a starred event inside its lead time, it is rem
     assert.deepEqual(await page.eval('window.__notify'), { made: 0, asked: 0 }, 'no browser notification in Phase E');
     assert.deepEqual(page.requests.filter((u) => !u.startsWith(BASE) && u !== FEED_URL), [], 'no request leaves the site');
     assert.deepEqual(unexpected(page, ALLOW), []);
+  } finally { await page.close(); }
+});
+
+check('Reminders: the dialog keeps its place when its list changes as reminders are turned on, so the switch stays under the pointer (in a wide font, Verdana here or DejaVu Sans on Ubuntu, the line for an event takes two lines when off and one when on)', async () => {
+  const page = await openR({ at: utc('2026-10-25T23:52:00Z'), prefs: { starred: ['tequatl-the-sunless'] }, reminders: null, clock: 'fail' });
+  try {
+    await sleep(600);
+    await click(page, '#reminders-btn'); await settle();
+    await page.eval(`document.getElementById('reminders-dialog').style.fontFamily = 'Verdana, "DejaVu Sans"'`); await settle();
+    const where = () => page.eval("[document.getElementById('reminders-dialog').getBoundingClientRect().top, document.getElementById('reminders-on').getBoundingClientRect().top, document.querySelector('#reminders-list li').getBoundingClientRect().height]");
+    const before = await where();
+    await click(page, '#reminders-on');
+    await page.waitFor("!document.getElementById('reminders-tray').hidden", 3000); await settle();
+    const after = await where();
+    assert.ok(after[2] < before[2], `the line for the event got shorter (${before[2]} -> ${after[2]}), so the dialog's height changed`);
+    assert.deepEqual(after.slice(0, 2), before.slice(0, 2), 'the dialog and its switch did not move');
   } finally { await page.close(); }
 });
 
@@ -1689,9 +1780,11 @@ check('Reminders: a tab still waiting for its clock check shows a reminder anoth
     assert.equal(await text(waiting, '#reminders-list li'), 'Tequatl the Sunless: starts 7:00 PM (00:00 UTC); reminder due now.');
     ready = await openR({ offset, keepStorage: true, reminders: null, clock: 'fail' });
     await ready.waitFor('(window.__said || []).length === 1', 4000);
-    await sleep(1500);
+    // The list is redrawn on the page's next tick after the storage event, so wait for it (a fixed 1.5 s was
+    // once too short on a busy Linux machine), but only while the waiting tab is still held.
+    await waiting.waitFor("document.querySelector('#reminders-list li').textContent.endsWith('; reminder given.')", 4000).catch(() => {});
     assert.ok(await waiting.eval('performance.now()') < 7500, 'the waiting tab is still held');
-    assert.equal(await text(waiting, '#reminders-list li'), 'Tequatl the Sunless: starts 7:00 PM (00:00 UTC); reminder given.', 'it learns of the reminder the other tab gave at once');
+    assert.equal(await text(waiting, '#reminders-list li'), 'Tequatl the Sunless: starts 7:00 PM (00:00 UTC); reminder given.', 'it learns of the reminder the other tab gave while still held');
     await waiting.waitFor('performance.now() > 9500', 12000); // past the end of its hold
     const a = await trayState(ready), b = await trayState(waiting);
     assert.deepEqual([a.ids, a.said.length], [['tequatl-the-sunless'], 1], 'the tab with a settled clock gave it');
@@ -1903,6 +1996,12 @@ check('Reminders: the tray and dialog at 320, 360, 390, 768 and 1440 px in both 
         const t = await trayState(page);
         assert.deepEqual([t.ids.length, t.more], width <= 640 ? [1, '+3 more'] : [3, 'Show 1 more'], at);
         if (width <= 640) assert.ok(r.height <= 170, `${at}: the tray takes ${r.height} px of ${height}`);
+        // A name on two lines (a long name, or a wide font: Verdana here, DejaVu Sans on Ubuntu) still fits 170 px at 320.
+        if (width === 320) {
+          const two = await page.eval(`(() => { const n = document.querySelector('.rm-notice .rm-name'); n.style.fontFamily = 'Verdana, "DejaVu Sans"';
+            const out = { lines: n.querySelector('.event-link').getClientRects().length, height: document.getElementById('reminders-tray').getBoundingClientRect().height }; n.style.fontFamily = ''; return out; })()`);
+          assert.ok(two.lines === 2 && two.height <= 170, `${at}: with the name on two lines: ${JSON.stringify(two)}`);
+        }
         // Where "+3 more" and Dismiss all sit, whatever the fonts. On a phone: inside the notice, on its row of
         // buttons when all four fit there, else on a line of their own below them, never past its edge.
         // Wider: under the list, as in v0.2.1's layout of the tray. (Pixel limits fail on Ubuntu's fonts in CI.)
@@ -1915,7 +2014,7 @@ check('Reminders: the tray and dialog at 320, 360, 390, 768 and 1440 px in both 
           assert.ok(g.inNotice && g.inside && g.extra <= 13, `${at}: inside the notice, nothing under it: ${JSON.stringify(g)}`);
           assert.equal(g.label, '+3 more reminders', at);
           if (Math.abs(g.need - g.room) >= 1) assert.ok(g.need < g.room ? g.sameRow : g.below, `${at}: ${JSON.stringify(g)}`);
-          // With Windows' fonts, where the layout was measured: one row from 360 px (a 111 px tray), two lines at 320.
+          // With Windows' fonts, where the layout was measured: one row from 360 px (a 105 px tray), two lines at 320.
           if (process.platform === 'win32') assert.equal(g.sameRow, width >= 360, `${at} on Windows: ${JSON.stringify(g)}`);
         } else assert.ok(g.underList && !g.inNotice && g.label === null, `${at}: ${JSON.stringify(g)}`);
         if (mobile) assert.deepEqual(await page.eval("[...document.querySelectorAll('#reminders-tray button, #reminders-tray a')].filter((b) => b.getClientRects().length && b.getBoundingClientRect().height < 36).map((b) => b.textContent)"), [], at);
@@ -1990,6 +2089,50 @@ check('Reminders: on a phone no control is hidden behind the tray when it takes 
       if (r && r !== 'tray') hidden.push(r);
     }
     assert.deepEqual(hidden, [], 'focused controls behind the tray');
+  } finally { await page.close(); }
+});
+
+check('Reminders: the room kept past the edge of the scroll padding, before the tray, is at least the tallest name link or button of one line in the lists less a line of the root font, so one Firefox leaves in place (it scrolls a control that takes focus only when less than a line shows) is still clear of the tray, on phones and a desktop', async () => {
+  for (const [width, height, mobile] of [[390, 844, true], [320, 568, true], [1440, 900, false]]) {
+    const page = await openR({ at: T0 - 10 * MIN - 1500, width, height, mobile, prefs: { starred: ['tequatl-the-sunless'] }, clock: 'fail' });
+    try {
+      await page.waitFor("!document.getElementById('reminders-tray').hidden", 5000); await settle();
+      const r = await page.eval(`(() => { const tr = document.getElementById('reminders-tray').getBoundingClientRect();
+        const edge = innerHeight - parseFloat(getComputedStyle(document.documentElement).scrollPaddingBottom);
+        const probe = document.createElement('span'); probe.textContent = 'Hg'; probe.style.font = getComputedStyle(document.documentElement).font; document.body.append(probe);
+        const line = probe.getBoundingClientRect().height; probe.remove();
+        const lines = (el) => { const rg = document.createRange(); rg.selectNodeContents(el); return new Set([...rg.getClientRects()].map((x) => Math.round(x.bottom))).size; };
+        const els = [...document.querySelectorAll('#now-list a.event-link, #next-list a.event-link, #now-list button, #next-list button')].filter((el) => el.getClientRects().length === 1 && lines(el) <= 1);
+        const top = els.reduce((m, el) => (el.getBoundingClientRect().height > m.getBoundingClientRect().height ? el : m), els[0]);
+        return { room: Math.round((tr.top - edge) * 10) / 10, line: Math.round(line * 10) / 10, tall: Math.round(top.getBoundingClientRect().height * 10) / 10, n: els.length,
+          what: (top.getAttribute('aria-label') || top.textContent).trim().slice(0, 50) + ' (' + top.tagName.toLowerCase() + '.' + top.className + ', ' + Math.round(top.getBoundingClientRect().width) + ' px wide)' }; })()`);
+      assert.ok(r.n > 10 && r.room >= r.tall - r.line, `${width}: the room past the edge (${r.room} px) against the tallest of ${r.n} one-line name links and buttons (${r.tall} px: ${r.what}) less a line (${r.line} px)`);
+    } finally { await page.close(); }
+  }
+});
+
+check('Reminders: a control that takes focus partly behind the tray is scrolled clear of it by the page, as Firefox leaves one where it is while a line of it shows (here, focus without the browser\'s own scroll): the stars in the list and a summary that wraps on a phone; one already clear, or in a dialog, moves nothing', async () => {
+  const page = await openR({ at: T0 - 10 * MIN - 1500, width: 320, height: 568, mobile: true, prefs: { starred: ['tequatl-the-sunless'] }, clock: 'fail' });
+  try {
+    await page.waitFor("!document.getElementById('reminders-tray').hidden", 5000); await settle();
+    // Each placed with its top 12 px above the tray, so most of it is behind, then focused.
+    const r = await page.eval(`(() => { const t = document.getElementById('reminders-tray'), out = [];
+      const els = [...[...document.querySelectorAll('#next-list .row [data-star]')].slice(2, 5), ...document.querySelectorAll('summary')];
+      for (const el of els) {
+        document.activeElement.blur();
+        scrollBy(0, el.getBoundingClientRect().top - (t.getBoundingClientRect().top - 12));
+        const before = el.getBoundingClientRect().bottom - t.getBoundingClientRect().top;
+        el.focus({ preventScroll: true });
+        out.push([Math.round(el.getBoundingClientRect().height), Math.round(before), Math.round(t.getBoundingClientRect().top - el.getBoundingClientRect().bottom)]); }
+      return out; })()`);
+    assert.ok(r.length >= 5 && r.some(([h]) => h > 60) && r.every(([, before, after]) => before > 0 && after >= 8), `[height, behind the tray by, then clear of it by] px: ${JSON.stringify(r)}`);
+    const still = await page.eval(`(() => { document.activeElement.blur(); scrollTo(0, 0); document.getElementById('filters-toggle').focus({ preventScroll: true }); return scrollY; })()`);
+    assert.equal(still, 0, 'a control already clear of the tray: the page did not move');
+    // The dialog moved down so its switch is level with the tray, as one in a dialog could be on a short window.
+    const inDialog = await page.eval(`(() => { document.activeElement.blur(); const d = document.getElementById('reminders-dialog'), t = document.getElementById('reminders-tray').getBoundingClientRect();
+      d.showModal(); d.style.margin = Math.round(t.top - 60) + 'px auto 0'; const c = d.querySelector('#reminders-on'), cb = c.getBoundingClientRect(), y = scrollY;
+      c.focus({ preventScroll: true }); const out = [cb.bottom > t.top && cb.top < t.bottom, scrollY !== y]; d.close(); d.style.margin = ''; return out; })()`);
+    assert.deepEqual(inDialog, [true, false], 'a control in a dialog, level with the tray: the page did not move');
   } finally { await page.close(); }
 });
 

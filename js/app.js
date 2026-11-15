@@ -449,15 +449,29 @@
   // added it, else the fragment is dropped in place, so a reload shows the reader's own page and Close
   // never leaves the site.
   const dropFragment = () => { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* the address keeps it */ } };
+  // Where focus goes when the details close: the control that opened them; else that control drawn again
+  // (starring rebuilds the lists); else the event's name in either list; else, when the event has left
+  // the lists (unstarred under Starred, or hidden, filtered out or past the span), the Coming up heading.
+  // Details opened straight from a link had no opener, and focus stays where the browser leaves it.
+  const shownEl = (el) => (el && el.isConnected && el !== document.body && el.getClientRects().length ? el : null);
+  function focusBack(from, id) {
+    if (!from || (!from.fkey && (!from.el || from.el === document.body))) return null;
+    return shownEl(from.el) || (from.fkey && shownEl(document.querySelector(`[data-fkey="${CSS.escape(from.fkey)}"]`)))
+      || (id && shownEl(document.querySelector(`#now-list [data-fkey="now:${CSS.escape(id)}:name"], #next-list [data-fkey^="next:${CSS.escape(id)}:"][data-fkey$=":name"]`)))
+      || $('coming-title');
+  }
   dialog.addEventListener('close', () => {
+    // The close event comes a moment after the dialog closes (Chrome on Linux sends it as late as the next
+    // rendering step). When Back closes the details and Forward opens them again before it comes, it
+    // belongs to that earlier close: the details open now keep their event, their opener and the address.
+    if (dialog.open) { closingByHash = false; return; }
     const id = dialogId;
     dialogId = null; dialogKey = '';
     if (!closingByHash && Link.parse(location.hash, IDS)) {
       if (history.state && history.state.gw2Event === id) history.back(); else dropFragment();
     }
     closingByHash = false;
-    const back = opener && (opener.el && opener.el.isConnected && opener.el !== document.body ? opener.el
-      : opener.fkey ? document.querySelector(`[data-fkey="${CSS.escape(opener.fkey)}"]`) : null);
+    const back = focusBack(opener, id);
     opener = null;
     if (back) back.focus();
   });
@@ -655,6 +669,18 @@
     if (document.documentElement.style.getPropertyValue('--tray-space') !== v) document.documentElement.style.setProperty('--tray-space', v);
   }
   if (window.ResizeObserver) new ResizeObserver(() => spaceForTray()).observe($('reminders-tray'));
+  // A control that takes focus partly behind the tray is scrolled up to the edge of that room. Browsers do this
+  // with the scroll padding, but Firefox only when less than a line of the control shows, which leaves one
+  // taller than the room and a line (a summary that wraps on a phone) partly behind. Not one in the tray or a
+  // dialog, which sit above the page.
+  document.addEventListener('focusin', (ev) => {
+    const tray = $('reminders-tray'), el = ev.target;
+    if (tray.hidden || !(el instanceof Element) || tray.contains(el) || el.closest('dialog')) return;
+    const b = el.getBoundingClientRect(), t = tray.getBoundingClientRect();
+    if (!(b.bottom > t.top && b.top < t.bottom && b.right > t.left && b.left < t.right)) return;
+    const edge = Math.min(window.innerHeight - (parseFloat(getComputedStyle(document.documentElement).scrollPaddingBottom) || 0), t.top - 8);
+    window.scrollBy(0, Math.ceil(Math.min(b.bottom - edge, b.top)));
+  });
   if (narrow && narrow.addEventListener) narrow.addEventListener('change', () => { trayKey = ''; refreshTray(nowMs()); });
 
   /** The dialog's list: each starred event's next start and its reminder. Rebuilt on a change, or when a time in it passes. */

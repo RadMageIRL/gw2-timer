@@ -416,6 +416,10 @@ dialog a { color: var(--text); }
 /* Reminders: the settings dialog, and this tab's notices fixed at the bottom of the window. While the
    tray is up, app.js sets --tray-space to the room it takes, so the page can be scrolled clear of it and
    a control that takes focus is scrolled into view above it. */
+/* The Reminders dialog keeps its top edge where it opened. Its list of starred events changes as reminders
+   are turned on or a lead is picked; centered, the dialog would move, with the switch just pressed under the
+   pointer, whenever that changes its height (a line that wraps in one state and not the other). */
+.rm-dialog { margin-block: clamp(20px, 8vh, 80px) auto; max-height: calc(100vh - clamp(20px, 8vh, 80px) - 20px); }
 .rm-settings { display: grid; gap: 8px; margin: 10px 0 8px; }
 .rm-option { display: flex; align-items: center; gap: 8px; min-height: 30px; font-size: 14px; color: var(--text); cursor: pointer; }
 .rm-option input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--focus); }
@@ -426,7 +430,11 @@ dialog .rm-unsaved { margin: 4px 0 0; color: var(--warn); }
 .rm-list .name { color: var(--text); font-weight: 600; }
 .rm-list .rm-none { list-style: none; margin-left: -18px; }
 
-html { scroll-padding-bottom: var(--tray-space, 0px); }
+/* While the tray is up, the scroll padding is its room and 24 px more (the min() is 0 when it is down). Firefox
+   scrolls a control that takes focus only when less than a line of the root font shows, so one mostly in view
+   stays put with up to its height less that line past this edge: a name link on a phone, up to 44 px, less an
+   18 px line is 26 px, inside the room's 8 and these 24. One that wraps (a summary, a long name) app.js scrolls clear. */
+html { scroll-padding-bottom: calc(var(--tray-space, 0px) + min(var(--tray-space, 0px), 24px)); }
 body { padding-bottom: var(--tray-space, 0px); }
 .rm-tray {
   position: fixed; right: 12px; bottom: 12px; z-index: 5;
@@ -471,7 +479,13 @@ body { padding-bottom: var(--tray-space, 0px); }
   .btn, .btn.small, .seg-btn, .chip, .link-btn, .field select, .field input, .find-box input, .ed-linkbox input { min-height: 36px; }
   .rm-option { min-height: 36px; }
   .share-links .link-btn, .share-links a { display: inline-flex; align-items: center; min-height: 36px; }
-  .event-link { padding: 8px 0; } /* name links: 36 px to tap, like every control here, with no change to the line */
+  /* Name links: 36 px to tap, like every control here, with no change to the line. In a line of text (a card's
+     heading, the tray) a link is its font's glyph box plus its padding, and the glyph box is never under 1em in
+     a text font (Segoe UI 1.33em, DejaVu Sans 1.16em, Liberation Serif 1.11em), so 19px - 0.5em of padding gives
+     36 px in any of them. In a Coming up row it is a flex item, its line's height plus its padding: with 8 px,
+     37.75 px in any font, and no taller than the star beside it. */
+  .event-link { padding: max(8px, calc(19px - 0.5em)) 0; }
+  .line1 > .event-link { padding: 8px 0; }
   .star-btn { min-width: 36px; min-height: 36px; }
   .news-list a { padding: 6px 0; }
   .news:is([data-status="idle"], [data-status="loading"]) .news-list:empty { min-height: calc(3 * (1.45em + 12px)); }
@@ -512,9 +526,11 @@ body { padding-bottom: var(--tray-space, 0px); }
   .compact .row .when { grid-column: 1 / -1; }
   /* One notice across the bottom; its buttons under the text. With several, app.js puts "+3 more" and
      Dismiss all at the end of that row; where they do not fit, they wrap onto a line of their own. */
-  .rm-tray { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); width: auto; padding: 5px; }
-  .rm-notice { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "when" "actions"; gap: 2px; padding: 6px 8px; }
-  .rm-actions { justify-content: flex-start; margin-top: 4px; row-gap: 2px; }
+  /* Spacing kept tight so that a name on two lines (a long name, or a wider font such as Ubuntu's DejaVu
+     Sans) with the group on its own line still keeps the tray within 170 px at 320 x 568. */
+  .rm-tray { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); width: auto; padding: 4px; }
+  .rm-notice { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "when" "actions"; gap: 2px; padding: 5px 8px; }
+  .rm-actions { justify-content: flex-start; margin-top: 2px; row-gap: 2px; }
   .rm-actions .btn.small { padding: 0 8px; } /* room for all four on one row at 360 px, in a wider font too */
   .rm-actions > .rm-foot { flex-wrap: nowrap; column-gap: 10px; margin-left: auto; padding: 0; }
 }
