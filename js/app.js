@@ -353,7 +353,70 @@
     else if (ev.key === 'Enter') { ev.preventDefault(); findNow(ev.target.value); }
   });
 
-  // ---- One event: "#event/<id>" opens its details (js/link.js reads and writes the links) ----
+  // ---- Two modes in this one page: Event Timers (the default) and the Trading Post ("#market") ----
+  // The switch shows one view and hides the other. Nothing reloads and nothing is lost: each view keeps its
+  // search, filters, sort and place on the page, and the timer, reminders included, keeps running under the
+  // Trading Post. A click on the switch adds one history entry ("#market", or the page's own address for
+  // Event Timers), so Back and Forward move between the modes. The Trading Post's code and its item list
+  // load the first time it opens, never with the timer, so the timer's first load asks the API for nothing.
+
+  const ASSET_Q = (() => { try { return new URL(document.currentScript.src).search; } catch (e) { return ''; } })();
+  const MARKET_FILES = [['js/money.js', 'GW2Money'], ['js/catalog.js', 'GW2Catalog'], ['js/api.js', 'GW2Api'], ['js/market.js', 'GW2Market']];
+  let mode = 'timers', market = null, marketLoading = null;
+  const place = { timers: 0, market: 0 };
+  const VIEW = { timers: 'timers-view', market: 'market-view' };
+  /** The heading focus goes to when the control that had it is gone: Coming up, or the Trading Post's. */
+  const viewHeading = () => $(mode === 'market' ? 'market-title' : 'coming-title');
+
+  /** The mode an address asks for: "#market..." the Trading Post; no fragment, Event Timers; an element's id, its view's; else none. */
+  function modeOf(hash) {
+    const raw = typeof hash === 'string' ? hash.replace(/^#/, '') : '';
+    if (/^market(?:\/|$)/.test(raw)) return 'market';
+    if (!raw) return 'timers';
+    if (raw.startsWith(Link.PREFIX)) return null; // one event's details, over either mode
+    const el = /^[A-Za-z][\w-]{0,40}$/.test(raw) ? document.getElementById(raw) : null;
+    return el && $('market-view').contains(el) ? 'market' : el && $('timers-view').contains(el) ? 'timers' : null;
+  }
+
+  function loadMarket() {
+    if (marketLoading) return marketLoading;
+    $('tp-boot').hidden = false; $('tp-boot').textContent = 'Loading the Trading Post...'; $('tp-retry').hidden = true;
+    // In parallel, run in order (async = false); a file that has already run is not loaded again on a retry.
+    marketLoading = Promise.all(MARKET_FILES.filter(([, g]) => !window[g]).map(([f]) => new Promise((ok, fail) => {
+      const s = document.createElement('script');
+      s.src = f + ASSET_Q; s.async = false;
+      s.onload = ok; s.onerror = () => { s.remove(); fail(new Error(f)); };
+      document.head.append(s);
+    }))).then(() => {
+      market = window.GW2Market.mount({ h, storage, Store, now: nowMs, copyText, canonical: Link.CANONICAL, version: ASSET_Q });
+      return market;
+    }, (e) => {
+      marketLoading = null;
+      $('tp-boot').textContent = 'The Trading Post could not load. Check your connection and try again. The timer is not affected.';
+      $('tp-retry').hidden = false;
+      throw e;
+    });
+    return marketLoading;
+  }
+  $('tp-retry').addEventListener('click', () => { if (!market) loadMarket().then((m) => m.shown(), () => {}); });
+
+  /** Shows `next`, keeping each view's place on the page; the first Trading Post opening loads it. */
+  function setMode(next) {
+    if (next !== mode) {
+      const from = $(VIEW[mode]), hadFocus = from.contains(document.activeElement);
+      place[mode] = window.scrollY;
+      mode = next;
+      $('timers-view').hidden = next !== 'timers';
+      $('market-view').hidden = next !== 'market';
+      for (const b of document.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === next));
+      for (const a of document.querySelectorAll('[data-skip]')) a.hidden = a.getAttribute('data-skip') !== next;
+      if (next === 'timers') render(true);
+      window.scrollTo(0, place[next]);
+      // Focus that was inside the view just hidden goes to the switch, which is where the reader is.
+      if (hadFocus) document.querySelector(`button[data-mode="${next}"]`).focus({ preventScroll: true });
+    }
+    if (next === 'market') loadMarket().then((m) => m.shown(), () => {});
+  }
   // A link names an event and nothing else. Opening one shows the reader's own view of it (their Adjust
   // time, their star) and changes no setting. A click on a name adds one history entry, so Back closes
   // the details and Forward opens them again; closing takes the event out of the address.
@@ -450,7 +513,7 @@
   // Closing takes the event out of the address: back to the entry before it when a click on this page
   // added it, else the fragment is dropped in place, so a reload shows the reader's own page and Close
   // never leaves the site.
-  const dropFragment = () => { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* the address keeps it */ } };
+  const dropFragment = () => { try { history.replaceState(null, '', location.pathname + location.search + (mode === 'market' ? '#market' : '')); } catch (e) { /* the address keeps it */ } };
   // Where focus goes when the details close: the control that opened them; else that control drawn again
   // (starring rebuilds the lists); else the event's name in either list; else, when the event has left
   // the lists (unstarred under Starred, or hidden, filtered out or past the span), the Coming up heading.
@@ -460,7 +523,7 @@
     if (!from || (!from.fkey && (!from.el || from.el === document.body))) return null;
     return shownEl(from.el) || (from.fkey && shownEl(document.querySelector(`[data-fkey="${CSS.escape(from.fkey)}"]`)))
       || (id && shownEl(document.querySelector(`#now-list [data-fkey="now:${CSS.escape(id)}:name"], #next-list [data-fkey^="next:${CSS.escape(id)}:"][data-fkey$=":name"]`)))
-      || $('coming-title');
+      || viewHeading();
   }
   dialog.addEventListener('close', () => {
     // The close event comes a moment after the dialog closes (Chrome on Linux sends it as late as the next
@@ -488,10 +551,23 @@
     $('link-notice-text').textContent = reason ? LINK_NOTICE[reason] || LINK_NOTICE.malformed : '';
   }
 
-  /** What the address asks for: one event's details, an unusable event link, or nothing of ours. */
+  /**
+   * What the address asks for: the Trading Post ("#market", "#market/item/<id>"), one event's details over
+   * either mode, an unusable event link, or Event Timers.
+   */
   function readHash() {
+    const m = modeOf(location.hash);
+    if (m === 'market') {
+      if (dialog.open) { closingByHash = true; dialog.close(); }
+      showLinkNotice(null);
+      setMode('market');
+      loadMarket().then((mk) => mk.route(location.hash), () => {});
+      return;
+    }
+    if (market) market.route(location.hash); // closes an item's details when the address leaves them
     const r = Link.parse(location.hash, IDS);
     if (r && r.ok) { openEvent(r.id); return; }
+    if (m === 'timers' || (r && !r.ok)) setMode('timers');
     if (dialog.open) { closingByHash = true; dialog.close(); }
     showLinkNotice(r ? r.reason : null);
   }
@@ -647,7 +723,7 @@
     if (had && (document.activeElement !== had || !had.getClientRects().length)) {
       const left = controls();
       const next = (had.isConnected && had.getClientRects().length && had) || (fkey && tray.querySelector(`[data-fkey="${CSS.escape(fkey)}"]`))
-        || left[Math.min(Math.max(at, 0), left.length - 1)] || $('coming-title');
+        || left[Math.min(Math.max(at, 0), left.length - 1)] || viewHeading();
       next.focus();
     }
     spaceForTray();
@@ -914,7 +990,12 @@
     const t = ev.target.closest('button, [data-close]');
     if (!t) return;
     const a = (name) => t.getAttribute(name);
-    if (a('data-filter')) { prefs.filter = a('data-filter'); changed(); }
+    if (a('data-mode')) {
+      // One history entry per switch, so Back returns to the other mode.
+      const next = a('data-mode');
+      if (next !== mode) { try { history.pushState({ gw2Mode: next }, '', next === 'market' ? '#market' : location.pathname + location.search); } catch (e) { /* no history here: the switch still works */ } }
+      setMode(next);
+    } else if (a('data-filter')) { prefs.filter = a('data-filter'); changed(); }
     else if (a('data-region')) { prefs.regions = toggleIn(prefs.regions, a('data-region')); changed(); }
     else if (a('data-star')) { prefs.starred = toggleIn(prefs.starred, a('data-star')); changed(); }
     else if (a('data-hide')) {

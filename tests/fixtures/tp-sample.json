@@ -1,0 +1,926 @@
+{
+ "note": "Real answers from api.guildwars2.com on 2026-11-15 between 12:27 and 12:45 UTC (Phase A snapshot), cut to a few items for offline browser checks. Not current prices.",
+ "prices": [
+  {
+   "id": 8935,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 359,
+    "unit_price": 782
+   },
+   "sells": {
+    "quantity": 0,
+    "unit_price": 0
+   }
+  },
+  {
+   "id": 9360,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 2366,
+    "unit_price": 596
+   },
+   "sells": {
+    "quantity": 0,
+    "unit_price": 0
+   }
+  },
+  {
+   "id": 9590,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 300,
+    "unit_price": 16607
+   },
+   "sells": {
+    "quantity": 0,
+    "unit_price": 0
+   }
+  },
+  {
+   "id": 9775,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 28,
+    "unit_price": 12014
+   },
+   "sells": {
+    "quantity": 0,
+    "unit_price": 0
+   }
+  },
+  {
+   "id": 19701,
+   "whitelisted": true,
+   "buys": {
+    "quantity": 257132,
+    "unit_price": 104
+   },
+   "sells": {
+    "quantity": 1369419,
+    "unit_price": 120
+   }
+  },
+  {
+   "id": 19712,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 37342,
+    "unit_price": 282
+   },
+   "sells": {
+    "quantity": 361996,
+    "unit_price": 315
+   }
+  },
+  {
+   "id": 19721,
+   "whitelisted": true,
+   "buys": {
+    "quantity": 391900,
+    "unit_price": 1710
+   },
+   "sells": {
+    "quantity": 2219204,
+    "unit_price": 1910
+   }
+  },
+  {
+   "id": 19976,
+   "whitelisted": true,
+   "buys": {
+    "quantity": 10199915,
+    "unit_price": 20904
+   },
+   "sells": {
+    "quantity": 103658,
+    "unit_price": 21462
+   }
+  },
+  {
+   "id": 24277,
+   "whitelisted": true,
+   "buys": {
+    "quantity": 145617,
+    "unit_price": 1089
+   },
+   "sells": {
+    "quantity": 608105,
+    "unit_price": 1187
+   }
+  },
+  {
+   "id": 24295,
+   "whitelisted": true,
+   "buys": {
+    "quantity": 55350,
+    "unit_price": 2023
+   },
+   "sells": {
+    "quantity": 246194,
+    "unit_price": 2140
+   }
+  },
+  {
+   "id": 24341,
+   "whitelisted": true,
+   "buys": {
+    "quantity": 1700345,
+    "unit_price": 37
+   },
+   "sells": {
+    "quantity": 4628454,
+    "unit_price": 40
+   }
+  },
+  {
+   "id": 24351,
+   "whitelisted": true,
+   "buys": {
+    "quantity": 68837,
+    "unit_price": 1875
+   },
+   "sells": {
+    "quantity": 174166,
+    "unit_price": 2080
+   }
+  },
+  {
+   "id": 24357,
+   "whitelisted": true,
+   "buys": {
+    "quantity": 48359,
+    "unit_price": 1437
+   },
+   "sells": {
+    "quantity": 216273,
+    "unit_price": 1741
+   }
+  },
+  {
+   "id": 24358,
+   "whitelisted": true,
+   "buys": {
+    "quantity": 53771,
+    "unit_price": 1514
+   },
+   "sells": {
+    "quantity": 130313,
+    "unit_price": 1739
+   }
+  },
+  {
+   "id": 26084,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 0,
+    "unit_price": 0
+   },
+   "sells": {
+    "quantity": 594,
+    "unit_price": 198
+   }
+  },
+  {
+   "id": 26316,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 0,
+    "unit_price": 0
+   },
+   "sells": {
+    "quantity": 351,
+    "unit_price": 89
+   }
+  },
+  {
+   "id": 26322,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 0,
+    "unit_price": 0
+   },
+   "sells": {
+    "quantity": 991,
+    "unit_price": 77
+   }
+  },
+  {
+   "id": 26332,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 0,
+    "unit_price": 0
+   },
+   "sells": {
+    "quantity": 1002,
+    "unit_price": 80
+   }
+  },
+  {
+   "id": 44921,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 94,
+    "unit_price": 179985
+   },
+   "sells": {
+    "quantity": 65,
+    "unit_price": 339895
+   }
+  },
+  {
+   "id": 44973,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 488,
+    "unit_price": 3669
+   },
+   "sells": {
+    "quantity": 692,
+    "unit_price": 4657
+   }
+  },
+  {
+   "id": 68063,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 23369,
+    "unit_price": 10560
+   },
+   "sells": {
+    "quantity": 52057,
+    "unit_price": 10798
+   }
+  },
+  {
+   "id": 72119,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 243,
+    "unit_price": 10012
+   },
+   "sells": {
+    "quantity": 441,
+    "unit_price": 19680
+   }
+  },
+  {
+   "id": 83008,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 105220,
+    "unit_price": 1587
+   },
+   "sells": {
+    "quantity": 585604,
+    "unit_price": 1650
+   }
+  },
+  {
+   "id": 87515,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 969,
+    "unit_price": 165012
+   },
+   "sells": {
+    "quantity": 142,
+    "unit_price": 269999
+   }
+  },
+  {
+   "id": 98002,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 2325,
+    "unit_price": 14500202
+   },
+   "sells": {
+    "quantity": 50,
+    "unit_price": 16800000
+   }
+  },
+  {
+   "id": 99389,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 134,
+    "unit_price": 13784
+   },
+   "sells": {
+    "quantity": 175,
+    "unit_price": 19999
+   }
+  },
+  {
+   "id": 110050,
+   "whitelisted": false,
+   "buys": {
+    "quantity": 23,
+    "unit_price": 2610001
+   },
+   "sells": {
+    "quantity": 7,
+    "unit_price": 7500000
+   }
+  }
+ ],
+ "items": [
+  {
+   "id": 8935,
+   "name": "Leather Bag",
+   "description": "12 Slots",
+   "type": "Bag",
+   "level": 0,
+   "rarity": "Basic",
+   "vendor_value": 8,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgHnIgAA]",
+   "icon": "https://render.guildwars2.com/file/0CD55FE36D39E30AA94A96030D73EF22250E0E26/63172.png"
+  },
+  {
+   "id": 9360,
+   "name": "Light Icy Bag",
+   "description": "Double-click to open.",
+   "type": "Container",
+   "level": 0,
+   "rarity": "Basic",
+   "vendor_value": 15,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgGQJAAA]",
+   "icon": "https://render.guildwars2.com/file/EBC5CEC199D1E51B02756A1C796A65E9D24F04B5/63171.png",
+   "details": {
+    "type": "Default"
+   }
+  },
+  {
+   "id": 9590,
+   "name": "18 Slot Oiled Box",
+   "description": "18 Slots. If possible, junk items will fill this box before other empty spaces. The contents of this box will not move when inventory is sorted.",
+   "type": "Bag",
+   "level": 0,
+   "rarity": "Fine",
+   "vendor_value": 54,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgF2JQAA]",
+   "icon": "https://render.guildwars2.com/file/F0B6C83B234D26282E3992AED6E24A17059DCE39/433592.png"
+  },
+  {
+   "id": 9775,
+   "name": "Recipe: Pot of Clam Chowder",
+   "description": "Recipe Unlock: Double-click to unlock the Chef recipe for Pot of Clam Chowder.",
+   "type": "Consumable",
+   "level": 25,
+   "rarity": "Masterwork",
+   "vendor_value": 31,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgEvJgAA]",
+   "icon": "https://render.guildwars2.com/file/E3B060A26B431EC37DEB03B8746359EC142E1B0D/849306.png",
+   "details": {
+    "type": "Unlock"
+   }
+  },
+  {
+   "id": 19701,
+   "name": "Orichalcum Ore",
+   "description": "Refine into Ingots.",
+   "type": "CraftingMaterial",
+   "level": 0,
+   "rarity": "Basic",
+   "vendor_value": 8,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgH1TAAA]",
+   "icon": "https://render.guildwars2.com/file/A6E2C82153BA684E2D05D3FCA09F3E02431366ED/220461.png"
+  },
+  {
+   "id": 19712,
+   "name": "Ancient Wood Plank",
+   "description": "Refined from Logs.",
+   "type": "CraftingMaterial",
+   "level": 0,
+   "rarity": "Basic",
+   "vendor_value": 8,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgEATQAA]",
+   "icon": "https://render.guildwars2.com/file/4A0C6F64BD7AD446ADCA0177C052D732582EE90A/220464.png"
+  },
+  {
+   "id": 19721,
+   "name": "Glob of Ectoplasm",
+   "description": "Salvage Item",
+   "type": "Trophy",
+   "level": 0,
+   "rarity": "Exotic",
+   "vendor_value": 256,
+   "flags": [],
+   "chat_link": "[&AgEJTQAA]",
+   "icon": "https://render.guildwars2.com/file/18CE5D78317265000CF3C23ED76AB3CEE86BA60E/65941.png"
+  },
+  {
+   "id": 19976,
+   "name": "Mystic Coin",
+   "description": "Coins are used to create high-level weapons at the Mystic Forge in Lion's Arch. \nPart of Zommoros's favorite trades.",
+   "type": "Trophy",
+   "level": 0,
+   "rarity": "Rare",
+   "vendor_value": 50,
+   "flags": [
+    "NoSalvage",
+    "NoSell"
+   ],
+   "chat_link": "[&AgEITgAA]",
+   "icon": "https://render.guildwars2.com/file/AB0317DF5B0E1BA47436A5420248660765154C08/62864.png"
+  },
+  {
+   "id": 24277,
+   "name": "Pile of Crystalline Dust",
+   "description": "",
+   "type": "CraftingMaterial",
+   "level": 0,
+   "rarity": "Rare",
+   "vendor_value": 37,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgHVXgAA]",
+   "icon": "https://render.guildwars2.com/file/080D00670558CD9E580D5662030394B2206E92A6/434537.png"
+  },
+  {
+   "id": 24295,
+   "name": "Vial of Powerful Blood",
+   "description": "",
+   "type": "CraftingMaterial",
+   "level": 0,
+   "rarity": "Rare",
+   "vendor_value": 37,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgHnXgAA]",
+   "icon": "https://render.guildwars2.com/file/1A930A6A7B5B01EAB4CB36E79014C12B500BF6B3/66950.png"
+  },
+  {
+   "id": 24341,
+   "name": "Large Bone",
+   "description": "",
+   "type": "CraftingMaterial",
+   "level": 0,
+   "rarity": "Fine",
+   "vendor_value": 11,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgEVXwAA]",
+   "icon": "https://render.guildwars2.com/file/13F077BA5D5C6324CFCB0A2E39050F24A441190B/66987.png"
+  },
+  {
+   "id": 24351,
+   "name": "Vicious Claw",
+   "description": "",
+   "type": "CraftingMaterial",
+   "level": 0,
+   "rarity": "Rare",
+   "vendor_value": 37,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgEfXwAA]",
+   "icon": "https://render.guildwars2.com/file/043E2BBA270F381870F1B45E7C09C098CAFE3D14/66996.png"
+  },
+  {
+   "id": 24357,
+   "name": "Vicious Fang",
+   "description": "",
+   "type": "CraftingMaterial",
+   "level": 0,
+   "rarity": "Rare",
+   "vendor_value": 37,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgElXwAA]",
+   "icon": "https://render.guildwars2.com/file/F2050EE1A7A43EDCDCB1E971FDA608AD0566E4DA/66998.png"
+  },
+  {
+   "id": 24358,
+   "name": "Ancient Bone",
+   "description": "",
+   "type": "CraftingMaterial",
+   "level": 0,
+   "rarity": "Rare",
+   "vendor_value": 37,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgEmXwAA]",
+   "icon": "https://render.guildwars2.com/file/0EE45FBB1E1A004600E9BAA7097830B2DE08587D/66828.png"
+  },
+  {
+   "id": 26084,
+   "name": "Rampager's Iron Greatsword of Serpent Slaying",
+   "description": "",
+   "type": "Weapon",
+   "level": 63,
+   "rarity": "Masterwork",
+   "vendor_value": 162,
+   "flags": [
+    "SoulBindOnUse"
+   ],
+   "chat_link": "[&AgHkZQAA]",
+   "icon": "https://render.guildwars2.com/file/1EA00FDAAD23FD1B1B9C4BD6E36EB30A43E21D06/64138.png",
+   "details": {
+    "type": "Greatsword"
+   }
+  },
+  {
+   "id": 26316,
+   "name": "Honed Iron Sword",
+   "description": "",
+   "type": "Weapon",
+   "level": 57,
+   "rarity": "Fine",
+   "vendor_value": 49,
+   "flags": [],
+   "chat_link": "[&AgHMZgAA]",
+   "icon": "https://render.guildwars2.com/file/D10679012504F6AD5829D1DF9F36303FE2EB46B4/64343.png",
+   "details": {
+    "type": "Sword"
+   }
+  },
+  {
+   "id": 26322,
+   "name": "Hearty Iron Sword",
+   "description": "",
+   "type": "Weapon",
+   "level": 63,
+   "rarity": "Fine",
+   "vendor_value": 54,
+   "flags": [],
+   "chat_link": "[&AgHSZgAA]",
+   "icon": "https://render.guildwars2.com/file/D10679012504F6AD5829D1DF9F36303FE2EB46B4/64343.png",
+   "details": {
+    "type": "Sword"
+   }
+  },
+  {
+   "id": 26332,
+   "name": "Berserker's Iron Sword",
+   "description": "",
+   "type": "Weapon",
+   "level": 66,
+   "rarity": "Fine",
+   "vendor_value": 56,
+   "flags": [],
+   "chat_link": "[&AgHcZgAA]",
+   "icon": "https://render.guildwars2.com/file/D10679012504F6AD5829D1DF9F36303FE2EB46B4/64343.png",
+   "details": {
+    "type": "Sword"
+   }
+  },
+  {
+   "id": 44921,
+   "name": "Lovestruck Protector Skin",
+   "description": "Double-click to apply this look to any other shield.",
+   "type": "Consumable",
+   "level": 0,
+   "rarity": "Rare",
+   "vendor_value": 0,
+   "flags": [
+    "NoMysticForge",
+    "NoSalvage",
+    "NoSell",
+    "DeleteWarning"
+   ],
+   "chat_link": "[&AgF5rwAA]",
+   "icon": "https://render.guildwars2.com/file/695E309EF9AA762F04CAA9D10DE85D0FB180EBBC/729612.png",
+   "details": {
+    "type": "Transmutation"
+   }
+  },
+  {
+   "id": 44973,
+   "name": "Levvi's Detector",
+   "description": "",
+   "type": "Weapon",
+   "level": 80,
+   "rarity": "Exotic",
+   "vendor_value": 396,
+   "flags": [
+    "HideSuffix",
+    "SoulBindOnUse"
+   ],
+   "chat_link": "[&AgGtrwAA]",
+   "icon": "https://render.guildwars2.com/file/1A9B1052E0AE3278263C0A360CF210EE51653008/619777.png",
+   "details": {
+    "type": "Rifle"
+   }
+  },
+  {
+   "id": 68063,
+   "name": "Amalgamated Gemstone",
+   "description": "Used in the Mystic Forge to create the Eternal Sands focus and to make Polish, used in precursor crafting.",
+   "type": "Trophy",
+   "level": 0,
+   "rarity": "Exotic",
+   "vendor_value": 200,
+   "flags": [
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgHfCQEA]",
+   "icon": "https://render.guildwars2.com/file/35BC2D35511C806348730A5E63152B2E260D4A5C/919363.png"
+  },
+  {
+   "id": 72119,
+   "name": "Berserker's Ley Guard's Protector",
+   "description": "",
+   "type": "Weapon",
+   "level": 80,
+   "rarity": "Exotic",
+   "vendor_value": 264,
+   "flags": [
+    "SoulBindOnUse"
+   ],
+   "chat_link": "[&AgG3GQEA]",
+   "icon": "https://render.guildwars2.com/file/398006F9C3071526FD431916E20FC69CB40343BF/1206143.png",
+   "details": {
+    "type": "Shield"
+   }
+  },
+  {
+   "id": 83008,
+   "name": "Piece of Rare Unidentified Gear",
+   "description": "Salvage for a reward of crafting materials, or double-click to identify and receive an item.",
+   "type": "Container",
+   "level": 0,
+   "rarity": "Rare",
+   "vendor_value": 206,
+   "flags": [],
+   "chat_link": "[&AgFARAEA]",
+   "icon": "https://render.guildwars2.com/file/EF63A10BD2317CECCEA63A3B7E6555550B414C4E/1766399.png",
+   "details": {
+    "type": "Default"
+   }
+  },
+  {
+   "id": 87515,
+   "name": "Glyph of the Prospector (Unused)",
+   "description": "Double-click to bind this glyph to your account.\n\nGrants a 33% chance to receive bonus ores while gathering in addition to your gathering results. Material types are determined by your character level and location in the world.",
+   "type": "Container",
+   "level": 0,
+   "rarity": "Rare",
+   "vendor_value": 0,
+   "flags": [
+    "NoMysticForge",
+    "NoSalvage",
+    "NoSell",
+    "NoUnderwater",
+    "DeleteWarning"
+   ],
+   "chat_link": "[&AgHbVQEA]",
+   "icon": "https://render.guildwars2.com/file/4EDD0117B4F558139C079FD2B14E9534E7AB28D2/1972350.png",
+   "details": {
+    "type": "Default"
+   }
+  },
+  {
+   "id": 98002,
+   "name": "Glob of Dragonvoid Aether",
+   "description": "An exceedingly rare item acquired by defeating a powerful foe. Double-click to select an account-bound Echo of the Dragonvoid infusion.",
+   "type": "Container",
+   "level": 0,
+   "rarity": "Exotic",
+   "vendor_value": 0,
+   "flags": [
+    "NoMysticForge",
+    "NoSalvage"
+   ],
+   "chat_link": "[&AgHSfgEA]",
+   "icon": "https://render.guildwars2.com/file/5059A1B6C33560C273BA4C7252CE05BC00C9B57E/2672259.png",
+   "details": {
+    "type": "Default"
+   }
+  },
+  {
+   "id": 99389,
+   "name": "Xunlai Aether Detector",
+   "description": "",
+   "type": "Weapon",
+   "level": 80,
+   "rarity": "Exotic",
+   "vendor_value": 264,
+   "flags": [
+    "SoulBindOnUse"
+   ],
+   "chat_link": "[&AgE9hAEA]",
+   "icon": "https://render.guildwars2.com/file/070E2D2394FE4255325008BC804C785D4BDFA221/3004836.png",
+   "details": {
+    "type": "Focus"
+   }
+  },
+  {
+   "id": 110050,
+   "name": "Mini Director Vloxx",
+   "description": "Double-click to summon this mini to follow you around. Only one mini may be in use at a time.",
+   "type": "MiniPet",
+   "level": 0,
+   "rarity": "Exotic",
+   "vendor_value": 50,
+   "flags": [
+    "NoMysticForge",
+    "NoSalvage",
+    "NoSell"
+   ],
+   "chat_link": "[&AgHirQEA]",
+   "icon": "https://render.guildwars2.com/file/D5EE1DFB2A5375B2912211D6F954B91247BAB604/3805904.png"
+  }
+ ],
+ "listings": [
+  {
+   "id": 19721,
+   "buys": [
+    {
+     "listings": 1,
+     "unit_price": 1706,
+     "quantity": 133
+    },
+    {
+     "listings": 1,
+     "unit_price": 1704,
+     "quantity": 247
+    },
+    {
+     "listings": 2,
+     "unit_price": 1703,
+     "quantity": 313
+    },
+    {
+     "listings": 8,
+     "unit_price": 1701,
+     "quantity": 1979
+    },
+    {
+     "listings": 2,
+     "unit_price": 1700,
+     "quantity": 500
+    },
+    {
+     "listings": 13,
+     "unit_price": 1694,
+     "quantity": 3250
+    },
+    {
+     "listings": 1,
+     "unit_price": 1693,
+     "quantity": 82
+    },
+    {
+     "listings": 2,
+     "unit_price": 1692,
+     "quantity": 281
+    }
+   ],
+   "sells": [
+    {
+     "listings": 2,
+     "unit_price": 1895,
+     "quantity": 231
+    },
+    {
+     "listings": 2,
+     "unit_price": 1896,
+     "quantity": 100
+    },
+    {
+     "listings": 1,
+     "unit_price": 1897,
+     "quantity": 227
+    },
+    {
+     "listings": 5,
+     "unit_price": 1898,
+     "quantity": 52
+    },
+    {
+     "listings": 7,
+     "unit_price": 1899,
+     "quantity": 81
+    },
+    {
+     "listings": 5,
+     "unit_price": 1914,
+     "quantity": 510
+    },
+    {
+     "listings": 3,
+     "unit_price": 1915,
+     "quantity": 261
+    },
+    {
+     "listings": 1,
+     "unit_price": 1919,
+     "quantity": 2
+    }
+   ]
+  },
+  {
+   "id": 24277,
+   "buys": [
+    {
+     "listings": 1,
+     "unit_price": 1089,
+     "quantity": 69
+    },
+    {
+     "listings": 1,
+     "unit_price": 1088,
+     "quantity": 44
+    },
+    {
+     "listings": 3,
+     "unit_price": 1085,
+     "quantity": 198
+    },
+    {
+     "listings": 1,
+     "unit_price": 1084,
+     "quantity": 168
+    },
+    {
+     "listings": 5,
+     "unit_price": 1038,
+     "quantity": 765
+    },
+    {
+     "listings": 2,
+     "unit_price": 1034,
+     "quantity": 493
+    },
+    {
+     "listings": 4,
+     "unit_price": 1033,
+     "quantity": 784
+    },
+    {
+     "listings": 4,
+     "unit_price": 1032,
+     "quantity": 1000
+    }
+   ],
+   "sells": [
+    {
+     "listings": 4,
+     "unit_price": 1187,
+     "quantity": 392
+    },
+    {
+     "listings": 9,
+     "unit_price": 1188,
+     "quantity": 1698
+    },
+    {
+     "listings": 3,
+     "unit_price": 1189,
+     "quantity": 43
+    },
+    {
+     "listings": 1,
+     "unit_price": 1190,
+     "quantity": 250
+    },
+    {
+     "listings": 10,
+     "unit_price": 1192,
+     "quantity": 668
+    },
+    {
+     "listings": 5,
+     "unit_price": 1193,
+     "quantity": 185
+    },
+    {
+     "listings": 9,
+     "unit_price": 1195,
+     "quantity": 1530
+    },
+    {
+     "listings": 7,
+     "unit_price": 1196,
+     "quantity": 154
+    }
+   ]
+  }
+ ]
+}

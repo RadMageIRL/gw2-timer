@@ -61,7 +61,7 @@ const check = (name, fn) => checks.push({ name, fn });
  * loads (not again on a reload); `init`, scripts run before the page's own in every load; and `clock`:
  * 'fail' makes the page's clock check fail at once (unavailable), 'hold' leaves it unanswered.
  */
-async function open({ at, offset, tz = 'America/Chicago', width = 1280, height = 900, mobile = false, news = { mode: 'fixture' }, url = BASE, keepStorage = false, seed = null, init = [], clock = null } = {}) {
+async function open({ at, offset, tz = 'America/Chicago', width = 1280, height = 900, mobile = false, news = { mode: 'fixture' }, url = BASE, keepStorage = false, seed = null, init = [], clock = null, api = null, local = null, wait = true } = {}) {
   const page = await chrome.newPage();
   const origin = /^https?:/.test(url) ? new URL(url).origin : BASE.slice(0, -1);
   if (!keepStorage) await page.send('Storage.clearDataForOrigin', { origin, storageTypes: 'all' });
@@ -74,9 +74,24 @@ async function open({ at, offset, tz = 'America/Chicago', width = 1280, height =
     await page.beforeLoad(`try { if (!sessionStorage.getItem('gw2-test-seeded')) { ${writes} sessionStorage.setItem('gw2-test-seeded', '1'); } } catch (e) {}`);
   }
   for (const source of init) await page.beforeLoad(source);
-  page.newsRequests = 0; page.clockRequests = 0;
-  await page.send('Fetch.enable', { patterns: [{ urlPattern: 'https://www.guildwars2.com/*' }, ...(clock ? [{ urlPattern: '*clock=*' }] : [])] });
+  page.newsRequests = 0; page.clockRequests = 0; page.apiRequests = []; page.iconRequests = 0;
+  // Since v0.4.0 every tab also answers ArenaNet's API and its icon server itself (the Trading Post): with `api`,
+  // a handler of tests/smoke-market.mjs; without one, any API request is recorded and refused, so a check that
+  // never opens the Trading Post can prove it asked the API for nothing.
+  await page.send('Fetch.enable', { patterns: [{ urlPattern: 'https://www.guildwars2.com/*' }, { urlPattern: 'https://api.guildwars2.com/*' }, { urlPattern: 'https://render.guildwars2.com/*' }, ...(clock ? [{ urlPattern: '*clock=*' }] : []), ...(local ? local.patterns.map((urlPattern) => ({ urlPattern })) : [])] });
   page.on('Fetch.requestPaused', async (p) => {
+    // `local`: this site's own files a check answers itself (the Trading Post's code and item list).
+    if (local && local.patterns.some((x) => p.request.url.includes(x.split('*').join('')))) { await local.handler(page, p); return; }
+    if (p.request.url.startsWith('https://api.guildwars2.com/')) {
+      page.apiRequests.push(p.request.url);
+      if (api) await api(page, p); else await page.send('Fetch.failRequest', { requestId: p.requestId, errorReason: 'BlockedByClient' });
+      return;
+    }
+    if (p.request.url.startsWith('https://render.guildwars2.com/')) {
+      page.iconRequests++;
+      await page.send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: 200, body: ICON_PNG, responseHeaders: [{ name: 'Content-Type', value: 'image/png' }, { name: 'Access-Control-Allow-Origin', value: '*' }] });
+      return;
+    }
     if (/[?&]clock=/.test(p.request.url)) {
       page.clockRequests++;
       if (clock === 'fail') await page.send('Fetch.failRequest', { requestId: p.requestId, errorReason: 'Failed' });
@@ -94,9 +109,11 @@ async function open({ at, offset, tz = 'America/Chicago', width = 1280, height =
     }
   });
   await page.goto(url);
-  await page.waitFor("document.querySelectorAll('#next-list .row, #next-empty:not([hidden])').length > 0");
+  if (wait) await page.waitFor("document.querySelectorAll('#next-list .row, #next-empty:not([hidden])').length > 0");
   return page;
 }
+// A 1 x 1 PNG for every item icon (render.guildwars2.com), so no check depends on ArenaNet's servers.
+const ICON_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const text = (page, sel) => page.eval(`(document.querySelector(${JSON.stringify(sel)}) || {}).textContent || ''`);
 const rows = (page) => page.eval("[...document.querySelectorAll('#next-list .row')].map((r) => ({ id: r.dataset.id, start: Number(r.dataset.start), t: r.querySelector('.t').textContent, utc: (r.querySelector('.utc') || {}).textContent || '' }))");
 const cards = (page) => page.eval("[...document.querySelectorAll('#now-list .event')].map((c) => c.dataset.id)");
@@ -325,6 +342,9 @@ check('news shows headlines as plain text with dates, names ArenaNet, says it co
     assert.match(await text(page, '#news-note'), /News is off/);
     assert.deepEqual(await moreState(page), [true, 'Show all 5', 'false'], 'no Show all while news is off');
     const before = page.newsRequests;
+    // No cached copy to hide behind: a page that loaded news while it is off would have to ask for it. (A fresh
+    // cache made this depend on how fast two loads ran: v0.4.0 Phase C, a negative control missed once.)
+    await page.eval("localStorage.removeItem('gw2-timer:v1:news')");
     await page.reload();
     await page.waitFor("document.querySelectorAll('#next-list .row').length > 0");
     await sleep(500);
@@ -501,13 +521,29 @@ check('page order: clocks and resets, news, filters, Scheduled now, Coming up, S
   } finally { await page.close(); }
 });
 
+// All three headlines are on the first screen at these sizes. At 360 x 640, the smallest phone screen checked, the
+// news heading and the first headline must be on it; with wide fonts (Linux's DejaVu and Liberation, as on CI) the
+// other two may end below it, and must then be reached by scrolling the page, whole and uncovered (Dos, v0.4.0
+// release hardening). "Uncovered": the point in the middle of each line's text belongs to that line.
 check('the news headlines are on screen without scrolling, on a desktop and on a phone', async () => {
-  for (const [width, height, mobile] of [[1280, 900, false], [1366, 768, false], [390, 844, true], [360, 640, true]]) {
+  const seen = `((sel) => { const el = document.querySelector(sel), r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + Math.min(24, r.width / 2), r.top + r.height / 2);
+    return { top: r.top, bottom: r.bottom, height: innerHeight, hit: !!hit && (el === hit || el.contains(hit)), whole: el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1 }; })`;
+  const onScreen = (v) => v.top >= 0 && v.bottom <= v.height && v.hit && v.whole;
+  for (const [width, height, mobile, all] of [[1280, 900, false, true], [1366, 768, false, true], [390, 844, true, true], [360, 640, true, false]]) {
     const page = await open({ at: utc('2026-10-25T23:50:00Z'), width, height, mobile });
     try {
       await page.waitFor("document.querySelectorAll('#news-list li').length === 3");
-      const b = await page.eval("[document.querySelector('#news-list li:last-child').getBoundingClientRect().bottom, innerHeight, scrollY]");
-      assert.ok(b[0] <= b[1] && b[2] === 0, `${width}x${height}: last headline ends at ${b[0]} of ${b[1]}`);
+      const first = await page.eval(`[scrollY, ${seen}('#news-title'), ${seen}('#news-list li:first-child a'), ${seen}('#news-list li:last-child a')]`);
+      assert.equal(first[0], 0, `${width}x${height}: the page opened scrolled`);
+      const must = all ? [['the news heading', first[1]], ['the first headline', first[2]], ['the last headline', first[3]]] : [['the news heading', first[1]], ['the first headline', first[2]]];
+      for (const [what, v] of must) assert.ok(onScreen(v), `${width}x${height}: ${what} is not whole and uncovered on the first screen: ${JSON.stringify(v)}`);
+      if (!all) {
+        // The other headlines: scroll the page (not an element) until the last one's bottom is on screen.
+        const after = await page.eval(`(() => { const r = document.querySelector('#news-list li:last-child a').getBoundingClientRect(); if (r.bottom > innerHeight) scrollBy(0, Math.ceil(r.bottom - innerHeight) + 8); return [${seen}('#news-list li:nth-child(2) a'), ${seen}('#news-list li:last-child a')]; })()`);
+        for (const [what, v] of [['the second headline', after[0]], ['the last headline', after[1]]]) assert.ok(onScreen(v), `${width}x${height}: ${what} is not whole and uncovered after scrolling: ${JSON.stringify(v)}`);
+        console.log(`     ${width}x${height}: first screen ends at ${height}; the last headline ends at ${first[3].bottom.toFixed(1)} (${first[3].bottom <= height ? 'on it' : 'reached by scrolling'})`);
+      }
     } finally { await page.close(); }
   }
 });
@@ -2552,6 +2588,11 @@ check('desktop screenshot for visual review', async () => {
     await page.screenshot(join(SHOTS, 'desktop-light.png'), { height: 1400 });
   } finally { await page.close(); }
 });
+
+// ---- v0.4.0 Phase C: the two modes and the Trading Post (tests/smoke-market.mjs) ----
+
+const { marketChecks } = await import('./smoke-market.mjs');
+marketChecks({ check, open, click, text, key, settle, sleep, utc, unexpected, lowContrast, BASE, ROOT, DIR, SHOTS, VERSION, reminders: { RSET, ON, PREFS, LISTEN, BLOCK_STORAGE, FAIL_WRITES, trayState } });
 
 // ---- Run ----
 

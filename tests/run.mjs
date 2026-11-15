@@ -736,9 +736,13 @@ test('the description, footer and About say Unofficial fansite, and the ArenaNet
   assert.ok(file('README.md').includes(notice));
   assert.ok(file('NOTICE').includes(notice));
 });
-test('the CSP allows scripts and styles from this site only, and connections to this site and guildwars2.com', () => {
+test('the CSP allows scripts and styles from this site only, connections to this site, guildwars2.com and the API, and images from ArenaNet\'s icon server', () => {
   const csp = /http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html)[1];
-  assert.equal(csp, "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://www.guildwars2.com; base-uri 'none'; form-action 'none'");
+  // v0.4.0 Phase C added exactly two sources, for the Trading Post only: api.guildwars2.com (prices, item records)
+  // and render.guildwars2.com (item icons). The timer itself asks neither (tests/smoke-market.mjs checks it).
+  assert.equal(csp, "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://render.guildwars2.com; connect-src 'self' https://www.guildwars2.com https://api.guildwars2.com; base-uri 'none'; form-action 'none'");
+  const before = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://www.guildwars2.com; base-uri 'none'; form-action 'none'";
+  assert.equal(csp.replace(' https://render.guildwars2.com', '').replace(' https://api.guildwars2.com', ''), before, 'v0.3.0 plus those two, nothing else');
   const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>/g)].map((m) => m[1].trim());
   assert.deepEqual(inline, ['type="application/ld+json"']);
   assert.ok(!/\sstyle="/.test(html) && !/\son[a-z]+="/.test(html), 'no inline style or handler attributes');
@@ -893,7 +897,7 @@ test('build-events --check refuses a page whose event index is stale, and the bu
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('the only network calls in the code are the news feed and the same-origin clock check', () => {
+test('the only network calls in the code are the news feed, the same-origin clock check, and the Trading Post\'s list and API queue', () => {
   const calls = [];
   for (const f of readdirSync(join(ROOT, 'js'))) {
     const src = file(`js/${f}`);
@@ -901,9 +905,26 @@ test('the only network calls in the code are the news feed and the same-origin c
     assert.ok(!/XMLHttpRequest|WebSocket|sendBeacon|EventSource|import\(/.test(src), f);
     const urls = [...src.matchAll(/https?:\/\/[a-z0-9.-]+/gi)].map((m) => m[0]);
     // radmagelabs.com is the page's own canonical address, which js/link.js writes into links to an event; nothing is requested from it.
-    for (const u of urls) assert.ok(['https://www.guildwars2.com', 'https://wiki.guildwars2.com', 'https://radmagelabs.com'].includes(u), `${f}: ${u}`);
+    // api.guildwars2.com only in js/api.js, and render.guildwars2.com (icons) only in js/market.js, which checks every icon address against it.
+    const allowed = { 'api.js': ['https://api.guildwars2.com'], 'market.js': ['https://render.guildwars2.com', 'https://wiki.guildwars2.com'] }[f] || [];
+    for (const u of urls) assert.ok(['https://www.guildwars2.com', 'https://wiki.guildwars2.com', 'https://radmagelabs.com', ...allowed].includes(u), `${f}: ${u}`);
   }
-  assert.deepEqual(calls.sort(), ['app.js: News.FEED_URL', 'app.js: url']);
+  // app.js: the news feed and the clock check. market.js: the item list (same origin) and the API queue's fetch. api.js: its one fetch.
+  assert.deepEqual(calls.sort(), ['api.js: job.url', 'app.js: News.FEED_URL', 'app.js: url', "market.js: LIST_URL + (version || ''", 'market.js: u']);
+  const api = file('js/api.js');
+  assert.ok(api.includes("o.fetch(job.url, { method: 'GET', credentials: 'omit', referrerPolicy: 'no-referrer', signal: ctl ? ctl.signal : undefined })"), 'a plain GET: no cookies, no referrer, no header');
+  assert.ok(!/headers\s*:|access_token|Authorization/.test(api), 'no header and no key');
+  assert.equal(file('js/market.js').split('Api.createClient(').length - 1, 1, 'one queue for every Trading Post request');
+});
+test('the timer asks the API for nothing: app.js names no ArenaNet API, and loads the Trading Post code only when it is opened', () => {
+  const app = file('js/app.js');
+  assert.ok(!/api\.guildwars2|render\.guildwars2|tp-items/.test(app), 'no API, icon or item list address in app.js');
+  assert.ok(app.includes("const MARKET_FILES = [['js/money.js', 'GW2Money'], ['js/catalog.js', 'GW2Catalog'], ['js/api.js', 'GW2Api'], ['js/market.js', 'GW2Market']];"));
+  assert.equal(app.split('loadMarket()').length - 1, 4, 'the switch, the address and Try again: the only calls');
+  for (const f of ['js/money.js', 'js/catalog.js', 'js/api.js', 'js/market.js', 'data/tp-items.json']) {
+    assert.ok(!new RegExp(`(src|href)="${f}`).test(html), `index.html does not load ${f}`);
+    assert.ok(SITE_FILES.includes(f), `${f} is published`);
+  }
 });
 test('no innerHTML, outerHTML, insertAdjacentHTML, document.write or eval in the page code', () => {
   for (const f of readdirSync(join(ROOT, 'js'))) assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function/.test(file(`js/${f}`)), f);
@@ -953,7 +974,8 @@ for (const tz of ZONES) {
 
 const moduleCounts = [];
 // The calendar module too (v0.4.0 Phase B): its files are written in UTC, so every zone must give the same bytes.
-for (const [name, zones] of [['search', [null]], ['link', [null]], ['reminders', ZONES], ['ics', ZONES]]) {
+// The Trading Post modules (v0.4.0 Phase C): money, the item list and its search, the API queue, and market.js's pure parts.
+for (const [name, zones] of [['search', [null]], ['link', [null]], ['reminders', ZONES], ['ics', ZONES], ['money', [null]], ['catalog', [null]], ['api', [null]], ['market', ZONES]]) {
   for (const tz of zones) {
     test(`js/${name}.js: tests/${name}.mjs passes${tz ? ` in ${tz}` : ''}`, () => {
       const r = spawnSync(process.execPath, [join(ROOT, 'tests', `${name}.mjs`)], { env: tz ? { ...process.env, TZ: tz } : process.env, encoding: 'utf8' });
@@ -964,6 +986,24 @@ for (const [name, zones] of [['search', [null]], ['link', [null]], ['reminders',
     });
   }
 }
+test('the Trading Post saves only favorites (item ids under tp-favorites) and never a price; it writes no other storage', () => {
+  const mk = file('js/market.js');
+  assert.deepEqual([...mk.matchAll(/Store\.write\(storage, ([A-Z_]+)/g)].map((m) => m[1]), ['FAV_KEY']);
+  assert.ok(mk.includes("const FAV_KEY = 'tp-favorites';"));
+  assert.ok(!/localStorage|sessionStorage|indexedDB|document\.cookie|caches\./.test(mk + file('js/api.js') + file('js/catalog.js') + file('js/money.js')), 'no other storage');
+  assert.ok(mk.includes('favs = sanitizeFavorites(Store.read(storage, FAV_KEY), cat.byId);'), 'checked on every read');
+});
+test('the Trading Post says what it cannot know: scope of a sort, estimates after fees, potential not profit, and no price without the API', () => {
+  const at = html.indexOf('<section class="view market-view');
+  assert.ok(at > 0, 'the Trading Post section');
+  const sec = html.slice(at, html.indexOf('</section>', at));
+  for (const said of ['when the API does not answer, no price is shown', 'It is not a profit: an order that is placed has not filled', 'how a fraction of a copper is rounded is not published, so every result after fees is an estimate', 'Prices are never saved']) assert.ok(sec.includes(said), said);
+  const mk = file('js/market.js');
+  for (const said of ['Not a ranking of the whole market.', 'Not a ranking of every match, or of the whole market.', 'Nothing is estimated in its place.', 'A potential margin, not a profit: neither order has filled, and prices move.', 'only if it sells', 'Phase A measured about 142']) assert.ok(mk.includes(said), said);
+  assert.ok(!/\bprofit\b(?!:| for| or|,| \(| unless| when)/i.test(mk.replace(/not a profit/gi, '').replace(/It is not a profit/g, '')), 'profit only ever denied');
+  assert.match(html, /<div class="mode-switch" role="group" aria-label="Mode">\s*<button type="button" class="mode-btn" data-mode="timers" aria-pressed="true" aria-controls="timers-view">Event Timers<\/button>\s*<button type="button" class="mode-btn" data-mode="market" aria-pressed="false" aria-controls="market-view">Trading Post<\/button>/);
+  assert.match(html, /<section class="view market-view" id="market-view" aria-labelledby="market-title" hidden>/, 'the Trading Post starts hidden');
+});
 test('the foundation modules are published with the site and the page loads each: search.js (Phase C), link.js (Phase D), reminders.js (Phase E), and ics.js (v0.4.0 Phase B)', () => {
   const global = (f) => `GW2${f.slice(3, 4).toUpperCase()}${f.slice(4, -3)}`;
   for (const f of ['js/search.js', 'js/link.js', 'js/reminders.js', 'js/ics.js']) {
@@ -1043,17 +1083,30 @@ test('reminders are checked once a tick after the lists are drawn, and delivery 
   assert.ok(app.includes('R.decide(R.due(ctx).filter((it) => !claiming.has(it.id)), mem);'));
   assert.equal(app.split('say(').length - 1, 2, 'one place announces: say() and its one call, in deliver()');
 });
-test('the address changes only for a link to one event: one pushState with the event fragment, and back or replaceState only to take an event fragment out', () => {
-  const app = file('js/app.js');
-  assert.deepEqual([...app.matchAll(/history\.pushState\((.*?)\);/g)].map((m) => m[1]), ["{ gw2Event: r.id }, '', Link.fragment(r.id)"]);
-  assert.deepEqual([...app.matchAll(/history\.replaceState\((.*?)\);/g)].map((m) => m[1]), ["null, '', location.pathname + location.search"]);
+test('the address changes only for a link to one event, a switch of mode, or one item: a pushState each, and back or replaceState only to take a fragment out', () => {
+  const app = file('js/app.js'), mk = file('js/market.js');
+  assert.deepEqual([...app.matchAll(/history\.pushState\((.*?)\);/g)].map((m) => m[1]), ["{ gw2Event: r.id }, '', Link.fragment(r.id)", "{ gw2Mode: next }, '', next === 'market' ? '#market' : location.pathname + location.search"]);
+  assert.deepEqual([...app.matchAll(/history\.replaceState\((.*?)\);/g)].map((m) => m[1]), ["null, '', location.pathname + location.search + (mode === 'market' ? '#market' : '')"]);
+  assert.deepEqual([...mk.matchAll(/history\.pushState\((.*?)\);/g)].map((m) => m[1]), ["{ gw2Item: id }, '', `#market/item/${id}`"]);
+  assert.deepEqual([...mk.matchAll(/history\.replaceState\((.*?)\);/g)].map((m) => m[1]), ["null, '', location.pathname + location.search + '#market'", "null, '', location.pathname + location.search + '#market'"]);
+  assert.equal(mk.split('history.back()').length - 1, 1);
+  assert.ok(mk.includes('if (history.state && history.state.gw2Item === id) history.back();'), 'back only to the entry this page added');
+  assert.ok(!/location\.(href|hash|search|pathname)\s*=(?!=)|location\.(assign|replace)\(|history\.go\(/.test(mk), 'nothing else moves the address');
   assert.equal(app.split('history.back()').length - 1, 1);
   assert.ok(app.includes('if (history.state && history.state.gw2Event === id) history.back(); else dropFragment();'), 'back only to the entry this page added');
   assert.ok(!/location\.(href|hash|search|pathname)\s*=(?!=)|location\.(assign|replace)\(|history\.go\(/.test(app), 'nothing else moves the address');
   // A link names an event and nothing else: Copy link writes Link.make(id), never the current address.
   assert.ok(app.includes('url = Link.make(e.id)') && !/copyText\(location/.test(app));
   // The link's own text never reaches the page: what is shown comes from the dataset or fixed sentences.
-  assert.ok(!/decodeURIComponent|location\.hash\)?\s*[,;)]\s*$|textContent\s*=\s*location/m.test(app.replace(/Link\.parse\(location\.hash, IDS\)/g, '')), 'location.hash is read only through Link.parse');
+  // Since v0.4.0 two more readers, neither of which writes anything of the address into the page: modeOf() (a
+  // fixed pattern, or an element id checked against a strict pattern) and the Trading Post's route().
+  const readers = /Link\.parse\(location\.hash, IDS\)|modeOf\(location\.hash\)|\.route\(location\.hash\)/g;
+  assert.ok(!/decodeURIComponent|location\.hash\)?\s*[,;)]\s*$|textContent\s*=\s*location/m.test(app.replace(readers, '')), 'location.hash is read only through Link.parse, modeOf and route');
+  assert.ok(app.includes("const el = /^[A-Za-z][\\w-]{0,40}$/.test(raw) ? document.getElementById(raw) : null;"), 'modeOf looks up only a plain id');
+  // route() takes a number from a strict pattern, and says only fixed sentences or names from the item list.
+  assert.ok(mk.includes("const m = /^#market\\/item\\/(\\d{1,9})\\/?$/.exec(hash || '');"));
+  const route = mk.slice(mk.indexOf('function route(hash)'), mk.indexOf('function say(text)'));
+  assert.ok(!/say\([^)]*hash|textContent\s*=\s*hash|decodeURIComponent/.test(route), 'nothing of the link is written');
 });
 test('the search query is never saved: app.js keeps it in memory only, out of prefs, storage and the address', () => {
   const app = file('js/app.js');

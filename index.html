@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://www.guildwars2.com; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://render.guildwars2.com; connect-src 'self' https://www.guildwars2.com https://api.guildwars2.com; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="dark light">
   <link rel="stylesheet" href="style.css?v=0.3.0">
@@ -39,8 +39,9 @@
   </script>
 </head>
 <body>
-  <a class="skip" href="#now-title">Skip to Scheduled now</a>
-  <a class="skip" href="#coming-title">Skip to Coming up</a>
+  <a class="skip" href="#now-title" data-skip="timers">Skip to Scheduled now</a>
+  <a class="skip" href="#coming-title" data-skip="timers">Skip to Coming up</a>
+  <a class="skip" href="#tp-find" data-skip="market" hidden>Skip to the item search</a>
   <header class="topbar">
     <div class="brand">
       <div class="brand-line">
@@ -60,8 +61,17 @@
   </header>
 
   <main>
+    <!-- The two modes of this one page. app.js shows one view and hides the other; nothing reloads, and the
+         timer, reminders included, keeps running under the Trading Post. Event Timers is the default;
+         "#market" opens the Trading Post. -->
+    <div class="mode-switch" role="group" aria-label="Mode">
+      <button type="button" class="mode-btn" data-mode="timers" aria-pressed="true" aria-controls="timers-view">Event Timers</button>
+      <button type="button" class="mode-btn" data-mode="market" aria-pressed="false" aria-controls="market-view">Trading Post</button>
+    </div>
     <p class="notice-bar" id="clock-notice" hidden></p>
     <div class="notice-bar link-notice" id="link-notice" role="status" hidden><span id="link-notice-text"></span> <button type="button" class="link-btn" id="link-notice-dismiss">Dismiss</button></div>
+
+    <div class="view" id="timers-view">
 
     <section class="strip panel" aria-label="Day and night, and resets">
       <ul class="strip-list" id="strip"></ul>
@@ -259,6 +269,77 @@
       </div>
     </details>
     <!-- /build:event-index -->
+    </div>
+
+    <!-- The Trading Post. js/market.js (loaded by app.js the first time this opens, with js/money.js,
+         js/catalog.js, js/api.js and the item list data/tp-items.json) fills it in. -->
+    <section class="view market-view" id="market-view" aria-labelledby="market-title" hidden>
+      <div class="section-head">
+        <h2 id="market-title" tabindex="-1">Trading Post</h2>
+        <span class="hint">prices from ArenaNet's public API</span>
+      </div>
+      <p class="explain">Find an item and compare its highest buy order with its lowest sell listing. Prices are asked for when you search, straight from ArenaNet's API, with the time they were fetched; when the API does not answer, no price is shown.</p>
+      <div class="notice-bar link-notice" id="tp-link-notice" role="status" hidden><span id="tp-link-notice-text"></span> <button type="button" class="link-btn" id="tp-link-notice-dismiss">Dismiss</button></div>
+      <p class="tp-boot" id="tp-boot" role="status">Loading the Trading Post...</p>
+      <p class="tp-boot-actions"><button type="button" class="btn small" id="tp-retry" hidden>Try again</button></p>
+      <div class="tp-app" id="tp-app" hidden>
+        <div class="controls panel tp-controls">
+          <div class="ctl-line find-line">
+            <label class="ctl-label" for="tp-find">Search</label>
+            <div class="find-row">
+              <div class="find-box" role="search">
+                <input type="search" id="tp-find" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" placeholder="Item name or id" aria-describedby="tp-count">
+                <button type="button" class="find-clear" id="tp-find-clear" aria-label="Clear the item search" hidden>Clear</button>
+              </div>
+            </div>
+          </div>
+          <div class="control-row tp-filters">
+            <label class="field">Type <select id="tp-type"><option value="-1">Any type</option></select></label>
+            <label class="field">Rarity <select id="tp-rarity"><option value="-1">Any rarity</option></select></label>
+            <label class="field">Sort
+              <select id="tp-sort" aria-describedby="tp-scope">
+                <option value="relevance">Best match</option>
+                <option value="name">Name, A to Z</option>
+                <option value="buy-desc">Highest buy order, high to low</option>
+                <option value="buy-asc">Highest buy order, low to high</option>
+                <option value="sell-desc">Lowest sell listing, high to low</option>
+                <option value="sell-asc">Lowest sell listing, low to high</option>
+                <option value="spread-desc">Spread, largest first</option>
+                <option value="margin-desc">Potential margin, largest first</option>
+              </select>
+            </label>
+            <button type="button" class="btn small" id="tp-favs" aria-pressed="false">Favorites (0)</button>
+          </div>
+          <p class="tp-fav-unsaved" id="tp-fav-unsaved" hidden>Favorites cannot be saved in this browser, so they last only until this tab closes.</p>
+        </div>
+        <div class="tp-status">
+          <p class="tp-count" id="tp-count" role="status"></p>
+          <p class="tp-scope" id="tp-scope"></p>
+          <p class="tp-prices" id="tp-prices"><span id="tp-prices-text" role="status"></span> <button type="button" class="link-btn" id="tp-refresh" hidden>Refresh prices</button></p>
+          <div class="tp-whole" id="tp-whole" hidden>
+            <button type="button" class="btn small" id="tp-whole-btn" aria-expanded="false" aria-controls="tp-whole-confirm">Load whole market</button>
+            <div class="tp-whole-confirm" id="tp-whole-confirm" hidden>
+              <p id="tp-whole-explain"></p>
+              <p class="tp-whole-actions"><button type="button" class="btn small" id="tp-whole-start">Load</button> <button type="button" class="btn small" id="tp-whole-no">Not now</button></p>
+            </div>
+            <div class="tp-whole-progress" id="tp-whole-progress" hidden>
+              <label for="tp-whole-bar">Loading the whole market</label> <progress id="tp-whole-bar" max="1" value="0"></progress> <span id="tp-whole-count"></span>
+              <button type="button" class="btn small" id="tp-whole-cancel">Cancel</button>
+            </div>
+            <p class="tp-whole-status" id="tp-whole-status" role="status" tabindex="-1"></p>
+          </div>
+        </div>
+        <div class="tp-head" id="tp-head" aria-hidden="true" hidden><span></span><span>Item</span><span>Highest buy order</span><span>Lowest sell listing</span><span>Spread</span><span>Potential margin</span><span></span></div>
+        <ol class="tp-results" id="tp-results" aria-label="Trading Post items" aria-describedby="tp-scope"></ol>
+        <p class="empty" id="tp-empty" hidden></p>
+        <p class="tp-more-line"><button type="button" class="btn small" id="tp-more" hidden>Show more</button></p>
+        <div class="tp-notes">
+          <p id="tp-asof"></p>
+          <p>Potential margin is what listing one unit at the lowest sell listing would bring after fees, minus the highest buy order. It is not a profit: an order that is placed has not filled, someone may list lower, and prices move. Fees: a 5% listing fee and a 10% exchange fee, each at least 1 copper, as ArenaNet documents them; how a fraction of a copper is rounded is not published, so every result after fees is an estimate.</p>
+          <p>Favorites are saved in this browser. Prices are never saved: they last while this page is open.</p>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer">
@@ -297,8 +378,10 @@
     <p>Sources: the Guild Wars 2 Wiki's event timer data, ArenaNet's game update notes and news, and the official Guild Wars 2 API for waypoint codes. Times were also compared with an independent community schedule (qjv/event-timers).</p>
     <h3>Reminders</h3>
     <p>Reminders are off until you turn them on with the Reminders button by the filters. Then a notice appears on this page, with a count in the tab's title, 5, 10 or 15 minutes before a starred event starts. A reminder is not a notification from your browser or your computer, and it comes only while this page is open: a closed page, a sleeping device, or a tab your browser has put to sleep cannot remind you, and a background tab can be about a minute late. A reminder that would come after its event has started is not shown. With several tabs open, one of them gives each reminder. The page's two addresses (radmagelabs.com and radmageirl.github.io) keep separate settings.</p>
+    <h3>Trading Post</h3>
+    <p>The Trading Post mode searches the items sold on the game's Trading Post (the item list is updated by hand, so the newest items can be missing) and shows each one's highest buy order and lowest sell listing, fetched from ArenaNet's public API when you search. It needs no account and no API key. A price sort says which items it covers; it ranks the whole market only after you choose Load whole market. Proceeds and margins after fees are estimates, not profits: an order has not filled until it does. Nothing here is a live feed of the game: the API itself can be a few minutes behind.</p>
     <h3>Privacy</h3>
-    <p>Settings, stars, adjustments and reminder choices are saved in this browser only. A search you type in Find is not saved at all, and a link to an event carries the event's name and nothing of yours. Two things leave it: the clock check asks this site's own address for the time, and the news panel loads headlines from guildwars2.com, so ArenaNet sees that request. You can turn news off.</p>
+    <p>Settings, stars, adjustments, reminder choices and Trading Post favorites are saved in this browser only. A search you type is not saved at all, and a link to an event or an item carries its name or id and nothing of yours. Two things leave the timer: the clock check asks this site's own address for the time, and the news panel loads headlines from guildwars2.com, so ArenaNet sees that request. You can turn news off. The Trading Post, once you open it, also asks ArenaNet's API (api.guildwars2.com) for prices and item details, and loads item icons from render.guildwars2.com, so ArenaNet sees those requests; nothing of yours is sent with them. The timer makes neither request.</p>
     <h3>Share and support</h3>
     <p>Share passes this timer's address, https://radmagelabs.com/gw2-timer/, to your device's share sheet, or copies it where there is none. It carries nothing of yours. If the timer helps you, you can buy me a coffee; the link opens buymeacoffee.com in a new tab, so reminders keep running in this one.</p>
     <p class="about-actions"><button type="button" class="btn small" data-share>Share</button> <a class="btn small" href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (opens a new tab)</span></a></p>
@@ -406,6 +489,15 @@
       <li>Whether a file's alarm is used depends on your calendar app; some use their own default reminder instead. If your phone's calendar app cannot open the file, import it on your calendar's website.</li>
       <li>A file holds at most 500 entries.</li>
     </ul>
+    <p class="sr-only" role="status" data-announce></p>
+  </dialog>
+
+  <!-- One Trading Post item, opened from its name or a link to it (#market/item/<id>). Filled in by js/market.js. -->
+  <dialog id="tp-item-dialog" class="event-dialog tp-dialog" aria-labelledby="tp-item-title">
+    <div class="dialog-close"><button type="button" class="btn small" data-close>Close</button></div>
+    <h2 id="tp-item-title" tabindex="-1"></h2>
+    <div id="tp-item-body"></div>
+    <p class="ed-status" id="tp-item-status" role="status"></p>
     <p class="sr-only" role="status" data-announce></p>
   </dialog>
 

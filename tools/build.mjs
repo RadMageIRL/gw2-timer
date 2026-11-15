@@ -20,6 +20,8 @@ export const SITE_FILES = [
   'js/search.js', 'js/link.js', 'js/reminders.js',
   // v0.4.0: calendar files (Add to calendar).
   'js/ics.js',
+  // v0.4.0: the Trading Post. app.js loads these the first time the Trading Post opens, never with the timer.
+  'js/money.js', 'js/catalog.js', 'js/api.js', 'js/market.js', 'data/tp-items.json',
 ];
 
 export function build(outDir = join(ROOT, 'dist')) {
