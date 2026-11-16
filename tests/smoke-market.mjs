@@ -44,7 +44,7 @@ export function marketChecks(h) {
 
   /**
    * The API as this page sees it. opts.answer(n, url) can return 'ok', 'offline', 'hold', 'no-cors-429', or an
-   * HTTP status, for the n-th request (from 1); opts.delay holds each answer that many ms. opts.prices (id -> row)
+   * HTTP status, for the n-th request (from 1); opts.delay holds each answer that many ms (opts.delayFor(url), one answer its own time). opts.prices (id -> row)
    * replaces an item's prices; opts.mangle(rows) may spoil the rows of a prices answer.
    */
   function api(opts = {}) {
@@ -54,7 +54,8 @@ export function marketChecks(h) {
       page.apiMaxLive = Math.max(page.apiMaxLive || 0, page.apiLive);
       try {
         const how = opts.answer ? opts.answer(n, url) : 'ok';
-        if (opts.delay) await sleep(opts.delay);
+        const wait = opts.delayFor ? opts.delayFor(url) : opts.delay;
+        if (wait) await sleep(wait);
         if (how === 'hold') return;
         if (how === 'offline') { await page.send('Fetch.failRequest', { requestId: p.requestId, errorReason: 'InternetDisconnected' }).catch(() => {}); return; }
         // A request the page has cancelled meanwhile can no longer be answered: that is fine.
@@ -199,7 +200,8 @@ export function marketChecks(h) {
   // ---- The home: Market Watch and the types (post-v0.4.0 polish) ----
 
   check('Trading Post home: #market opens the home: Market Watch\'s eight hand-picked items with prices from one request and icons from one more, and the item list\'s types with their counts; never called a ranking; current prices are not asked for again', async () => {
-    const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
+    // The prices arrive last (after the icons and the gem rates), so only the redraw that follows them can show them.
+    const page = await open({ at: AT, api: api({ delayFor: (u) => (/commerce\/prices/.test(u.pathname) ? 700 : 0) }), url: BASE + '#market', wait: false });
     try {
       await market(page);
       await watchReady(page);
@@ -675,13 +677,17 @@ export function marketChecks(h) {
   // Found by Lighthouse in the baseline matrix of 2026-11-16 (CLS 0.049 on #market): the home's price lines grew as
   // the prices and their Refresh button arrived, and moved the cards under them.
   check('Trading Post home: nothing on screen moves while the home\'s prices, rates and icons arrive (layout shift 0), on a desktop and a phone', async () => {
-    const CLS = "window.__cls = 0; window.__shifts = []; new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) { window.__cls += e.value; window.__shifts.push((e.sources || []).map((x) => x.node && (x.node.id || x.node.className)).join(' ')); } }).observe({ type: 'layout-shift', buffered: true });";
+    // Where Market Watch and (while on screen, as Lighthouse counts it) the types sit on the page, every frame from the
+    // moment the home is first shown: one place only. (The layout-shift entries Lighthouse counts are not reported in these headless runs, so the positions are
+    // sampled directly; Lighthouse's own CLS for #market is in the matrix.)
+    const TOPS = "window.__tops = []; (function loop() { const home = document.getElementById('tp-home'); if (home && !home.hidden && document.getElementById('tp-watch-list')) { const y = (id) => Math.round(document.getElementById(id).getBoundingClientRect().top + scrollY); const grid = document.getElementById('tp-cat-grid').getBoundingClientRect().top; const k = y('tp-watch-list') + ',' + (grid < innerHeight ? y('tp-cat-grid') : 'below the screen'); if (window.__tops[window.__tops.length - 1] !== k) window.__tops.push(k); } requestAnimationFrame(loop); })();";
     for (const [width, height, mobile] of [[1280, 900, false], [390, 844, true]]) {
-      const page = await open({ at: AT, api: api({ delay: 300 }), url: BASE + '#market', wait: false, width, height, mobile, init: [CLS] });
+      const page = await open({ at: AT, api: api({ delay: 300 }), url: BASE + '#market', wait: false, width, height, mobile, init: [TOPS] });
       try {
         await market(page); await watchReady(page); await sleep(600);
-        const r = await page.eval('({ cls: window.__cls, shifts: window.__shifts })');
-        assert.ok(r.cls < 0.001, `${width}: CLS ${r.cls.toFixed(4)} from ${JSON.stringify(r.shifts)}`);
+        const tops = await page.eval('window.__tops');
+        assert.ok(tops.length >= 1, `${width}: the home was seen`);
+        assert.deepEqual(tops, [tops[0]], `${width}: Market Watch and the types moved while the prices arrived: ${tops.join(' -> ')}`);
       } finally { await page.close(); }
     }
   });
@@ -1305,6 +1311,21 @@ export function marketChecks(h) {
         assert.deepEqual(r.filter((x) => !x.icon).map((x) => x.id), [], `"${q}" typed key by key: rows without an icon`);
       }
       assert.match(await text(page, '#tp-results .tp-row .tp-sell'), /silver|copper|gold/);
+      // The same rows asked for twice in a row, every time: a fresh query (its prices and item records not here yet), then,
+      // while its requests are on their way, the same query again (a trailing space), which cancels them and must ask
+      // again at once. Typed key by key, whether the last search is one that would skip depends on the query's length
+      // (the RC matrix of v0.4.1 missed a control that way); this does not.
+      for (const q of ['charged lodestone', 'powerful venom']) {
+        await page.eval(`(() => { const i = document.getElementById('tp-find'); i.value = ${JSON.stringify(q)}; i.dispatchEvent(new Event('input', { bubbles: true })); return 1; })()`);
+        await sleep(250);
+        await page.eval(`(() => { const i = document.getElementById('tp-find'); i.value = ${JSON.stringify(q + ' ')}; i.dispatchEvent(new Event('input', { bubbles: true })); return 1; })()`);
+        await sleep(200);
+        assert.ok(!STUCK.test(await text(page, '#tp-results')), `"${q}" asked twice: a row left "not requested yet"`);
+        await page.waitFor(`${settled} && [...document.querySelectorAll('#tp-results .tp-row')].every((li) => li.querySelector('.tp-icon img'))`, 10000).catch(() => {});
+        const r = await page.eval("[...document.querySelectorAll('#tp-results .tp-row')].map((li) => ({ id: Number(li.dataset.id), sell: li.querySelector('.tp-sell').textContent, icon: Boolean(li.querySelector('.tp-icon img')) }))");
+        assert.equal(r.length, 1, q);
+        assert.deepEqual(r.filter((x) => !x.icon || !/silver|copper|gold|no sell listings/.test(x.sell)).map((x) => x.id), [], `"${q}" asked twice: rows without a price or an icon`);
+      }
       // A price sort 300 ms after a search, while the search's prices are still on their way: every match is
       // priced and ranked, and the scope line says so.
       await typeTp(page, ''); await page.waitFor(settled, 10000).catch(() => {});
