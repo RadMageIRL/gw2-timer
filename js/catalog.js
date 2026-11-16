@@ -122,6 +122,9 @@
     sell: (qt) => qt.sell,
     spread: (qt) => qt.spread,
     margin: (qt) => qt.margin,
+    // The potential margin as a share of the highest buy order (js/money.js marginPct). null without either side,
+    // so an item with no buy orders (no denominator) is never ranked, never as 0%.
+    marginPct: (qt) => qt.marginPct,
   };
 
   /**

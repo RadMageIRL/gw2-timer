@@ -329,5 +329,42 @@ await test('a wait before a retry is told to onRetry; paused() is true only whil
   assert.deepEqual([r.rows.has(5), r.error], [true, null]);
 });
 
+// ---- The gem exchange (post-v0.4.0 polish) ----
+
+await test('gem exchange: one GET a direction, for the amount given, through the same queue; the quote says what is given and what is got, in which currency', async () => {
+  const clock = fakeClock();
+  // As the real API answered on 2026-11-16: 1,000,000 copper (100 gold) gets 225 gems; 400 gems get 1,197,567 copper.
+  const fetch = fakeFetch((url) => (/exchange\/coins/.test(url) ? json(200, { coins_per_gem: 4444, quantity: 225 }) : json(200, { coins_per_gem: 2993, quantity: 1197567 })));
+  const c = Api.createClient({ fetch, ...clock });
+  const [buy, sell] = await Promise.all([c.exchange('coins', 1000000), c.exchange('gems', 400)]);
+  assert.deepEqual(buy, { ok: true, quote: { direction: 'coins', give: 1000000, get: 225, coinsPerGem: 4444, at: clock.now() } });
+  assert.deepEqual(sell, { ok: true, quote: { direction: 'gems', give: 400, get: 1197567, coinsPerGem: 2993, at: clock.now() } });
+  const urls = fetch.calls.map((x) => x.url).sort();
+  assert.deepEqual(urls, ['https://api.guildwars2.com/v2/commerce/exchange/coins?quantity=1000000&v=2025-08-29T01%3A00%3A00Z', 'https://api.guildwars2.com/v2/commerce/exchange/gems?quantity=400&v=2025-08-29T01%3A00%3A00Z']);
+  assert.ok(fetch.calls.every((x) => x.init.method === 'GET' && x.init.credentials === 'omit' && x.init.referrerPolicy === 'no-referrer'));
+  assert.equal(c.stats().started, 2, 'through the queue');
+});
+
+await test('gem exchange: a direction or amount that is not one never reaches the API; a refusal (400, too few coins), an unreadable answer and a 404 are errors, never a rate; 5xx is tried again', async () => {
+  const clock = fakeClock();
+  let mode = 'refuse';
+  const fetch = fakeFetch(() => (mode === 'refuse' ? json(400, { text: 'too few coins' }) : mode === 'junk' ? json(200, { coins_per_gem: '44', quantity: 225 })
+    : mode === 'zero' ? json(200, { coins_per_gem: 0, quantity: 0 }) : mode === 'gone' ? json(404, { text: 'no' }) : mode === 'down' ? json(503, {}) : json(200, { coins_per_gem: 4444, quantity: 225 })));
+  const c = Api.createClient({ fetch, ...clock });
+  for (const [d, q] of [['coin', 100], ['gems', 0], ['gems', -4], ['coins', 1.5], ['coins', '100'], [null, 100]]) assert.deepEqual(await c.exchange(d, q), { ok: false, error: 'http' }, `${d} ${q}`);
+  assert.equal(fetch.calls.length, 0, 'nothing sent for those');
+  assert.deepEqual(await c.exchange('coins', 100), { ok: false, error: 'http', status: 400 });
+  assert.equal(fetch.calls.length, 1, 'a refusal is not tried again');
+  for (const m of ['junk', 'zero', 'gone']) { mode = m; assert.equal((await c.exchange('coins', 1000000)).error, 'bad-data', m); }
+  mode = 'down';
+  const p = c.exchange('gems', 400);
+  await clock.advance(1000);
+  const tries = fetch.calls.length;
+  mode = 'ok';
+  await clock.advance(1500);
+  assert.equal(fetch.calls.length, tries + 1, 'tried again after 2 s');
+  assert.deepEqual((await p).quote.get, 225, 'then the rate');
+});
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

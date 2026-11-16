@@ -38,6 +38,24 @@
   }
 
   /**
+   * The break-even listing price for one unit that cost `cost`: the lowest price at which listing it would give back
+   * at least `cost` after both fees, by proceeds() itself (so the same fees and rounding). What a listing gives never
+   * falls as its price rises: the 5% fee steps up only at prices of 10 copper mod 20 and the 10% fee only at 5 mod 10,
+   * never on the same copper. So the first price that covers the cost is the answer. breakEven(cost + 1) is the
+   * lowest price that gives back at least 1 copper more than the cost. null for a cost that is not a whole, positive
+   * number of copper, or one too large to work out in exact whole numbers (far above any Trading Post price).
+   */
+  function breakEven(cost) {
+    if (!whole(cost) || cost <= 0) return null;
+    const keep = 100 - LISTING_PCT - EXCHANGE_PCT;
+    let p = Math.max(1, Math.floor((cost * 100) / keep) - 2);
+    if (!whole(p * 100)) return null;
+    while (proceeds(p).net < cost) p++;
+    while (p > 1 && proceeds(p - 1).net >= cost) p--;
+    return p;
+  }
+
+  /**
    * The numbers for one item's two best prices. A side with no orders has quantity 0 (the API's empty side
    * is { quantity: 0, unit_price: 0 }) and gives null, never a price of 0.
    *   buy, sell        the highest buy order and the lowest sell listing, or null
@@ -46,7 +64,9 @@
    *   listAtLowest     proceeds of listing one unit at the lowest sell listing, if it sells (not guaranteed)
    *   margin           listAtLowest.net - buy: buying at the highest buy order and listing at the lowest sell
    *                    listing; a potential margin, before undercutting and before either order fills
-   *   marginPct        margin / buy, as a fraction
+   *   marginPct        margin / buy, as a fraction: the potential margin as a share of the highest buy order, what
+   *                    buying one unit costs (never a zero denominator: a side with no orders is null, not 0)
+   *   breakEven        breakEven(buy): the lowest listing price that gives back the buy price after fees, or null
    */
   function quote(p) {
     const side = (s) => (s && whole(s.unit_price) && s.unit_price > 0 && whole(s.quantity) && s.quantity > 0 ? s.unit_price : null);
@@ -61,6 +81,7 @@
       spread: buy !== null && sell !== null ? sell - buy : null,
       sellNow, listAtLowest, margin,
       marginPct: margin === null ? null : margin / buy,
+      breakEven: buy === null ? null : breakEven(buy),
     };
   }
 
@@ -94,7 +115,7 @@
     return `${f < 0 && v > 0 ? MINUS : ''}${v.toFixed(1)}%`;
   }
 
-  const Money = { LISTING_PCT, EXCHANGE_PCT, MAX_UNITS, fee, listingFee, exchangeFee, proceeds, quote, coins, count, percent };
+  const Money = { LISTING_PCT, EXCHANGE_PCT, MAX_UNITS, fee, listingFee, exchangeFee, proceeds, breakEven, quote, coins, count, percent };
   if (typeof module === 'object' && module.exports) module.exports = Money;
   else root.GW2Money = Money;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

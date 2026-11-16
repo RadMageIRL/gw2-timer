@@ -11,6 +11,9 @@
 //   placed has not filled.
 // - Favorites are the only thing saved (gw2-timer:v1:tp-favorites, item ids). The search, filters and sort live
 //   in memory, so a switch to the timer and back keeps them; prices are never saved.
+// - With nothing typed, no filter and no price sort, it shows its home: the item list's types to browse, and Market
+//   Watch, a fixed hand-picked set of items whose prices are asked for when the home is shown (two requests: their
+//   prices and their item records). It is never called a ranking. The timer itself still asks the API for nothing.
 (function (root) {
   'use strict';
 
@@ -33,6 +36,68 @@
   };
   const typeLabel = (t) => TYPE_LABEL[t] || String(t).replace(/([a-z])([A-Z])/g, '$1 $2');
 
+  /**
+   * Market Watch on the Trading Post's home: a fixed set of familiar items used in crafting, chosen by hand (each had
+   * a buy order and a sell listing on 2026-11-16). It is not a ranking, and the page never presents it as one: there
+   * is no evidence of how much any item trades. Their prices are asked for when the home is shown, in one request
+   * (and their icons in one more); an id the item list no longer has is left out.
+   */
+  const WATCH = [19976, 19721, 68063, 24277, 24295, 19701, 19725, 19746];
+  const watchIds = (cat) => WATCH.filter((id) => cat.byId.has(id));
+  /** The home shows this many favorites, newest first; Show all opens every one as results. */
+  const FAV_HOME = 8;
+  const favHome = (favs) => favs.slice(-FAV_HOME).reverse();
+  /** Saved favorite ids the item list no longer has (well-formed ones only, once each): said, not silently dropped. */
+  const lostFavorites = (raw, known) => (Array.isArray(raw) ? [...new Set(raw.filter((x) => Number.isSafeInteger(x) && x > 0 && !known.has(x)))].length : 0);
+
+  /**
+   * The gem exchange on the home: two quotes, one for each direction, each for a fixed amount the line names:
+   * what 100 gold (1,000,000 copper) buys in gems, and what 400 gems sell for. ArenaNet's API quotes gems for an
+   * amount of gold, and gold for an amount of gems; the rate depends on the amount, and each direction is its own
+   * price. So the page says what each quote is and never turns one into the other.
+   */
+  const GEM_GOLD = 1000000, GEM_GEMS = 400;
+
+  /** Line drawings for the item list's types (24 x 24, stroked), made for this page; any other type gets the box. */
+  const TYPE_ICON = {
+    Armor: 'M9 3.5L6 4.5L3.5 8.5L6 10V20.5H18V10L20.5 8.5L18 4.5L15 3.5 M9 3.5c.6 1.7 1.6 2.6 3 2.6s2.4-.9 3-2.6 M12 6.1V20.5 M6 14h12',
+    Back: 'M8 4h8l1.5 2.5L19 20l-3.5-1.5L12 20l-3.5-1.5L5 20L6.5 6.5z M10 4c0 1.3.9 2.2 2 2.2s2-.9 2-2.2',
+    Bag: 'M5.5 9h13l1 11.5h-15z M9 9V7.5a3 3 0 0 1 6 0V9 M9 13h6',
+    Consumable: 'M9.5 3h5 M10.5 3v5.2L5.8 16.4a2.8 2.8 0 0 0 2.4 4.1h7.6a2.8 2.8 0 0 0 2.4-4.1L13.5 8.2V3 M7.6 14h8.8',
+    Container: 'M4 11V8.5A3.5 3.5 0 0 1 7.5 5h9A3.5 3.5 0 0 1 20 8.5V11 M4 11h16v8.5H4z M10.5 11v3h3v-3',
+    CraftingMaterial: 'M3 19.5L5.5 14h13L21 19.5z M7 14l2-4.5h6L17 14 M18.5 3.5v3 M17 5h3',
+    Gizmo: 'M12 2.5v3 M12 18.5v3 M2.5 12h3 M18.5 12h3 M5.3 5.3l2.1 2.1 M16.6 16.6l2.1 2.1 M5.3 18.7l2.1-2.1 M16.6 7.4l2.1-2.1 M6 12a6 6 0 1 0 12 0a6 6 0 1 0-12 0 M9.5 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0',
+    JadeTechModule: 'M7 7h10v10H7z M10 10h4v4h-4z M9.5 4v3 M14.5 4v3 M9.5 17v3 M14.5 17v3 M4 9.5h3 M4 14.5h3 M17 9.5h3 M17 14.5h3',
+    MiniPet: 'M12 12.5c-2.8 0-5 3.2-5 5.3 0 1.6 1.3 2.2 2.4 2.2 1.1 0 1.6-.6 2.6-.6s1.5.6 2.6.6c1.1 0 2.4-.6 2.4-2.2 0-2.1-2.2-5.3-5-5.3z M5.5 10.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0 M8.5 7a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0 M12.5 7a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0 M15.5 10.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0',
+    PowerCore: 'M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z M13 7.5l-3 4.8h4L11 17',
+    Relic: 'M12 3l5.5 6.5L12 21L6.5 9.5z M6.5 9.5h11 M9.5 9.5L12 3l2.5 6.5',
+    Tool: 'M4 9.5C6.5 6.3 9 5 12 5s5.5 1.3 8 4.5 M12 5v15.5 M10 20.5h4',
+    Trinket: 'M6.5 14.5a5.5 5.5 0 1 0 11 0a5.5 5.5 0 1 0-11 0 M9.5 6.5L12 3.5l2.5 3L12 9z',
+    Trophy: 'M8 4h8v5a4 4 0 0 1-8 0z M8 5.5H5.5a2.5 2.5 0 0 0 2.6 4 M16 5.5h2.5a2.5 2.5 0 0 1-2.6 4 M12 13v4 M8.5 20.5h7 M9.5 20.5l.5-3.5h4l.5 3.5',
+    UpgradeComponent: 'M12 3l8.5 9-8.5 9-8.5-9z M12 8v8 M9.5 10.5L12 8l2.5 2.5',
+    Weapon: 'M20 4l-3.5.2-9 9 3.3 3.3 9-9z M5.8 12.6l5.6 5.6 M7.5 16.5l-3 3',
+  };
+  const BOX_ICON = 'M5 5h14v14H5z M5 9h14';
+
+  /** The types on the home, as the Type list orders them (by label): { index, type, label, count, icon }. */
+  function typeTiles(cat) {
+    const n = new Array(cat.types.length).fill(0);
+    for (let i = 0; i < cat.count; i++) n[cat.type[i]]++;
+    return cat.types.map((type, index) => ({ index, type, label: typeLabel(type), count: n[index], icon: TYPE_ICON[type] || BOX_ICON }))
+      .sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+  }
+
+  /** What the results show, for the line beside "Trading Post home": the filters and what is typed, or every item. */
+  function crumbText(s, cat) {
+    const parts = [];
+    if (s.type >= 0 && s.type < cat.types.length) parts.push(typeLabel(cat.types[s.type]));
+    if (s.rarity >= 0 && s.rarity < cat.rarities.length) parts.push(cat.rarities[s.rarity]);
+    if (s.favOnly) parts.push('Favorites');
+    const q = String(s.query || '').trim();
+    if (q) parts.push(`“${q}”`);
+    return parts.length ? parts.join(' · ') : 'Every item';
+  }
+
   const SORTS = {
     relevance: { label: 'Best match' },
     name: { label: 'Name, A to Z' },
@@ -42,6 +107,9 @@
     'sell-asc': { key: 'sell', dir: 'asc', what: 'lowest sell listing', how: 'low to high', none: 'no sell listings' },
     'spread-desc': { key: 'spread', dir: 'desc', what: 'spread', how: 'largest first', none: 'no buy orders or no sell listings' },
     'margin-desc': { key: 'margin', dir: 'desc', what: 'potential margin after fees', how: 'largest first', none: 'no buy orders or no sell listings' },
+    // The potential margin as a share of the highest buy order (what buying one unit costs); an item with no buy orders
+    // has no such share and comes after the ranked ones, never as 0%.
+    'marginpct-desc': { key: 'marginPct', dir: 'desc', short: 'Potential margin %', what: 'potential margin as a share of the highest buy order', how: 'largest first', none: 'no buy orders or no sell listings' },
   };
 
   /** Saved favorites: whole item ids the list has, once each, at most FAV_MAX. Anything else is dropped. */
@@ -138,7 +206,10 @@
     const release = (m, ids, own) => { for (const id of ids) if (m.get(id) === own) m.delete(id); };
     let lastError = null, viewCtl = null, sortCtl = null, wholeCtl = null, detailCtl = null;
     const whole = { state: 'idle', done: 0, total: 0, answered: 0, failedReq: 0, started: 0, ended: 0, all: false };
-    let favs = [], favUnsaved = !storage;
+    let favs = [], favUnsaved = !storage, favLost = 0;
+    // The gem exchange's two quotes (api.js exchange()), each with its own state, as a price has.
+    const gem = { coins: null, gems: null }, gemPending = { coins: false, gems: false }, gemFailed = { coins: null, gems: null };
+    let gemCtl = null;
     let detailId = null, opener = null, closingByHash = false, pendingRoute = '';
     let book = null;
 
@@ -167,9 +238,15 @@
       cat = r.catalog;
       listState = 'ready';
       favs = sanitizeFavorites(Store.read(storage, FAV_KEY), cat.byId);
+      favLost = lostFavorites(Store.read(storage, FAV_KEY), cat.byId);
       $('tp-type').replaceChildren(h('option', { value: '-1', text: 'Any type' }), ...cat.types.map((t, i) => [t, i]).sort((a, b) => (typeLabel(a[0]) < typeLabel(b[0]) ? -1 : 1)).map(([t, i]) => h('option', { value: String(i), text: typeLabel(t) })));
       $('tp-rarity').replaceChildren(h('option', { value: '-1', text: 'Any rarity' }), ...cat.rarities.map((t, i) => h('option', { value: String(i), text: t })));
       $('tp-asof').textContent = `Item list as of ${day.format(Date.parse(cat.asOf))}: ${cat.count.toLocaleString('en-US')} items with a Trading Post price then. Items added to the game since then cannot be found until the list is updated.`;
+      const tiles = typeTiles(cat);
+      $('tp-cats-hint').textContent = `the item list's ${tiles.length} types`;
+      $('tp-cat-grid').replaceChildren(...tiles.map((t) => h('li', {},
+        h('button', { type: 'button', class: 'tp-cat', 'data-tp-cat': t.index, 'data-tpkey': `cat:${t.index}` }, glyph(t.icon),
+          h('span', { class: 'tp-cat-name', text: t.label }), h('span', { class: 'tp-cat-count', text: plural(t.count, 'item', 'items') })))));
       setBoot('', false);
       $('tp-app').hidden = false;
       syncControls();
@@ -223,6 +300,39 @@
           loadPrices(all, sig).then(() => { if (sig.aborted) return; resort(); draw(); loadItems(visibleIds(), viewCtl.signal); });
         }
       }
+      if (searchStatus === 'idle') loadWatch(force);
+    }
+
+    /**
+     * The home's prices and icons, while it is on screen: Market Watch's and the favorites shown there, together in
+     * one request for the prices that are not current (none when all are) and one for the item records not yet here;
+     * then the gem exchange's two quotes when they are not current. Its requests are not cancelled by a search, which
+     * may show the same items: their answer serves both. Refresh (`force`) asks again for current prices too.
+     */
+    let watchCtl = null;
+    const homeIds = () => [...new Set([...watchIds(cat), ...favHome(favs)])];
+    function loadWatch(force) {
+      if (!cat || searchStatus !== 'idle' || view.hidden) return;
+      const ids = homeIds();
+      if (!watchCtl || watchCtl.signal.aborted) watchCtl = new AbortController();
+      loadPrices(ids, watchCtl.signal, undefined, force).then((r) => { if (!r) return; const s = sortDef(); if (s && s.key) resort(); draw(); });
+      loadItems(ids, watchCtl.signal);
+      loadGems(false);
+    }
+
+    /** The gem exchange's two quotes, each asked for when it is not current (or always, with `force`). */
+    async function loadGems(force) {
+      const t = now(), ks = ['coins', 'gems'].filter((k) => !gemPending[k] && (force || !gem[k] || t - gem[k].at >= CURRENT_MS));
+      if (!ks.length) return;
+      if (!gemCtl || gemCtl.signal.aborted) gemCtl = new AbortController();
+      for (const k of ks) gemPending[k] = true;
+      drawSoon();
+      await Promise.all(ks.map(async (k) => {
+        const r = await client.exchange(k, k === 'coins' ? GEM_GOLD : GEM_GEMS, { signal: gemCtl.signal });
+        gemPending[k] = false;
+        if (r.ok) { gem[k] = r.quote; gemFailed[k] = null; } else if (r.error !== 'aborted') gemFailed[k] = r.error;
+      }));
+      draw();
     }
 
     // A price keeps the time it was fetched until a new one replaces it: a forced refresh never touches it, so the
@@ -266,6 +376,17 @@
         h('span', { class: 'sr-only', text: c.spoken }));
     }
     const qty = (n, word) => h('span', { class: 'tp-q', text: `${Money.count(n)} ${word}` });
+    /** A type's line drawing (TYPE_ICON), hidden from screen readers: the label beside it says the type. */
+    function glyph(d) {
+      const NS = 'http://www.w3.org/2000/svg', s = document.createElementNS(NS, 'svg'), p = document.createElementNS(NS, 'path');
+      for (const [k, v] of [['viewBox', '0 0 24 24'], ['width', '28'], ['height', '28'], ['class', 'tp-cat-ic'], ['aria-hidden', 'true'], ['focusable', 'false']]) s.setAttribute(k, v);
+      p.setAttribute('d', d);
+      s.append(p);
+      return s;
+    }
+    /** An item's icon from the API's item record, only from ArenaNet's render host; none until the record is here. */
+    const iconOf = (it, size, cls) => (it && typeof it.icon === 'string' && it.icon.startsWith(ICON_PREFIX)
+      ? h('img', { class: cls, src: it.icon, alt: '', width: size, height: size, loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' }) : null);
 
     /** One price cell: the value, or why there is none. */
     function cell(id, cls, label, short, fill) {
@@ -289,16 +410,14 @@
       if (why) return { age: '', text: `No price: ${API_SAYS[why] || API_SAYS.network}.` };
       return { age: '', text: '' };
     }
-    const rowClass = (rar, age) => `tp-row rarity-${rar.toLowerCase()}${age === 'stale' ? ' is-stale' : age === 'old' ? ' is-old' : ''}`;
+    const rowClass = (rar, age, base) => `${base || 'tp-row'} rarity-${rar.toLowerCase()}${age === 'stale' ? ' is-stale' : age === 'old' ? ' is-old' : ''}`;
 
     function row(i) {
       const id = cat.ids[i], name = cat.names[i], rar = cat.rarities[cat.rarity[i]], it = items.get(id);
       const on = favs.includes(id), lv = cat.level[i];
-      const icon = it && typeof it.icon === 'string' && it.icon.startsWith(ICON_PREFIX)
-        ? h('img', { src: it.icon, alt: '', width: 32, height: 32, loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' }) : null;
       const note = rowNote(id, now());
       return h('li', { class: rowClass(rar, note.age), 'data-id': id },
-        h('span', { class: 'tp-icon', 'aria-hidden': 'true' }, icon),
+        h('span', { class: 'tp-icon', 'aria-hidden': 'true' }, iconOf(it, 32)),
         h('span', { class: 'tp-item' },
           h('a', { class: 'tp-name', href: `#market/item/${id}`, 'aria-haspopup': 'dialog', 'data-tpkey': `name:${id}`, text: name }),
           h('span', { class: 'tp-meta' }, h('span', { class: 'tp-rarity', text: rar }), ` · ${typeLabel(cat.types[cat.type[i]])}${lv ? ` · level ${lv}` : ''}`),
@@ -309,9 +428,21 @@
         // one the wrapper steps aside (display: contents) and each is a column.
         h('span', { class: 'tp-extra' },
           cell(id, 'tp-spread', 'Spread', 'Spread', (q) => (q.spread === null ? [h('span', { class: 'tp-none', text: 'none' })] : [coins(q.spread)])),
-          cell(id, 'tp-margin', 'Potential margin after fees', 'Margin', (q) => (q.margin === null ? [h('span', { class: 'tp-none', text: 'none' })] : [coins(q.margin)]))),
+          cell(id, 'tp-margin', 'Potential margin after fees', 'Margin', (q) => (q.margin === null ? [h('span', { class: 'tp-none', text: 'none' })] : [coins(q.margin), ' ', h('span', { class: 'tp-q tp-pct', text: `${Money.percent(q.marginPct)} of buy` })]))),
         h('button', { type: 'button', class: 'star-btn tp-fav' + (on ? ' on' : ''), 'data-tp-fav': id, 'data-tpkey': `fav:${id}`, 'aria-pressed': String(on), 'aria-label': `Favorite: ${name}` },
           h('span', { 'aria-hidden': 'true', text: on ? '★' : '☆' })));
+    }
+
+    /** One Market Watch card: icon, name (to its details), the two prices, and the same price notes as a row. */
+    function watchCard(id, t, key) {
+      const i = cat.byId.get(id), rar = cat.rarities[cat.rarity[i]], note = rowNote(id, t);
+      const side = (v, none) => (v === null ? [h('span', { class: 'tp-none', text: none })] : [coins(v)]);
+      return h('li', { class: rowClass(rar, note.age, 'tp-watch-card'), 'data-id': id },
+        h('span', { class: 'tp-icon', 'aria-hidden': 'true' }, iconOf(items.get(id), 32)),
+        h('a', { class: 'tp-name', href: `#market/item/${id}`, 'aria-haspopup': 'dialog', 'data-tpkey': `${key || 'watch'}:${id}`, text: cat.names[i] }),
+        cell(id, 'tp-buy', 'Highest buy order', 'Buy', (q) => side(q.buy, 'no buy orders')),
+        cell(id, 'tp-sell', 'Lowest sell listing', 'Sell', (q) => side(q.sell, 'no sell listings')),
+        h('span', { class: 'tp-note', text: note.text, hidden: !note.text }));
     }
 
     let drawTimer = 0;
@@ -324,10 +455,16 @@
       const list = order.slice(0, st.shown);
       $('tp-results').replaceChildren(...list.map(row));
       $('tp-results').setAttribute('aria-busy', String(list.some((i) => pending.has(cat.ids[i]))));
+      // Nothing typed, no filter, no price sort: the home (Market Watch and the types) instead of results, and the
+      // way back to it beside the results otherwise.
+      const home = searchStatus === 'idle';
+      $('tp-home').hidden = !home;
+      $('tp-crumbs').hidden = home;
+      if (!home) $('tp-crumb').textContent = crumbText(st, cat);
+      else { drawWatch(t); drawFavHome(t); drawGems(t); }
       const empty = $('tp-empty');
-      empty.hidden = searchStatus === 'ok' && matches.length > 0;
-      empty.textContent = searchStatus === 'idle' ? 'Search for an item by name or id (at least 2 letters), or choose a type, a rarity, Favorites or a price sort.'
-        : searchStatus === 'short' ? 'Type at least 2 letters, or choose a type, a rarity or Favorites.'
+      empty.hidden = home || (searchStatus === 'ok' && matches.length > 0);
+      empty.textContent = searchStatus === 'short' ? 'Type at least 2 letters, or choose a type, a rarity or Favorites.'
           : st.favOnly && !favs.length ? 'No favorites yet. Use the star (☆) by an item to add it.'
             : 'No item in the list matches. The list holds only items with a Trading Post price when it was made.';
       $('tp-head').hidden = !list.length;
@@ -363,14 +500,74 @@
       countTimer = setTimeout(() => { $('tp-count').textContent = countText; }, 400);
     }
 
-    /** The price line: loading, errors (with what is kept), and how fresh the shown prices are. */
-    function drawPrices(list, t) {
-      const ids = list.map((i) => cat.ids[i]);
+    /** Market Watch: its cards and its own price line. Shown only on the home. */
+    function drawWatch(t) {
+      const ids = watchIds(cat);
+      $('tp-watch-list').replaceChildren(...ids.map((id) => watchCard(id, t)));
+      $('tp-watch-list').setAttribute('aria-busy', String(ids.some((id) => pending.has(id))));
+      priceLine(ids, t, WATCH_LINE);
+    }
+
+    /** Your favorites on the home: the newest few, priced as Market Watch is, or what to do when there are none. */
+    function drawFavHome(t) {
+      const ids = favHome(favs), list = $('tp-favhome-list'), all = $('tp-favhome-all');
+      list.replaceChildren(...ids.map((id) => watchCard(id, t, 'favhome')));
+      list.hidden = !ids.length;
+      list.setAttribute('aria-busy', String(ids.some((id) => pending.has(id))));
+      $('tp-favhome-empty').hidden = ids.length > 0;
+      $('tp-favhome-prices').hidden = !ids.length;
+      if (ids.length) priceLine(ids, t, FAVHOME_LINE);
+      all.hidden = favs.length <= ids.length;
+      all.textContent = `Show all ${favs.length} favorites`;
+      $('tp-favhome-hint').textContent = `saved in this browser, newest first${favLost ? `; ${plural(favLost, 'saved favorite is', 'saved favorites are')} no longer in the item list, so not shown` : ''}`;
+    }
+
+    /** The gem exchange: one line a direction, each saying what is given and what is got; no number without the API. */
+    function drawGems(t) {
+      const line = (k) => {
+        const q = gem[k];
+        if (q && k === 'coins') return [`${(q.give / 10000).toLocaleString('en-US')} gold buys ${plural(q.get, 'gem', 'gems')} (about `, coins(q.coinsPerGem), ' a gem)'];
+        if (q) return [`${plural(q.give, 'gem', 'gems')} sell for `, coins(q.get), ' (about ', coins(q.coinsPerGem), ' a gem)'];
+        const why = gemFailed[k];
+        return [h('span', { class: 'tp-none', text: gemPending[k] ? (client.paused() ? 'waiting' : 'loading...') : why ? `no rate here: ${API_SAYS[why] || API_SAYS.network}.` : 'not asked for yet' })];
+      };
+      $('tp-gem-buy-v').replaceChildren(...line('coins'));
+      $('tp-gem-sell-v').replaceChildren(...line('gems'));
+      gemLine(t);
+    }
+    /** The gem exchange's line: loading, errors, and how fresh the rates are; Refresh. */
+    function gemLine(t) {
+      const ks = ['coins', 'gems'], loading = ks.some((k) => gemPending[k]), whys = ks.map((k) => gemFailed[k]).filter(Boolean);
+      const ats = ks.map((k) => gem[k]).filter(Boolean).map((q) => q.at), parts = [];
+      if (loading) parts.push(client.paused() ? "Loading the rates: ArenaNet's API asked for fewer requests (HTTP 429), so the page waits before asking again." : 'Loading the rates...');
+      if (whys.length) {
+        const why = whys.reduce((a, b) => (Api.ERRORS.indexOf(a) <= Api.ERRORS.indexOf(b) ? a : b)), none = ks.filter((k) => gemFailed[k] && !gem[k]).length;
+        parts.push(`${API_SAYS[why] || API_SAYS.network}, so ${none === 2 ? 'neither rate is shown' : none ? 'one rate is not shown' : 'a rate could not be refreshed'}. Nothing is estimated in its place.`);
+      }
+      if (ats.length) {
+        const oldest = Math.min(...ats), f = freshness(oldest, t), when = time.format(oldest), again = loading ? '' : ' Refresh for current rates.';
+        parts.push(f === 'current' ? `Rates from ${when}, current.` : `Rates from ${when}, ${ago(t - oldest)}: ${f}.${again}`);
+        $('tp-gem-prices').setAttribute('data-fresh', f);
+      } else $('tp-gem-prices').removeAttribute('data-fresh');
+      const text = parts.join(' ');
+      if ($('tp-gem-text').textContent !== text) $('tp-gem-text').textContent = text;
+      $('tp-gem-refresh').hidden = loading;
+      $('tp-gem-refresh').textContent = ks.some((k) => gemFailed[k] && !gem[k]) ? 'Try again' : 'Refresh rates';
+    }
+
+    /** The price line under the controls, for the rows shown. */
+    const RESULTS_LINE = { line: 'tp-prices', text: 'tp-prices-text', btn: 'tp-refresh' };
+    const WATCH_LINE = { line: 'tp-watch-prices', text: 'tp-watch-text', btn: 'tp-watch-refresh' };
+    const FAVHOME_LINE = { line: 'tp-favhome-prices', text: 'tp-favhome-text', btn: 'tp-favhome-refresh' };
+    const drawPrices = (list, t) => priceLine(list.map((i) => cat.ids[i]), t, RESULTS_LINE);
+
+    /** A price line: loading, errors (with what is kept), and how fresh the given items' prices are. */
+    function priceLine(ids, t, el) {
       const loading = ids.filter((id) => pending.has(id)).length;
       const missing = ids.filter((id) => failed.has(id) && !cache.has(id)).length;
       const ats = ids.map((id) => cache.get(id)).filter((c) => c && c.q).map((c) => c.at);
       const parts = [];
-      const btn = $('tp-refresh');
+      const btn = $(el.btn), said = $(el.text);
       if (loading) parts.push(client.paused() ? `Loading prices for ${plural(loading, 'item', 'items')}: ArenaNet's API asked for fewer requests (HTTP 429), so the page waits before asking again.` : `Loading prices for ${plural(loading, 'item', 'items')}...`);
       // The reason given is the worst among the shown rows' own errors, not just the last one seen.
       const whys = ids.map((id) => failed.get(id)).filter(Boolean);
@@ -385,10 +582,10 @@
         const again = loading ? '' : ' Refresh for current prices.';
         parts.push(f === 'current' ? `Prices from ${when}, current.` : f === 'stale' ? `Prices from ${when}, ${ago(t - oldest)}: stale.${again}`
           : `Prices from ${when}, ${ago(t - oldest)}: old, shown faded.${again}`);
-        $('tp-prices').setAttribute('data-fresh', f);
-      } else $('tp-prices').removeAttribute('data-fresh');
+        $(el.line).setAttribute('data-fresh', f);
+      } else $(el.line).removeAttribute('data-fresh');
       const text = parts.join(' ');
-      if ($('tp-prices-text').textContent !== text) $('tp-prices-text').textContent = text;
+      if (said.textContent !== text) said.textContent = text;
       btn.hidden = !ids.length || loading > 0;
       btn.textContent = missing && lastError ? 'Try again' : 'Refresh prices';
     }
@@ -466,7 +663,8 @@
     window.addEventListener('storage', (ev) => {
       if (!cat || ev.key !== Store.PREFIX + FAV_KEY) return;
       favs = sanitizeFavorites(Store.read(storage, FAV_KEY), cat.byId);
-      if (st.favOnly) apply(true); else draw();
+      favLost = lostFavorites(Store.read(storage, FAV_KEY), cat.byId);
+      if (st.favOnly) apply(true); else { draw(); loadWatch(false); }
     });
 
     // ---- One item's details: "#market/item/<id>" ----
@@ -477,12 +675,22 @@
       const fact = (k, ...v) => [h('dt', { text: k }), h('dd', {}, ...v)];
       const none = (text) => h('span', { class: 'tp-none', text });
       const on = favs.includes(id);
-      const icon = it && typeof it.icon === 'string' && it.icon.startsWith(ICON_PREFIX) ? h('img', { class: 'tp-big-icon', src: it.icon, alt: '', width: 48, height: 48, referrerpolicy: 'no-referrer' }) : null;
+      const icon = iconOf(it, 48, 'tp-big-icon');
       const sub = it && it.details && typeof it.details.type === 'string' ? ` (${it.details.type.replace(/([a-z])([A-Z])/g, '$1 $2')})` : '';
       const prices = [];
+      // The three figures a trader looks for first, large, with when they were fetched; the arithmetic and the
+      // caveats follow in the list below them, smaller.
+      let stats = null;
       if (q) {
-        prices.push(...fact('Highest buy order', ...(q.buy === null ? [none('No buy orders.')] : [coins(q.buy), ` (${Money.count(q.buyQty)} units wanted in all buy orders)`])));
-        prices.push(...fact('Lowest sell listing', ...(q.sell === null ? [none('No sell listings.')] : [coins(q.sell), ` (${Money.count(q.sellQty)} units listed in all)`])));
+        const f = freshness(c.at, t), why = failed.get(id);
+        const stat = (cls, label, value, note) => h('div', { class: `tp-stat ${cls}` }, h('span', { class: 'tp-stat-k', text: label }), h('span', { class: 'tp-stat-v' }, ...value), note ? h('span', { class: 'tp-stat-sub', text: note }) : null);
+        stats = h('div', { class: 'tp-stats-wrap' },
+          h('div', { class: `tp-stats${f === 'old' ? ' is-old' : ''}` },
+            stat('tp-stat-buy', 'Highest buy order', q.buy === null ? [none('No buy orders.')] : [coins(q.buy)], q.buy === null ? '' : `${Money.count(q.buyQty)} units wanted in all buy orders`),
+            stat('tp-stat-sell', 'Lowest sell listing', q.sell === null ? [none('No sell listings.')] : [coins(q.sell)], q.sell === null ? '' : `${Money.count(q.sellQty)} units listed in all`),
+            stat('tp-stat-margin', 'Potential margin', q.margin === null ? [none('None: one side has no orders.')] : [coins(q.margin)], q.margin === null ? '' : `${Money.percent(q.marginPct)} of the highest buy order, after fees`),
+            stat('tp-stat-even', 'Break-even listing price', q.breakEven === null ? [none('None: no buy orders to cost it.')] : [coins(q.breakEven)], q.breakEven === null ? '' : 'the lowest that gives back the buy price after fees')),
+          h('p', { class: `tp-stat-when${f === 'current' ? '' : ' is-' + f}`, text: `Prices fetched ${time.format(c.at)}, ${ago(t - c.at)} (${f}). ArenaNet's API may itself be up to 2 minutes behind.${why ? ` A newer price could not be loaded: ${API_SAYS[why] || API_SAYS.network}.` : ''}` }));
         prices.push(...fact('Spread', ...(q.spread === null ? [none('None: one side has no orders.')] : [coins(q.spread), ' (lowest sell listing minus highest buy order)'])));
         // At a price of a few copper the two fees (at least 1 copper each) take all of it: said in words, not left
         // as "about 0c" or "about -1c".
@@ -490,10 +698,16 @@
         prices.push(...fact('Sell one now', ...(q.sellNow ? ['Selling to the highest buy order would give you about ', coins(q.sellNow.net), ' after the listing fee of ', coins(q.sellNow.listing), ' and the exchange fee of ', coins(q.sellNow.exchange), `.${allFees(q.sellNow)}`] : [none('No buy orders to sell to.')])));
         prices.push(...fact('List one', ...(q.listAtLowest ? ['Listing at the lowest sell listing would give you about ', coins(q.listAtLowest.net), ` after fees, only if it sells: someone may list lower, and it may not sell.${allFees(q.listAtLowest)}`] : [none('No sell listings to match.')])));
         prices.push(...fact('Potential margin', ...(q.margin === null ? [none('None: one side has no orders.')]
-          : [coins(q.margin), ` (${Money.percent(q.marginPct)} of the buy price): buying at the highest buy order and listing at the lowest sell listing, after fees. A potential margin, not a profit: neither order has filled, and prices move.`])));
-        const f = freshness(c.at, t);
-        const why = failed.get(id);
-        prices.push(...fact('Prices fetched', `${time.format(c.at)}, ${ago(t - c.at)} (${f}). ArenaNet's API may itself be up to 2 minutes behind.${why ? ` A newer price could not be loaded: ${API_SAYS[why] || API_SAYS.network}.` : ''}`));
+          : ['Buying at the highest buy order and listing at the lowest sell listing, after fees. The percentage is of the highest buy order, what buying one costs. A potential margin, not a profit: neither order has filled, and prices move.'])));
+        // Break-even: by the same fees as everything above (Money.breakEven runs proceeds()), for one unit bought at the
+        // highest buy order. Where the lowest sell listing stands against it is said in words.
+        if (q.breakEven !== null) {
+          const gain = Money.breakEven(q.buy + 1);
+          const vs = q.sell === null ? 'There are no sell listings to compare it with.'
+            : q.sell >= q.breakEven ? ['The lowest sell listing, ', coins(q.sell), ', is at or above it.'] : ['The lowest sell listing, ', coins(q.sell), ', is below it: listing there now would lose.'];
+          prices.push(...fact('Break-even', 'Listing one unit at ', coins(q.breakEven), ' or more would give back at least the highest buy order, ', coins(q.buy), ', after both fees; any lower would lose. A gain of 1 copper or more starts at ', coins(gain), '. ', ...[].concat(vs),
+            " An estimate: the fees' rounding is assumed, and an order fills only if someone takes it."));
+        }
       } else if (c && c.none) prices.push(...fact('Prices', none('Not on the Trading Post now: the API has no price for it.')));
       else if (pending.has(id)) prices.push(...fact('Prices', none(client.paused() ? "Waiting: ArenaNet's API asked for fewer requests (HTTP 429). The page asks again shortly." : 'Loading...')));
       else if (failed.has(id)) prices.push(...fact('Prices', none(`${API_SAYS[failed.get(id)] || API_SAYS.network}. No price is shown; nothing is estimated.`)));
@@ -505,6 +719,7 @@
         h('div', { class: 'tp-detail-head' }, icon, h('p', { class: 'badges' },
           h('span', { class: `badge tp-rarity-badge rarity-${rar.toLowerCase()}`, text: rar }), ' ',
           h('span', { class: 'badge', text: typeLabel(cat.types[cat.type[i]]) + sub }), lv ? ' ' : null, lv ? h('span', { class: 'badge', text: `Level ${lv}` }) : null)),
+        stats,
         desc ? h('p', { class: 'tp-desc', text: desc }) : null,
         h('div', { class: 'actions ed-actions' },
           h('button', { type: 'button', class: 'btn small ed-star' + (on ? ' on' : ''), 'data-tp-fav': id, 'data-tpkey': 'dlg:fav', 'aria-pressed': String(on), 'aria-label': `Favorite: ${name}` }, h('span', { 'aria-hidden': 'true', text: on ? '★' : '☆' }), ' Favorite'),
@@ -616,6 +831,44 @@
     const onSelect = (id, key) => $(id).addEventListener('change', (ev) => { st[key] = key === 'sort' ? ev.target.value : Number(ev.target.value); st.shown = PAGE; apply(true); });
     onSelect('tp-type', 'type'); onSelect('tp-rarity', 'rarity'); onSelect('tp-sort', 'sort');
 
+    // A type on the home opens its results at once, as the Type list would; focus goes to the line that names them,
+    // beside the way back. No history entry: like every filter, it lives in this tab's memory.
+    function pickType(index) {
+      clearTimeout(typing);
+      Object.assign(st, { query: '', type: index, rarity: -1, favOnly: false, shown: PAGE });
+      syncControls();
+      apply(true);
+      $('tp-crumb').focus();
+    }
+    // Show all favorites, from the home: the Favorites filter's results, as the Favorites button gives them.
+    function pickFavorites() {
+      clearTimeout(typing);
+      Object.assign(st, { query: '', type: -1, rarity: -1, favOnly: true, shown: PAGE });
+      syncControls();
+      apply(true);
+      $('tp-crumb').focus();
+    }
+    // Back to the home: nothing typed, no filter, Best match. Focus goes to the Trading Post's heading, at the top.
+    function goHome() {
+      clearTimeout(typing);
+      Object.assign(st, { query: '', type: -1, rarity: -1, favOnly: false, sort: 'relevance', shown: PAGE });
+      syncControls();
+      apply(true);
+      $('market-title').focus();
+    }
+    /** The notes' pills: one panel open at a time; a second press, or Escape inside them, closes it. */
+    function pill(btn, open) {
+      for (const b of view.querySelectorAll('[data-tp-pill]')) {
+        const on = open && b === btn;
+        b.setAttribute('aria-expanded', String(on));
+        $(b.getAttribute('data-tp-pill')).hidden = !on;
+      }
+    }
+    $('tp-notes').addEventListener('keydown', (ev) => {
+      const b = $('tp-notes').querySelector('[data-tp-pill][aria-expanded="true"]');
+      if (ev.key === 'Escape' && b) { pill(b, false); b.focus(); }
+    });
+
     view.addEventListener('click', (ev) => {
       const a = ev.target.closest ? ev.target.closest('a[href^="#market/item/"]') : null;
       if (a && !ev.defaultPrevented && ev.button === 0 && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !ev.altKey) {
@@ -641,6 +894,12 @@
       else if (t.id === 'tp-whole-no') { whole.state = whole.ended ? 'done' : 'idle'; draw(); $('tp-whole-btn').focus(); }
       else if (t.id === 'tp-whole-start') startWhole();
       else if (t.id === 'tp-whole-cancel') { if (wholeCtl) wholeCtl.abort(); }
+      else if (a('data-tp-cat')) pickType(Number(a('data-tp-cat')));
+      else if (t.id === 'tp-home-btn') goHome();
+      else if (t.id === 'tp-watch-refresh' || t.id === 'tp-favhome-refresh') { for (const id of homeIds()) failed.delete(id); lastError = null; loadWatch(true); }
+      else if (t.id === 'tp-gem-refresh') { gemFailed.coins = gemFailed.gems = null; loadGems(true); }
+      else if (t.id === 'tp-favhome-all') pickFavorites();
+      else if (a('data-tp-pill')) pill(t, a('aria-expanded') !== 'true');
       else if (t.id === 'tp-link-notice-dismiss') { say(''); try { history.replaceState(null, '', location.pathname + location.search + '#market'); } catch (e) { /* kept */ } }
       else if (a('data-tp-book')) loadBook(Number(a('data-tp-book')));
       else if (a('data-tp-refresh-one')) { const id = Number(a('data-tp-refresh-one')); failed.delete(id); loadPrices([id], detailCtl ? detailCtl.signal : undefined, undefined, true).then(() => { draw(); drawDetail(); }); drawDetail(); }
@@ -654,6 +913,7 @@
       if (!cat || view.hidden) return;
       const t = now(), ids = visibleIds();
       if (ids.some((id) => { const c = cache.get(id); return c && t - c.at >= CURRENT_MS; })) fetchNeeded(false);
+      loadWatch(false); // on the home: only what is not current, so nothing when it all is
       draw();
     }
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !view.hidden) shown(); });
@@ -662,10 +922,12 @@
     function tick() {
       const t = now();
       drawPrices(order.slice(0, st.shown), t);
-      for (const li of $('tp-results').children) {
+      if (searchStatus === 'idle') { priceLine(watchIds(cat), t, WATCH_LINE); if (favHome(favs).length) priceLine(favHome(favs), t, FAVHOME_LINE); gemLine(t); }
+      for (const li of [...$('tp-results').children, ...$('tp-watch-list').children, ...$('tp-favhome-list').children]) {
         const id = Number(li.getAttribute('data-id')), i = cat.byId.get(id);
         if (i === undefined) continue;
-        const note = rowNote(id, t), cls = rowClass(cat.rarities[cat.rarity[i]], note.age), el = li.querySelector('.tp-note');
+        const base = li.classList.contains('tp-watch-card') ? 'tp-watch-card' : 'tp-row';
+        const note = rowNote(id, t), cls = rowClass(cat.rarities[cat.rarity[i]], note.age, base), el = li.querySelector('.tp-note');
         if (li.className !== cls) li.className = cls;
         if (el && el.textContent !== note.text) { el.textContent = note.text; el.hidden = !note.text; }
       }
@@ -677,11 +939,11 @@
     return {
       route, shown,
       /** For the browser checks: what this tab holds, never the reader's data beyond favorites. */
-      debug: () => ({ listState, query: st.query, type: st.type, rarity: st.rarity, sort: st.sort, favOnly: st.favOnly, shown: st.shown, matches: matches.length, cached: cache.size, whole: Object.assign({}, whole), stats: client.stats() }),
+      debug: () => ({ listState, home: searchStatus === 'idle', query: st.query, type: st.type, rarity: st.rarity, sort: st.sort, favOnly: st.favOnly, shown: st.shown, matches: matches.length, cached: cache.size, whole: Object.assign({}, whole), stats: client.stats() }),
     };
   }
 
-  const Market = { LIST_URL, PAGE, SORT_CAP, CURRENT_MS, OLD_MS, FAV_KEY, FAV_MAX, SORTS, TYPE_LABEL, typeLabel, sanitizeFavorites, freshness, scopeText, listFailure, mount };
+  const Market = { LIST_URL, PAGE, SORT_CAP, CURRENT_MS, OLD_MS, FAV_KEY, FAV_MAX, SORTS, TYPE_LABEL, TYPE_ICON, WATCH, FAV_HOME, GEM_GOLD, GEM_GEMS, typeLabel, watchIds, favHome, lostFavorites, typeTiles, crumbText, sanitizeFavorites, freshness, scopeText, listFailure, mount };
   if (typeof module === 'object' && module.exports) module.exports = Market;
   else root.GW2Market = Market;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

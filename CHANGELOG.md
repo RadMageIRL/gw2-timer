@@ -4,6 +4,24 @@ Every version of GW2 Timer and what changed in it, newest first. Dates are the d
 
 The schedule data has its own revision numbers (r1, r2, ...), listed under "Schedule data" below. A revision is either a **schedule change** (a start time, cycle or event added or removed) or **metadata only** (a label, note or verification status changed; no time moved).
 
+## v0.4.1 (unreleased)
+
+A home for the Trading Post. Settings and favorites saved by earlier versions carry over unchanged, and the schedule data is still r1.
+
+Added
+- Trading Post home: with nothing typed and no filter, the Trading Post opens on Market Watch and Browse by type instead of an empty list. Market Watch is a fixed set of eight familiar items used in crafting, chosen by hand, with their highest buy order and lowest sell listing asked for from ArenaNet's API when the home is shown (one request for the prices, one for the icons), each with when it was fetched. It is not a ranking. Browse by type shows the item list's 16 types with their item counts; choosing one opens its results at once, and Trading Post home returns.
+- Your favorites on the Trading Post home: your newest 8 favorites with their prices, asked for in the same request as Market Watch's, and Show all for every favorite. With none, it says how to add one; a saved favorite the item list no longer has is counted and said.
+- Gem exchange on the Trading Post home: what 100 gold buys in gems and what 400 gems sell for, from ArenaNet's exchange when the home is shown (one request each), with when. Each direction is its own price and the rate changes with the amount, so neither line is presented as the other reversed. When the API does not answer, no rate is shown.
+- Break-even listing price in item details: the lowest price at which listing one unit would give back at least the highest buy order after both fees, with where a gain of 1 copper starts and how the lowest sell listing compares. An estimate, as every result after fees is.
+- Sort by potential margin %: the potential margin as a share of the highest buy order. Items with no buy orders have no such share and come after the ranked ones; over 1,000 matches it ranks only the prices loaded, as the other price sorts do.
+
+Changed
+- Item details lead with the highest buy order, the lowest sell listing and the potential margin, large, then when they were fetched; the arithmetic and the caveats follow, smaller.
+- The Trading Post's notes (the item list's date, fees and margin, what is saved) are behind three pills under the results, so they take one line until opened.
+- The item search is larger, as the Trading Post's first control.
+- The page title is "GW2 Timer | Unofficial Guild Wars 2 Fansite", as ArenaNet's Content Use Policy asks of fan sites ("including in the browser title bar"). The description is unchanged.
+- Item details name the margin's denominator: a percentage of the highest buy order.
+
 ## v0.4.0 (2026-11-16)
 
 A Trading Post explorer beside the timer, and Add to calendar. Settings saved by earlier versions carry over unchanged, and the schedule data is still r1.

@@ -69,11 +69,17 @@ test('every sort the page offers has its words; name and best match say so', () 
   assert.deepEqual(offered.map((m) => m[1]), Object.keys(Market.SORTS));
   for (const [, v, label] of offered) {
     const s = Market.SORTS[v];
-    if (s.key) assert.equal(label, `${s.what === 'potential margin after fees' ? 'Potential margin' : s.what[0].toUpperCase() + s.what.slice(1)}, ${s.how}`, v);
+    if (s.key) assert.equal(label, `${s.short || (s.what === 'potential margin after fees' ? 'Potential margin' : s.what[0].toUpperCase() + s.what.slice(1))}, ${s.how}`, v);
     else assert.equal(label, s.label, v);
   }
   assert.equal(Market.scopeText({ ...base, sort: 'name' }), 'Sorted by name.');
   assert.equal(Market.scopeText({ ...base, sort: 'relevance' }), 'Best matches first, then by name.');
+  // The margin as a percentage says what it is a percentage of, and that items with no buy orders (no denominator) come last.
+  assert.equal(Market.SORTS['marginpct-desc'].key, 'marginPct');
+  assert.equal(Market.scopeText({ ...base, sort: 'marginpct-desc', matches: 358, ranked: 350, noSide: 8, unpriced: 0 }),
+    'Ranked by potential margin as a share of the highest buy order, largest first, among all 358 matching items. Not a ranking of the whole market. 8 items with no buy orders or no sell listings come after the ranked ones.');
+  assert.equal(Market.scopeText({ ...base, sort: 'marginpct-desc', matches: 1075, ranked: 48, noSide: 2, unpriced: 1025 }),
+    'Ranked by potential margin as a share of the highest buy order, largest first, among only the 50 of 1,075 matching items whose prices are loaded. Not a ranking of every match, or of the whole market. To rank every match, narrow the search to 1,000 items or fewer, or load the whole market. 2 items with no buy orders or no sell listings come after the ranked ones.');
 });
 
 test('an item list that does not load: opened as a file it says the site must be served over HTTP or HTTPS, with no retry; served, the connection and reading messages stay', () => {
@@ -99,6 +105,71 @@ test('an item list that does not load: opened as a file it says the site must be
 
 test('item types read as words', () => {
   assert.deepEqual(['CraftingMaterial', 'UpgradeComponent', 'MiniPet', 'Back', 'JadeTechModule', 'SomethingNew'].map(Market.typeLabel), ['Crafting material', 'Upgrade component', 'Miniature', 'Back item', 'Jade Tech module', 'Something New']);
+});
+
+// ---- The home (post-v0.4.0 landing page) ----
+
+const Catalog = require('../js/catalog.js');
+const CAT = Catalog.parse(readFileSync(join(ROOT, 'data', 'tp-items.json'), 'utf8')).catalog;
+
+test('Market Watch is the eight hand-picked items, in its order, each in the committed item list; an id the list loses is left out', () => {
+  assert.deepEqual(Market.WATCH, [19976, 19721, 68063, 24277, 24295, 19701, 19725, 19746]);
+  assert.deepEqual(Market.watchIds(CAT).map((id) => CAT.names[CAT.byId.get(id)]),
+    ['Mystic Coin', 'Glob of Ectoplasm', 'Amalgamated Gemstone', 'Pile of Crystalline Dust', 'Vial of Powerful Blood', 'Orichalcum Ore', 'Ancient Wood Log', 'Bolt of Gossamer']);
+  const fewer = { byId: new Map([[19721, 0], [24295, 1]]) };
+  assert.deepEqual(Market.watchIds(fewer), [19721, 24295]);
+  assert.deepEqual(Market.watchIds({ byId: new Map() }), []);
+});
+
+test('the home\'s types are exactly the item list\'s, ordered as the Type list, each with its count and a drawing; a type with no drawing gets the box', () => {
+  const tiles = Market.typeTiles(CAT);
+  assert.equal(tiles.length, CAT.types.length);
+  assert.deepEqual(tiles.map((t) => t.type).sort(), CAT.types.slice().sort(), 'no type invented, none left out');
+  assert.equal(tiles.reduce((a, t) => a + t.count, 0), CAT.count, 'every item counted once');
+  for (const t of tiles) {
+    assert.equal(t.count, Array.from(CAT.type).filter((x) => x === t.index).length, t.type);
+    assert.equal(t.label, Market.typeLabel(t.type));
+    assert.equal(CAT.types[t.index], t.type);
+    assert.ok(Market.TYPE_ICON[t.type], `${t.type} has its own drawing`);
+    assert.equal(t.icon, Market.TYPE_ICON[t.type]);
+  }
+  assert.deepEqual(tiles.map((t) => t.label), tiles.map((t) => t.label).slice().sort(), 'by label');
+  assert.equal(tiles.find((t) => t.type === 'Weapon').count, 11780);
+  // A refreshed list with a type this page has no drawing for still shows it, with the plain box.
+  const odd = { types: ['Weapon', 'Novelty'], count: 3, type: Uint8Array.from([0, 1, 1]) };
+  const t2 = Market.typeTiles(odd);
+  assert.deepEqual(t2.map((t) => [t.label, t.count]), [['Novelty', 2], ['Weapon', 1]]);
+  assert.equal(t2[0].icon, 'M5 5h14v14H5z M5 9h14');
+  // Each drawing is a path of commands and numbers only.
+  for (const [k, d] of Object.entries(Market.TYPE_ICON)) assert.match(d, /^[MmLlHhVvCcSsAaZz0-9 .,-]+$/, k);
+});
+
+test('the line beside "Trading Post home" names the results: type, rarity, Favorites and what is typed, or every item', () => {
+  const s = (o) => ({ query: '', type: -1, rarity: -1, favOnly: false, ...o });
+  const w = CAT.types.indexOf('Weapon'), ex = CAT.rarities.indexOf('Exotic');
+  assert.equal(Market.crumbText(s({ type: w }), CAT), 'Weapon');
+  assert.equal(Market.crumbText(s({ type: w, rarity: ex }), CAT), 'Weapon · Exotic');
+  assert.equal(Market.crumbText(s({ rarity: ex, favOnly: true, query: '  glob ' }), CAT), 'Exotic · Favorites · “glob”');
+  assert.equal(Market.crumbText(s({ query: 'iron sword' }), CAT), '“iron sword”');
+  assert.equal(Market.crumbText(s({}), CAT), 'Every item', 'a price sort with nothing typed ranks every item');
+  assert.equal(Market.crumbText(s({ type: 99, rarity: 99 }), CAT), 'Every item', 'an index the list does not have names nothing');
+});
+
+test('the home shows the newest favorites first, at most 8; saved ids the item list no longer has are counted once each, junk is not', () => {
+  assert.equal(Market.FAV_HOME, 8);
+  assert.deepEqual(Market.favHome([19721, 24295, 19976]), [19976, 24295, 19721], 'favorites are saved oldest first');
+  assert.deepEqual(Market.favHome(Array.from({ length: 12 }, (_, i) => i + 1)), [12, 11, 10, 9, 8, 7, 6, 5]);
+  assert.deepEqual(Market.favHome([]), []);
+  const known = new Map([[19721, 0], [24295, 1]]);
+  assert.equal(Market.lostFavorites([19721, 999999999, 999999999, 'x', 1.5, -3, 0, 24295, 123], known), 2, '999999999 once, and 123');
+  assert.equal(Market.lostFavorites([19721, 24295], known), 0);
+  for (const raw of ['19721', null, undefined, { 0: 1 }]) assert.equal(Market.lostFavorites(raw, known), 0);
+});
+
+test('the gem exchange quotes what 100 gold buys and what 400 gems sell for: a fixed amount each way, named on the page', () => {
+  assert.deepEqual([Market.GEM_GOLD, Market.GEM_GEMS], [1000000, 400]);
+  const mk = readFileSync(join(ROOT, 'js', 'market.js'), 'utf8');
+  assert.ok(mk.includes("client.exchange(k, k === 'coins' ? GEM_GOLD : GEM_GEMS, { signal: gemCtl.signal })"), 'coins gives gold and gets gems; gems gives gems and gets gold');
 });
 
 console.log(`${passed} passed, ${failed} failed`);

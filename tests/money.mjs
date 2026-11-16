@@ -142,5 +142,42 @@ test('counts and percents', () => {
   assert.deepEqual([Money.percent(0.125), Money.percent(-0.0509), Money.percent(0), Money.percent(-0.0001), Money.percent(NaN)], ['12.5%', `${MINUS}5.1%`, '0.0%', '0.0%', '']);
 });
 
+// ---- Break-even (post-v0.4.0 polish) ----
+
+test('break-even: the lowest listing price that gives back the cost after both fees, worked by hand at the 1 copper minimums and at real prices', () => {
+  // The two 1c minimums: 3c gives back 3 - 1 - 1 = 1c (2c gives 0c); 4c gives 2c; 5c gives 3c.
+  assert.deepEqual([1, 2, 3].map(Money.breakEven), [3, 4, 5]);
+  // 14c gives 12c; 15c gives 15 - 1 - 2 = 12c (the 10% fee reaches 2c at 15c), so 13c first comes back at 16c.
+  assert.deepEqual([Money.breakEven(12), Money.breakEven(13)], [14, 16]);
+  // Glob of Ectoplasm's 17s 10c buy order: 20s 12c gives back 2012 - 101 - 201 = 1710; 20s 11c gives 2011 - 101 - 201 = 1709.
+  assert.equal(Money.breakEven(1710), 2012);
+  // Mystic Coin at 2g 11s 00c: 2g 48s 23c gives back 24823 - 1241 - 2482 = 21100 exactly; 2g 48s 22c gives 21099.
+  assert.equal(Money.breakEven(21100), 24823);
+  // At least 1 copper more than the cost (the lowest price that makes any money): 2g 48s 24c gives 21101.
+  assert.equal(Money.breakEven(21101), 24824);
+});
+
+test('break-even is never too low and never more than needed: every cost from 1c to 50 gold, and large ones', () => {
+  for (let cost = 1; cost <= 500000; cost++) {
+    const p = Money.breakEven(cost);
+    if (Money.proceeds(p).net < cost || (p > 1 && Money.proceeds(p - 1).net >= cost)) assert.fail(`cost ${cost}: ${p}`);
+  }
+  for (const cost of [9999999, 123456789, 999999999, 7654321012]) {
+    const p = Money.breakEven(cost);
+    assert.ok(Money.proceeds(p).net >= cost && Money.proceeds(p - 1).net < cost, `${cost}: ${p}`);
+    assert.ok(Math.abs(p - cost / 0.85) < 3, `${cost}: ${p} is about cost / 0.85`);
+  }
+});
+
+test('break-even refuses anything that is not a whole, positive number of copper; quote() carries it, and none without buy orders', () => {
+  for (const bad of [0, -1, -1710, 1.5, NaN, Infinity, '1710', null, undefined, {}, 2 ** 53, 9e15]) assert.equal(Money.breakEven(bad), null, String(bad));
+  assert.equal(Money.quote({ buys: { quantity: 391900, unit_price: 1710 }, sells: { quantity: 2219204, unit_price: 1910 } }).breakEven, 2012);
+  assert.equal(Money.quote({ buys: { quantity: 0, unit_price: 0 }, sells: { quantity: 5, unit_price: 1910 } }).breakEven, null, 'no buy orders: nothing to break even against');
+  assert.equal(Money.quote({ buys: { quantity: 40, unit_price: 1 }, sells: { quantity: 0, unit_price: 0 } }).breakEven, 3, 'no sell listings: the break-even still stands');
+  // The margin as a share of the buy price never divides by zero: no buy orders gives null, not Infinity.
+  assert.equal(Money.quote({ buys: { quantity: 0, unit_price: 0 }, sells: { quantity: 5, unit_price: 1910 } }).marginPct, null);
+  assert.equal(Money.quote({ buys: { quantity: 40, unit_price: 1 }, sells: { quantity: 12, unit_price: 2 } }).marginPct, -1, '1c buy, 2c sell: a loss of all of it');
+});
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

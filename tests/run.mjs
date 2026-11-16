@@ -758,10 +758,12 @@ test('the page is in the v0.2.0 order, with the event index after Schedule notes
 });
 // ---- Search metadata, structured data, headings, links and loading ----
 
-test('the title says GW2 Timer and Guild Wars 2 and names world bosses and meta events, with no version, in 60 characters or less', () => {
+// ArenaNet's Content Use Policy (last updated 2025-10-28): fan sites must be labeled as such, "including in the browser
+// title bar". Approved by Dos 2026-11-16: "GW2 Timer | Unofficial Guild Wars 2 Fansite".
+test('the title says GW2 Timer and Guild Wars 2 and labels the site an unofficial fansite, as ArenaNet asks of fan sites, with no version, in 60 characters or less', () => {
   const t = pageTitle();
-  assert.equal(t, 'GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers');
-  for (const w of ['GW2 Timer', 'Guild Wars 2', 'World Boss', 'Meta Event']) assert.ok(t.includes(w), w);
+  assert.equal(t, 'GW2 Timer | Unofficial Guild Wars 2 Fansite');
+  for (const w of ['GW2 Timer', 'Guild Wars 2', 'Unofficial', 'Fansite']) assert.ok(t.includes(w), w);
   assert.ok(t.length <= 60, `${t.length} characters`);
   assert.ok(!/\bv?\d+\.\d+/.test(t), 'no version number');
   assert.equal(html.split('<title>').length - 1, 1, 'one title');
@@ -906,9 +908,12 @@ test('the only network calls in the code are the news feed, the same-origin cloc
     const urls = [...src.matchAll(/https?:\/\/[a-z0-9.-]+/gi)].map((m) => m[0]);
     // radmagelabs.com is the page's own canonical address, which js/link.js writes into links to an event; nothing is requested from it.
     // api.guildwars2.com only in js/api.js, and render.guildwars2.com (icons) only in js/market.js, which checks every icon address against it.
-    const allowed = { 'api.js': ['https://api.guildwars2.com'], 'market.js': ['https://render.guildwars2.com', 'https://wiki.guildwars2.com'] }[f] || [];
+    // http://www.w3.org in js/market.js is the SVG namespace name for createElementNS (the home's type drawings), which is never requested; only that exact use.
+    const allowed = { 'api.js': ['https://api.guildwars2.com'], 'market.js': ['https://render.guildwars2.com', 'https://wiki.guildwars2.com', 'http://www.w3.org'] }[f] || [];
     for (const u of urls) assert.ok(['https://www.guildwars2.com', 'https://wiki.guildwars2.com', 'https://radmagelabs.com', ...allowed].includes(u), `${f}: ${u}`);
+    if (f === 'market.js') assert.deepEqual([...src.matchAll(/http:\/\/www\.w3\.org[^'"]*/g)].map((m) => m[0]), ['http://www.w3.org/2000/svg'], 'the w3.org name only as the SVG namespace');
   }
+  assert.ok(file('js/market.js').includes("const NS = 'http://www.w3.org/2000/svg', s = document.createElementNS(NS, 'svg'), p = document.createElementNS(NS, 'path');"), 'used only by createElementNS');
   // app.js: the news feed and the clock check. market.js: the item list (same origin) and the API queue's fetch. api.js: its one fetch.
   assert.deepEqual(calls.sort(), ['api.js: job.url', 'app.js: News.FEED_URL', 'app.js: url', "market.js: LIST_URL + (version || ''", 'market.js: u']);
   const api = file('js/api.js');
@@ -996,11 +1001,16 @@ test('the Trading Post saves only favorites (item ids under tp-favorites) and ne
 test('the Trading Post says what it cannot know: scope of a sort, estimates after fees, potential not profit, and no price without the API', () => {
   const at = html.indexOf('<section class="view market-view');
   assert.ok(at > 0, 'the Trading Post section');
-  const sec = html.slice(at, html.indexOf('</section>', at));
+  // The section holds the home's own sections, so it ends where main does (it is main's last child).
+  const sec = html.slice(at, html.indexOf('</main>', at));
+  assert.match(sec, /<\/section>\s*$/, 'the Trading Post is the last thing in main');
   for (const said of ['when the API does not answer, no price is shown', 'It is not a profit: an order that is placed has not filled', 'how a fraction of a copper is rounded is not published, so every result after fees is an estimate', 'Prices are never saved']) assert.ok(sec.includes(said), said);
   const mk = file('js/market.js');
   for (const said of ['Not a ranking of the whole market.', 'Not a ranking of every match, or of the whole market.', 'Nothing is estimated in its place.', 'A potential margin, not a profit: neither order has filled, and prices move.', 'only if it sells', 'Phase A measured about 142']) assert.ok(mk.includes(said), said);
   assert.ok(!/\bprofit\b(?!:| for| or|,| \(| unless| when)/i.test(mk.replace(/not a profit/gi, '').replace(/It is not a profit/g, '')), 'profit only ever denied');
+  // Market Watch is a hand-picked set: never called popular, top, trending or most traded, with no evidence for it.
+  assert.ok(sec.includes('eight familiar items used in crafting, chosen by hand; not a ranking'), 'Market Watch says what it is');
+  assert.ok(!/popular|top[- ]traded|most traded|trending|best[- ]sell|hottest/i.test(sec + mk), 'no popularity claimed');
   assert.match(html, /<div class="mode-switch" role="group" aria-label="Mode">\s*<button type="button" class="mode-btn" data-mode="timers" aria-pressed="true" aria-controls="timers-view">Event Timers<\/button>\s*<button type="button" class="mode-btn" data-mode="market" aria-pressed="false" aria-controls="market-view">Trading Post<\/button>/);
   assert.match(html, /<section class="view market-view" id="market-view" aria-labelledby="market-title" hidden>/, 'the Trading Post starts hidden');
 });

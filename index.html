@@ -6,28 +6,28 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://render.guildwars2.com; connect-src 'self' https://www.guildwars2.com https://api.guildwars2.com; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="dark light">
-  <link rel="stylesheet" href="style.css?v=0.4.0">
+  <link rel="stylesheet" href="style.css?v=0.4.1">
   <!-- The scripts download together and run in order once the page is parsed. app.js holds the
        first paint until it has filled the page in, so the page does not jump as it loads. -->
   <script defer src="events-data.js?r=1"></script>
-  <script defer src="js/schedule.js?v=0.4.0"></script>
-  <script defer src="js/store.js?v=0.4.0"></script>
-  <script defer src="js/news.js?v=0.4.0"></script>
-  <script defer src="js/clock.js?v=0.4.0"></script>
-  <script defer src="js/search.js?v=0.4.0"></script>
-  <script defer src="js/link.js?v=0.4.0"></script>
-  <script defer src="js/reminders.js?v=0.4.0"></script>
-  <script defer src="js/ics.js?v=0.4.0"></script>
-  <script defer blocking="render" src="js/app.js?v=0.4.0"></script>
-  <script src="js/theme-boot.js?v=0.4.0"></script>
+  <script defer src="js/schedule.js?v=0.4.1"></script>
+  <script defer src="js/store.js?v=0.4.1"></script>
+  <script defer src="js/news.js?v=0.4.1"></script>
+  <script defer src="js/clock.js?v=0.4.1"></script>
+  <script defer src="js/search.js?v=0.4.1"></script>
+  <script defer src="js/link.js?v=0.4.1"></script>
+  <script defer src="js/reminders.js?v=0.4.1"></script>
+  <script defer src="js/ics.js?v=0.4.1"></script>
+  <script defer blocking="render" src="js/app.js?v=0.4.1"></script>
+  <script src="js/theme-boot.js?v=0.4.1"></script>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23101114'/%3E%3Ccircle cx='32' cy='34' r='19' fill='none' stroke='%23d9a441' stroke-width='5'/%3E%3Cpath d='M32 34V22M32 34l9 6' stroke='%23e9e4da' stroke-width='5' stroke-linecap='round'/%3E%3Crect x='26' y='6' width='12' height='7' rx='2' fill='%23d9a441'/%3E%3C/svg%3E">
-  <title>GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers</title>
+  <title>GW2 Timer | Unofficial Guild Wars 2 Fansite</title>
   <meta name="description" content="Guild Wars 2 world boss and meta-event timer: what is scheduled now and next in your local time, day and night cycles, resets and waypoints. Unofficial fansite.">
   <link rel="canonical" href="https://radmagelabs.com/gw2-timer/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="RadMage Labs">
   <meta property="og:url" content="https://radmagelabs.com/gw2-timer/">
-  <meta property="og:title" content="GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers">
+  <meta property="og:title" content="GW2 Timer | Unofficial Guild Wars 2 Fansite">
   <meta property="og:description" content="Guild Wars 2 world boss and meta-event timer: what is scheduled now and next in your local time, day and night cycles, resets and waypoints. Unofficial fansite.">
   <meta property="og:image" content="https://radmagelabs.com/assets/og/gw2-timer.png">
   <meta property="og:image:width" content="1200">
@@ -46,7 +46,7 @@
     <div class="brand">
       <div class="brand-line">
         <h1>GW2 Timer</h1>
-        <span class="tag">v0.4.0 · Guild Wars 2 Boss &amp; Meta Timers · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
+        <span class="tag">v0.4.1 · Guild Wars 2 Boss &amp; Meta Timers · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
       </div>
       <nav class="share-links" aria-label="Share and support"><button type="button" class="link-btn" data-share title="Share https://radmagelabs.com/gw2-timer/">share</button> · <a href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">buy me a coffee<span class="sr-only"> (opens a new tab)</span></a></nav>
     </div>
@@ -278,7 +278,7 @@
         <h2 id="market-title" tabindex="-1">Trading Post</h2>
         <span class="hint">prices from ArenaNet's public API</span>
       </div>
-      <p class="explain">Find an item and compare its highest buy order with its lowest sell listing. Prices are asked for when you search, straight from ArenaNet's API, with the time they were fetched; when the API does not answer, no price is shown.</p>
+      <p class="explain">Find an item and compare its highest buy order with its lowest sell listing. Prices are asked for when you open the Trading Post and when you search, straight from ArenaNet's API, with the time they were fetched; when the API does not answer, no price is shown.</p>
       <div class="notice-bar link-notice" id="tp-link-notice" role="status" hidden><span id="tp-link-notice-text"></span> <button type="button" class="link-btn" id="tp-link-notice-dismiss">Dismiss</button></div>
       <p class="tp-boot" id="tp-boot" role="status">Loading the Trading Post...</p>
       <p class="tp-boot-actions"><button type="button" class="btn small" id="tp-retry" hidden>Try again</button></p>
@@ -306,6 +306,7 @@
                 <option value="sell-asc">Lowest sell listing, low to high</option>
                 <option value="spread-desc">Spread, largest first</option>
                 <option value="margin-desc">Potential margin, largest first</option>
+                <option value="marginpct-desc">Potential margin %, largest first</option>
               </select>
             </label>
             <button type="button" class="btn small" id="tp-favs" aria-pressed="false">Favorites (0)</button>
@@ -313,6 +314,7 @@
           <p class="tp-fav-unsaved" id="tp-fav-unsaved" hidden>Favorites cannot be saved in this browser, so they last only until this tab closes.</p>
         </div>
         <div class="tp-status">
+          <p class="tp-crumbs" id="tp-crumbs" hidden><button type="button" class="btn small tp-home-btn" id="tp-home-btn"><span aria-hidden="true">‹</span> Trading Post home</button> <span class="tp-crumb-sep" aria-hidden="true">/</span> <span class="tp-crumb" id="tp-crumb" tabindex="-1"></span></p>
           <p class="tp-count" id="tp-count" role="status"></p>
           <p class="tp-scope" id="tp-scope"></p>
           <p class="tp-prices" id="tp-prices"><span id="tp-prices-text" role="status"></span> <button type="button" class="link-btn" id="tp-refresh" hidden>Refresh prices</button></p>
@@ -329,14 +331,60 @@
             <p class="tp-whole-status" id="tp-whole-status" role="status" tabindex="-1"></p>
           </div>
         </div>
+        <!-- The Trading Post's home: shown while nothing is typed and no filter or price sort is chosen. -->
+        <div class="tp-home" id="tp-home" hidden>
+          <section class="tp-watch" aria-labelledby="tp-watch-title">
+            <div class="section-head">
+              <h3 id="tp-watch-title">Market Watch</h3>
+              <span class="hint">eight familiar items used in crafting, chosen by hand; not a ranking</span>
+            </div>
+            <p class="tp-prices tp-watch-prices" id="tp-watch-prices"><span id="tp-watch-text" role="status"></span> <button type="button" class="link-btn" id="tp-watch-refresh" hidden>Refresh prices</button></p>
+            <ul class="tp-watch-list" id="tp-watch-list" aria-label="Market Watch items"></ul>
+          </section>
+          <section class="tp-favhome" aria-labelledby="tp-favhome-title">
+            <div class="section-head">
+              <h3 id="tp-favhome-title">Your favorites</h3>
+              <span class="hint" id="tp-favhome-hint">saved in this browser, newest first</span>
+            </div>
+            <p class="tp-prices tp-watch-prices" id="tp-favhome-prices" hidden><span id="tp-favhome-text" role="status"></span> <button type="button" class="link-btn" id="tp-favhome-refresh" hidden>Refresh prices</button></p>
+            <ul class="tp-watch-list" id="tp-favhome-list" aria-label="Your favorite items" hidden></ul>
+            <p class="tp-favhome-empty" id="tp-favhome-empty">No favorites yet. Star an item (☆) in the results or in its details to keep it here, with its prices.</p>
+            <p class="tp-favhome-more"><button type="button" class="btn small" id="tp-favhome-all" hidden>Show all favorites</button></p>
+          </section>
+          <section class="tp-gems" aria-labelledby="tp-gems-title">
+            <div class="section-head">
+              <h3 id="tp-gems-title">Gem exchange</h3>
+              <span class="hint">ArenaNet's exchange now; each direction is its own price</span>
+            </div>
+            <ul class="tp-gem-list">
+              <li class="tp-gem"><span class="tp-gem-k">Gold to gems</span> <span class="tp-gem-v" id="tp-gem-buy-v"></span></li>
+              <li class="tp-gem"><span class="tp-gem-k">Gems to gold</span> <span class="tp-gem-v" id="tp-gem-sell-v"></span></li>
+            </ul>
+            <p class="tp-prices tp-watch-prices" id="tp-gem-prices"><span id="tp-gem-text" role="status"></span> <button type="button" class="link-btn" id="tp-gem-refresh" hidden>Refresh rates</button></p>
+            <p class="tp-gem-note">The rate changes with the amount, and buying gems and selling them are different prices: neither line is the other one reversed.</p>
+          </section>
+          <section class="tp-cats" aria-labelledby="tp-cats-title">
+            <div class="section-head">
+              <h3 id="tp-cats-title">Browse by type</h3>
+              <span class="hint" id="tp-cats-hint"></span>
+            </div>
+            <ul class="tp-cat-grid" id="tp-cat-grid"></ul>
+          </section>
+        </div>
         <div class="tp-head" id="tp-head" aria-hidden="true" hidden><span></span><span>Item</span><span>Highest buy order</span><span>Lowest sell listing</span><span>Spread</span><span>Potential margin</span><span></span></div>
         <ol class="tp-results" id="tp-results" aria-label="Trading Post items" aria-describedby="tp-scope"></ol>
         <p class="empty" id="tp-empty" hidden></p>
         <p class="tp-more-line"><button type="button" class="btn small" id="tp-more" hidden>Show more</button></p>
-        <div class="tp-notes">
-          <p id="tp-asof"></p>
-          <p>Potential margin is what listing one unit at the lowest sell listing would bring after fees, minus the highest buy order. It is not a profit: an order that is placed has not filled, someone may list lower, and prices move. Fees: a 5% listing fee and a 10% exchange fee, each at least 1 copper, as ArenaNet documents them; how a fraction of a copper is rounded is not published, so every result after fees is an estimate.</p>
-          <p>Favorites are saved in this browser. Prices are never saved: they last while this page is open.</p>
+        <!-- Notes behind pills, so they take one line until asked for. One open at a time. -->
+        <div class="tp-notes" id="tp-notes">
+          <p class="tp-pill-row">
+            <button type="button" class="tp-pill" id="tp-pill-list" data-tp-pill="tp-panel-list" aria-expanded="false" aria-controls="tp-panel-list"><span class="tp-pill-ic" aria-hidden="true"></span>Item list</button>
+            <button type="button" class="tp-pill" id="tp-pill-fees" data-tp-pill="tp-panel-fees" aria-expanded="false" aria-controls="tp-panel-fees"><span class="tp-pill-ic" aria-hidden="true"></span>Fees and margin</button>
+            <button type="button" class="tp-pill" id="tp-pill-saved" data-tp-pill="tp-panel-saved" aria-expanded="false" aria-controls="tp-panel-saved"><span class="tp-pill-ic" aria-hidden="true"></span>What is saved</button>
+          </p>
+          <div class="tp-pill-panel" id="tp-panel-list" role="region" aria-labelledby="tp-pill-list" hidden><p id="tp-asof"></p></div>
+          <div class="tp-pill-panel" id="tp-panel-fees" role="region" aria-labelledby="tp-pill-fees" hidden><p>Potential margin is what listing one unit at the lowest sell listing would bring after fees, minus the highest buy order. It is not a profit: an order that is placed has not filled, someone may list lower, and prices move. Fees: a 5% listing fee and a 10% exchange fee, each at least 1 copper, as ArenaNet documents them; how a fraction of a copper is rounded is not published, so every result after fees is an estimate.</p></div>
+          <div class="tp-pill-panel" id="tp-panel-saved" role="region" aria-labelledby="tp-pill-saved" hidden><p>Favorites are saved in this browser. Prices are never saved: they last while this page is open.</p></div>
         </div>
       </div>
     </section>
@@ -364,7 +412,7 @@
 
   <dialog id="about" aria-labelledby="about-title">
     <div class="dialog-close"><button type="button" class="btn small" data-close>Close</button></div>
-    <h2 id="about-title">GW2 Timer v0.4.0</h2>
+    <h2 id="about-title">GW2 Timer v0.4.1</h2>
     <p>A Guild Wars 2 timer for world bosses and meta-events: what is in its scheduled window now, what starts next, in your local time. Unofficial fansite, not affiliated with ArenaNet or NCSOFT.</p>
     <h3>Scheduled, not live</h3>
     <p>Every time here is a scheduled start. The game publishes no live state for events, so a map can run early, late, fail, or close. "Scheduled now" means the scheduled window is open, not that the fight is on in your map.</p>
@@ -381,9 +429,9 @@
     <h3>Add to calendar</h3>
     <p>The Calendar button by the filters, or Add to calendar in an event's details, makes a calendar file (.ics) of the scheduled starts you choose, for the next start or up to 30 days, with an alarm if you want one. Each start is written in UTC, so your calendar shows it in your time zone. The file is made in this browser and never updates itself; if a schedule changes, download a new one. Whether a file's alarm is used, and what importing a file again does, depends on your calendar app.</p>
     <h3>Trading Post</h3>
-    <p>The Trading Post mode searches the items sold on the game's Trading Post (the item list is updated by hand, so the newest items can be missing) and shows each one's highest buy order and lowest sell listing, fetched from ArenaNet's public API when you search. It needs no account and no API key. A price sort says which items it covers; it ranks the whole market only after you choose Load whole market. Proceeds and margins after fees are estimates, not profits: an order has not filled until it does. Nothing here is a live feed of the game: the API itself can be a few minutes behind.</p>
+    <p>The Trading Post mode searches the items sold on the game's Trading Post (the item list is updated by hand, so the newest items can be missing) and shows each one's highest buy order and lowest sell listing, fetched from ArenaNet's public API when you search. It opens on a home with the item types to browse, your newest favorites, the gem exchange's current rates (what 100 gold buys and what 400 gems sell for, each its own price) and a Market Watch: eight familiar items used in crafting, chosen by hand (not a ranking). Their prices and rates are fetched when the Trading Post opens. It needs no account and no API key. A price sort says which items it covers; it ranks the whole market only after you choose Load whole market. Proceeds and margins after fees are estimates, not profits: an order has not filled until it does. Nothing here is a live feed of the game: the API itself can be a few minutes behind.</p>
     <h3>Privacy</h3>
-    <p>Settings, stars, adjustments, reminder choices and Trading Post favorites are saved in this browser only. A calendar file is made in this browser and saved by your browser like any download; nothing about it is sent anywhere or saved here. A search you type is not saved at all, and a link to an event or an item carries its name or id and nothing of yours. Two things leave the timer: the clock check asks this site's own address for the time, and the news panel loads headlines from guildwars2.com, so ArenaNet sees that request. You can turn news off. The Trading Post, once you open it, also asks ArenaNet's API (api.guildwars2.com) for prices and item details, and loads item icons from render.guildwars2.com, so ArenaNet sees those requests; nothing of yours is sent with them. The timer makes neither request.</p>
+    <p>Settings, stars, adjustments, reminder choices and Trading Post favorites are saved in this browser only. A calendar file is made in this browser and saved by your browser like any download; nothing about it is sent anywhere or saved here. A search you type is not saved at all, and a link to an event or an item carries its name or id and nothing of yours. Two things leave the timer: the clock check asks this site's own address for the time, and the news panel loads headlines from guildwars2.com, so ArenaNet sees that request. You can turn news off. The Trading Post, once you open it, also asks ArenaNet's API (api.guildwars2.com) for prices, item details and gem exchange rates, and loads item icons from render.guildwars2.com, so ArenaNet sees those requests; nothing of yours is sent with them. The timer makes neither request.</p>
     <h3>Share and support</h3>
     <p>Share passes this timer's address, https://radmagelabs.com/gw2-timer/, to your device's share sheet, or copies it where there is none. It carries nothing of yours. If the timer helps you, you can buy me a coffee; the link opens buymeacoffee.com in a new tab, so reminders keep running in this one.</p>
     <p class="about-actions"><button type="button" class="btn small" data-share>Share</button> <a class="btn small" href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (opens a new tab)</span></a></p>

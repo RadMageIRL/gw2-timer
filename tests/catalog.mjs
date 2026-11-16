@@ -175,8 +175,18 @@ test('a price sort ranks by the value, high to low or low to high, ties by name;
   assert.deepEqual(s('spread', 'desc').slice(1), [3, 2, 5]);
   assert.deepEqual(s('margin', 'desc')[0].slice(0, 3), ['Pile of Bloodstone Dust', 'Glob', 'Glob of Ectoplasm'], 'margins: 80-4-8-50=18, 3-1-1-1=0, 1623-1710=-87');
   assert.throws(() => Catalog.priceSort(CAT, all, 'volume', 'desc', q), /unknown sort/);
+  // The margin as a share of the buy price ranks differently from the margin in copper: 1,000g buy, 1,300g sell
+  // leaves 130000 - 6500 - 13000 - 100000 = 10500 (10.5%); 50c buy, 80c sell leaves 18 (36%); 1c buy, 3c sell 0 (0%).
+  // An item with no buy orders has no denominator: after the ranked ones, never as 0%.
+  const P2 = Object.assign({}, P, { 19721: { buys: { quantity: 9, unit_price: 100000 }, sells: { quantity: 9, unit_price: 130000 } } });
+  delete P2[19976];
+  const q2 = (id) => (P2[id] ? Money.quote(P2[id]) : undefined);
+  const s2 = (key) => { const r = Catalog.priceSort(CAT, all, key, 'desc', q2); return [r.order.slice(0, 4).map((i) => CAT.names[i]), r.ranked, r.noSide, r.unpriced]; };
+  assert.deepEqual(s2('margin'), [['Glob of Ectoplasm', 'Pile of Bloodstone Dust', 'Glob', 'Vial of Powerful Blood'], 3, 1, 6]);
+  assert.deepEqual(s2('marginPct'), [['Pile of Bloodstone Dust', 'Glob of Ectoplasm', 'Glob', 'Vial of Powerful Blood'], 3, 1, 6], '36% before 10.5% before 0%');
+  assert.deepEqual(s('marginPct', 'desc').slice(1), [3, 2, 5], 'no buy orders, and no sell listings, both come after the ranked ones');
   // The same answer whatever order the matches come in (ties by name, not by arrival).
-  for (const [key, dir] of [['sell', 'desc'], ['buy', 'asc'], ['spread', 'desc'], ['margin', 'desc']]) {
+  for (const [key, dir] of [['sell', 'desc'], ['buy', 'asc'], ['spread', 'desc'], ['margin', 'desc'], ['marginPct', 'desc']]) {
     assert.deepEqual(Catalog.priceSort(CAT, all.slice().reverse(), key, dir, q).order, Catalog.priceSort(CAT, all, key, dir, q).order, `${key} ${dir}`);
   }
 });

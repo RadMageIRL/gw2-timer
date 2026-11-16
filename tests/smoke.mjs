@@ -84,12 +84,13 @@ async function open({ at, offset, tz = 'America/Chicago', width = 1280, height =
     if (local && local.patterns.some((x) => p.request.url.includes(x.split('*').join('')))) { await local.handler(page, p); return; }
     if (p.request.url.startsWith('https://api.guildwars2.com/')) {
       page.apiRequests.push(p.request.url);
-      if (api) await api(page, p); else await page.send('Fetch.failRequest', { requestId: p.requestId, errorReason: 'BlockedByClient' });
+      // A page a check has already closed can no longer be answered: that is fine (Market Watch's icons may still be on their way).
+      if (api) await api(page, p); else await page.send('Fetch.failRequest', { requestId: p.requestId, errorReason: 'BlockedByClient' }).catch(() => {});
       return;
     }
     if (p.request.url.startsWith('https://render.guildwars2.com/')) {
       page.iconRequests++;
-      await page.send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: 200, body: ICON_PNG, responseHeaders: [{ name: 'Content-Type', value: 'image/png' }, { name: 'Access-Control-Allow-Origin', value: '*' }] });
+      await page.send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: 200, body: ICON_PNG, responseHeaders: [{ name: 'Content-Type', value: 'image/png' }, { name: 'Access-Control-Allow-Origin', value: '*' }] }).catch(() => {});
       return;
     }
     if (/[?&]clock=/.test(p.request.url)) {
@@ -127,7 +128,7 @@ const unexpected = (page, allow = []) => page.problems.filter((p) => !allow.some
 check('desktop load at 23:50 UTC in Chicago: header, footer, Scheduled now and Coming up are right', async () => {
   const page = await open({ at: utc('2026-10-25T23:50:00Z') });
   try {
-    assert.equal(await page.eval('document.title'), 'GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers');
+    assert.equal(await page.eval('document.title'), 'GW2 Timer | Unofficial Guild Wars 2 Fansite');
     assert.equal(await text(page, '.brand .tag'), `v${VERSION} · Guild Wars 2 Boss & Meta Timers · RadMage Labs`);
     assert.equal(await text(page, '#now-title'), 'Scheduled now');
     assert.equal(await text(page, '#revision'), `Schedule r${DATA.meta.datasetRevision} · reviewed ${fmtDay(DATA.meta.reviewedOn)}`);
@@ -633,7 +634,7 @@ check('Share and Buy me a coffee, as on FFXI Timer: in the header, footer and Ab
     await click(page, '.topbar [data-share]'); await settle();
     await click(page, '.site-footer [data-share]'); await settle();
     let s = await state();
-    const sheet = [CANONICAL, 'GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers'];
+    const sheet = [CANONICAL, 'GW2 Timer | Unofficial Guild Wars 2 Fansite'];
     assert.deepEqual([s.shared, s.copied], [[sheet, sheet], []], 'the share sheet, twice; nothing copied');
     // The reader closes the sheet: nothing happens. The sheet fails: the address is copied instead.
     await page.eval("window.__mode = 'AbortError'"); await click(page, '.topbar [data-share]'); await settle();
@@ -1539,7 +1540,7 @@ check('Link: the details fit a 320, 360 and 390 px phone and a desktop: no sidew
 // ---- v0.3.0 Phase E: reminders on the page ----
 
 const MIN = 60000, DAY = 86400000;
-const TITLE = 'GW2 Timer: Guild Wars 2 World Boss and Meta Event Timers';
+const TITLE = 'GW2 Timer | Unofficial Guild Wars 2 Fansite';
 const RSET = 'gw2-timer:v1:reminders', RDONE = 'gw2-timer:v1:reminded';
 const ON = { on: true, lead: 10, notify: false };
 // Tequatl, Admiral Taidha Covington, Kaineng Blackout and Defense of Amnytas all start then (7:00 PM in Chicago).

@@ -74,6 +74,10 @@ export function marketChecks(h) {
         } else if (url.pathname === '/v2/commerce/listings') {
           const b = BOOK.get(Number(url.searchParams.get('id')));
           if (b) await send(200, b); else await send(404, { text: 'no such id' });
+        } else if (url.pathname === '/v2/commerce/exchange/coins') {
+          await send(200, { coins_per_gem: 4444, quantity: Math.floor(Number(url.searchParams.get('quantity')) / 4444) });
+        } else if (url.pathname === '/v2/commerce/exchange/gems') {
+          await send(200, { coins_per_gem: 2993, quantity: Number(url.searchParams.get('quantity')) * 2993 });
         } else await send(404, { text: 'not found' });
       } finally { page.apiLive--; }
     };
@@ -89,6 +93,17 @@ export function marketChecks(h) {
   const select = (page, id, value) => page.eval(`(() => { const s = document.getElementById(${JSON.stringify(id)}); s.value = ${JSON.stringify(value)}; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
   const idle = (page) => page.waitFor("!document.querySelector('#tp-results[aria-busy=\"true\"]') && !/Loading/.test(document.getElementById('tp-scope').textContent)", 15000);
   const MARKET_CODE = /\/(js\/(money|catalog|api|market)\.js|data\/tp-items\.json)/;
+  // The home's Market Watch: its eight ids, and its requests (prices and item records ask for exactly those ids, sorted).
+  const Market = require(join(DIR, 'js', 'market.js'));
+  const WATCH = Market.watchIds(CAT), WATCH_Q = [...WATCH].sort((a, b) => a - b).join(',');
+  const isWatch = (u) => new URL(u).searchParams.get('ids') === WATCH_Q;
+  // The home's other requests: the gem exchange's two quotes. isHome: anything the home asks for with no favorites.
+  const isGem = (u) => /\/v2\/commerce\/exchange\/(coins|gems)\?/.test(u);
+  const isHome = (u) => isWatch(u) || isGem(u);
+  const asked = (page) => page.apiRequests.map((u) => { const x = new URL(u); return `${x.pathname} ${x.searchParams.get('ids') || `quantity=${x.searchParams.get('quantity')}`}`; }).sort();
+  const HOME_ASKED = [`/v2/commerce/exchange/coins quantity=1000000`, `/v2/commerce/exchange/gems quantity=400`, `/v2/commerce/prices ${WATCH_Q}`, `/v2/items ${WATCH_Q}`];
+  const watchReady = (page) => page.waitFor("/current\\./.test(document.getElementById('tp-watch-text').textContent) && document.querySelectorAll('#tp-watch-list .tp-icon img').length === 8 && /current\\./.test(document.getElementById('tp-gem-text').textContent)", 15000);
+  const later = (page, ms) => page.eval(`(() => { const prev = Date.now; Date.now = () => prev() + ${ms}; })()`);
 
   // ---- The two modes ----
 
@@ -181,13 +196,504 @@ export function marketChecks(h) {
     } finally { await page.close(); }
   });
 
+  // ---- The home: Market Watch and the types (post-v0.4.0 polish) ----
+
+  check('Trading Post home: #market opens the home: Market Watch\'s eight hand-picked items with prices from one request and icons from one more, and the item list\'s types with their counts; never called a ranking; current prices are not asked for again', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
+    try {
+      await market(page);
+      await watchReady(page);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-home').hidden, document.getElementById('tp-crumbs').hidden, document.getElementById('tp-empty').hidden, document.getElementById('tp-head').hidden, document.querySelectorAll('#tp-results li').length, GW2Market && true]"),
+        [false, true, true, true, 0, true], 'the home, and no results');
+      const cards = await page.eval(`[...document.querySelectorAll('#tp-watch-list .tp-watch-card')].map((li) => ({ id: Number(li.dataset.id), name: li.querySelector('a.tp-name').textContent, href: li.querySelector('a.tp-name').getAttribute('href'),
+        buy: li.querySelector('.tp-buy .coins .sr-only').textContent, sell: li.querySelector('.tp-sell .coins .sr-only').textContent, icon: Boolean(li.querySelector('.tp-icon img')), note: li.querySelector('.tp-note').hidden }))`);
+      assert.deepEqual(cards.map((c) => c.id), [19976, 19721, 68063, 24277, 24295, 19701, 19725, 19746]);
+      for (const c of cards) {
+        const q = quoteOf(c.id);
+        assert.deepEqual([c.name, c.href, c.buy, c.sell, c.icon, c.note], [CAT.names[CAT.byId.get(c.id)], `#market/item/${c.id}`, Money.coins(q.buy).spoken, Money.coins(q.sell).spoken, true, true], String(c.id));
+      }
+      assert.equal(await text(page, '#tp-watch-text'), 'Prices from 7:00 AM, current.');
+      // Four requests: the eight's prices and their item records (the icons), and the gem exchange's two quotes.
+      assert.deepEqual(asked(page), HOME_ASKED);
+      // Each icon from the render host, loaded (the browser may serve one from its cache, so requests are not counted).
+      await page.waitFor("[...document.querySelectorAll('#tp-watch-list .tp-icon img')].every((i) => i.complete && i.naturalWidth > 0)", 5000);
+      assert.ok(await page.eval("[...document.querySelectorAll('#tp-watch-list .tp-icon img')].every((i) => i.src.startsWith('https://render.guildwars2.com/file/'))"));
+      // The types: exactly the item list's, each with its count, ordered as the Type list, each with its drawing.
+      const tiles = await page.eval("[...document.querySelectorAll('#tp-cat-grid .tp-cat')].map((b) => [b.dataset.tpCat, b.querySelector('.tp-cat-name').textContent, b.querySelector('.tp-cat-count').textContent, Boolean(b.querySelector('svg[aria-hidden=\"true\"] path[d]'))])");
+      // Counted here from the list itself, not by the module under test.
+      const n = (i) => CAT.type.filter((x) => x === i).length;
+      assert.deepEqual(tiles, Market.typeTiles(CAT).map((t) => [String(t.index), t.label, `${n(t.index).toLocaleString('en-US')} ${n(t.index) === 1 ? 'item' : 'items'}`, true]));
+      assert.equal(tiles.length, CAT.types.length);
+      assert.deepEqual(tiles.map((t) => t[1]), await page.eval("[...document.querySelectorAll('#tp-type option')].slice(1).map((o) => o.textContent)"), 'the same types, in the same order, as the Type list');
+      // A hand-picked set, never a ranking.
+      const words = await text(page, '#tp-home');
+      assert.match(words, /eight familiar items used in crafting, chosen by hand; not a ranking/);
+      assert.deepEqual(await page.eval("[...document.querySelectorAll('#tp-home section')].map((x) => x.querySelector('h3').textContent)"), ['Market Watch', 'Your favorites', 'Gem exchange', 'Browse by type']);
+      assert.doesNotMatch(words, /popular|top[- ]traded|most traded|trending|best[- ]sell|hottest|volume/i);
+      // The search comes first and stands out: taller than the filters under it.
+      const sz = await page.eval("[document.getElementById('tp-find').getBoundingClientRect().height, document.getElementById('tp-type').getBoundingClientRect().height]");
+      assert.ok(sz[0] >= 40 && sz[0] > sz[1], `search ${sz[0]} px, filters ${sz[1]} px`);
+      // Away and back within 5 minutes: nothing asked. 6 minutes on: the prices again, not the icons.
+      await click(page, '[data-mode="timers"]'); await click(page, '[data-mode="market"]'); await sleep(500);
+      assert.equal(page.apiRequests.length, 4, 'still current: nothing more');
+      await later(page, 6 * 60000);
+      await click(page, '[data-mode="timers"]'); await click(page, '[data-mode="market"]');
+      await page.waitFor("document.getElementById('tp-watch-text').textContent === 'Prices from 7:06 AM, current.' && document.getElementById('tp-gem-text').textContent === 'Rates from 7:06 AM, current.'", 10000);
+      assert.deepEqual(page.apiRequests.slice(4).map((u) => `${new URL(u).pathname} ${new URL(u).searchParams.get('ids') || new URL(u).searchParams.get('quantity')}`).sort(),
+        ['/v2/commerce/exchange/coins 1000000', '/v2/commerce/exchange/gems 400', `/v2/commerce/prices ${WATCH_Q}`], 'the prices and rates again; the item records are kept');
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post home: a type opens its results at once, named beside "Trading Post home", with focus there; the home comes back with nothing typed, no filter and Best match; typing, a filter, a price sort or Favorites leave it; each survives a switch of mode', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
+    try {
+      await market(page); await watchReady(page);
+      const W = CAT.types.indexOf('Weapon');
+      await click(page, `.tp-cat[data-tp-cat="${W}"]`); await idle(page);
+      const want = Catalog.search(CAT, { type: W }).indexes.slice(0, 50).map((i) => CAT.ids[i]);
+      assert.deepEqual(await shownIds(page), want, 'what the Type list gives');
+      assert.deepEqual(await page.eval("[document.getElementById('tp-home').hidden, document.getElementById('tp-crumbs').hidden, document.getElementById('tp-crumb').textContent, document.activeElement.id, document.getElementById('tp-type').value, document.getElementById('tp-find').value, location.hash]"),
+        [true, false, 'Weapon', 'tp-crumb', String(W), '', '#market'], 'results, named, focus on the name; no history entry');
+      await page.waitFor("document.getElementById('tp-count').textContent === '11,780 items with these filters.'", 3000);
+      assert.equal(page.apiRequests.filter((u) => /commerce\/prices/.test(u) && !isWatch(u)).length, 1, 'one request for the 50 shown');
+      await page.waitFor("/^Prices from 7:00 AM, current\\.$/.test(document.getElementById('tp-prices-text').textContent)", 10000);
+      // A switch of mode keeps them.
+      await click(page, '[data-mode="timers"]'); await click(page, '[data-mode="market"]'); await settle();
+      assert.deepEqual(await shownIds(page), want);
+      assert.equal(await text(page, '#tp-crumb'), 'Weapon');
+      // Trading Post home: nothing typed, no filter, Best match, focus at the top; no request (Market Watch is current).
+      await select(page, 'tp-sort', 'name'); await idle(page);
+      const before = page.apiRequests.length;
+      await click(page, '#tp-home-btn'); await settle();
+      assert.deepEqual(await page.eval("[document.getElementById('tp-home').hidden, document.getElementById('tp-crumbs').hidden, document.activeElement.id, document.getElementById('tp-type').value, document.getElementById('tp-rarity').value, document.getElementById('tp-sort').value, document.getElementById('tp-find').value, document.querySelectorAll('#tp-results li').length, location.hash]"),
+        [false, true, 'market-title', '-1', '-1', 'relevance', '', 0, '#market']);
+      await sleep(300);
+      assert.equal(page.apiRequests.length, before, 'Market Watch still current');
+      // Typing leaves the home; Clear comes back to it.
+      await typeTp(page, 'glob'); await idle(page);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-home').hidden, document.getElementById('tp-crumb').textContent]"), [true, '“glob”']);
+      await click(page, '#tp-find-clear'); await settle();
+      assert.equal(await page.eval("document.getElementById('tp-home').hidden"), false, 'Clear: the home again');
+      // A rarity, a price sort (every item, among the loaded prices), Favorites: each leaves the home and is named.
+      await select(page, 'tp-rarity', String(CAT.rarities.indexOf('Exotic'))); await idle(page);
+      assert.equal(await text(page, '#tp-crumb'), 'Exotic');
+      await click(page, '#tp-home-btn'); await settle();
+      await select(page, 'tp-sort', 'sell-desc'); await idle(page);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-home').hidden, document.getElementById('tp-crumb').textContent]"), [true, 'Every item']);
+      assert.match(await text(page, '#tp-scope'), new RegExp(`among only the \\d+ of ${COUNT} matching items whose prices are loaded\\. Not a ranking of every match, or of the whole market\\.`));
+      await click(page, '#tp-home-btn'); await settle();
+      await click(page, '#tp-favs'); await idle(page);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-home').hidden, document.getElementById('tp-crumb').textContent, document.getElementById('tp-empty').textContent]"), [true, 'Favorites', 'No favorites yet. Use the star (☆) by an item to add it.']);
+      await click(page, '#tp-home-btn'); await settle();
+      assert.equal(await page.eval("document.getElementById('tp-favs').getAttribute('aria-pressed')"), 'false');
+      // The home again, after a switch of mode too.
+      await click(page, '[data-mode="timers"]'); await click(page, '[data-mode="market"]'); await settle();
+      assert.equal(await page.eval("document.getElementById('tp-home').hidden"), false);
+      assert.equal(page.apiRequests.filter(isWatch).length, 2, 'Market Watch asked once: its prices stayed current');
+      assert.equal(page.apiRequests.filter(isGem).length, 2, 'the gem quotes once');
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post home: when the API cannot be reached or has an error, Market Watch shows no price and why on every card, estimates nothing, and Try again recovers; aging prices are marked stale, then old and faded, in place', async () => {
+    for (const how of ['offline', 503]) {
+      let fail = true;
+      const page = await open({ at: AT, url: BASE + '#market', wait: false, api: api({ answer: (n, u) => (fail && /commerce\/prices/.test(u.pathname) ? how : 'ok') }) });
+      try {
+        await market(page);
+        await page.waitFor("/^ArenaNet's API/.test(document.getElementById('tp-watch-text').textContent)", 30000);
+        const why = how === 'offline' ? "ArenaNet's API could not be reached" : "ArenaNet's API had an error";
+        assert.equal(await text(page, '#tp-watch-text'), `${why}, so 8 items have no price here. Nothing is estimated in its place.`, String(how));
+        const cards = await page.eval("[...document.querySelectorAll('#tp-watch-list .tp-watch-card')].map((li) => [li.querySelector('.tp-buy').textContent, li.querySelector('.tp-sell').textContent, li.querySelector('.tp-note').hidden ? null : li.querySelector('.tp-note').textContent, Boolean(li.querySelector('.coins'))])");
+        assert.equal(cards.length, 8);
+        for (const c of cards) assert.deepEqual(c, ['Highest buy order: Buynot loaded', 'Lowest sell listing: Sellnot loaded', `No price: ${why}.`, false], String(how));
+        assert.equal(page.apiRequests.filter((u) => /commerce\/prices/.test(u)).length, 4, `${how}: one try and three more`);
+        assert.deepEqual(await page.eval("[document.getElementById('tp-watch-refresh').hidden, document.getElementById('tp-watch-refresh').textContent]"), [false, 'Try again']);
+        assert.deepEqual(await lowContrast(page, '#tp-watch-list .tp-note, #tp-watch-list .tp-none, #tp-watch-text'), [], 'the reasons are readable');
+        fail = false;
+        await click(page, '#tp-watch-refresh');
+        await page.waitFor("document.getElementById('tp-watch-text').textContent === 'Prices from 7:00 AM, current.'", 10000);
+        assert.equal(await page.eval("document.querySelectorAll('#tp-watch-list .tp-note:not([hidden])').length"), 0, 'the notes go with the failure');
+        assert.match(await page.eval("document.querySelector('#tp-watch-list [data-id=\"19721\"] .tp-sell').textContent"), /19 silver 10 copper/);
+        assert.equal(await text(page, '#tp-watch-refresh'), 'Refresh prices');
+        // Refresh asks again even for current prices: one more request for the eight.
+        const asked = page.apiRequests.filter((u) => /commerce\/prices/.test(u)).length;
+        await click(page, '#tp-watch-refresh');
+        const count = () => page.apiRequests.filter((u) => /commerce\/prices/.test(u)).length;
+        for (let i = 0; i < 50 && count() === asked; i++) await sleep(100);
+        await page.waitFor("document.getElementById('tp-watch-text').textContent === 'Prices from 7:00 AM, current.' && !document.getElementById('tp-watch-refresh').hidden", 10000);
+        await sleep(300);
+        assert.equal(count(), asked + 1, 'Refresh asks again, once');
+        assert.deepEqual(unexpected(page, NET), []);
+      } finally { await page.close(); }
+    }
+    let hold = false;
+    const page = await open({ at: AT, url: BASE + '#market', wait: false, api: api({ answer: () => (hold ? 'hold' : 'ok') }) });
+    try {
+      await market(page); await watchReady(page);
+      hold = true;
+      await later(page, 12 * 60000);
+      await click(page, '[data-mode="timers"]'); await click(page, '[data-mode="market"]'); await sleep(400);
+      assert.equal(await text(page, '#tp-watch-text'), 'Loading prices for 8 items... Prices from 7:00 AM, 12 minutes ago: stale.', 'no "Refresh" while a refresh is on its way');
+      assert.equal(await page.eval("document.getElementById('tp-watch-prices').dataset.fresh"), 'stale');
+      assert.deepEqual(await page.eval("[...new Set([...document.querySelectorAll('#tp-watch-list .tp-watch-card')].map((li) => li.classList.contains('is-stale') + ' ' + li.querySelector('.tp-note').textContent))]"), ['true Stale price, fetched 12 minutes ago.']);
+      assert.match(await page.eval("document.querySelector('#tp-watch-list [data-id=\"19721\"] .tp-sell').textContent"), /19 silver 10 copper/, 'the older price stays');
+      assert.deepEqual(await lowContrast(page, '#tp-watch-text, #tp-watch-list .tp-note'), [], 'stale, readable');
+      // An hour on: the 30-second tick marks every card old, in place.
+      await page.eval("document.querySelector('#tp-watch-list .tp-watch-card').dataset.mark = 'kept'");
+      await later(page, 60 * 60000);
+      await page.waitFor("document.querySelectorAll('#tp-watch-list .tp-watch-card.is-old').length === 8", 35000);
+      assert.equal(await page.eval("document.querySelector('#tp-watch-list .tp-watch-card').dataset.mark"), 'kept', 'updated in place, not redrawn');
+      assert.equal(await text(page, '#tp-watch-text'), 'Loading prices for 8 items... Prices from 7:00 AM, 72 minutes ago: old, shown faded.');
+      assert.equal(await text(page, '#tp-watch-list .tp-note'), 'Old price, fetched 72 minutes ago.');
+      assert.deepEqual(await lowContrast(page, '#tp-watch-list .tp-watch-card.is-old .coin, #tp-watch-list .tp-note'), [], 'faded, still readable');
+      assert.deepEqual(unexpected(page, NET), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post home: the timer\'s first load asks the API for nothing; the home\'s two requests come only when the Trading Post is opened; a link to an item still opens its details at once, over the home', async () => {
+    const page = await open({ at: AT, api: api() });
+    try {
+      await sleep(1500);
+      assert.deepEqual(page.apiRequests, [], 'nothing before the Trading Post is opened');
+      assert.equal(page.iconRequests, 0);
+      assert.equal(await page.eval("document.querySelectorAll('#tp-watch-list li, #tp-cat-grid li').length"), 0, 'the home is not even drawn');
+      await click(page, '[data-mode="market"]'); await market(page); await watchReady(page);
+      assert.deepEqual(asked(page), HOME_ASKED);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+    const deep = await open({ at: AT, api: api(), url: BASE + '#market/item/24295', wait: false });
+    try {
+      await deep.waitFor("document.getElementById('tp-item-dialog').open && document.getElementById('tp-item-title').textContent === 'Vial of Powerful Blood' && document.querySelector('#tp-item-body .tp-stats')", 15000);
+      assert.deepEqual(await deep.eval("[document.activeElement.id, document.getElementById('tp-home').hidden, location.hash]"), ['tp-item-title', false, '#market/item/24295']);
+      // Vial of Powerful Blood is one of Market Watch's: its price came with theirs, in the home's requests.
+      await watchReady(deep);
+      assert.deepEqual(asked(deep), HOME_ASKED);
+      await deep.eval("document.querySelector('#tp-item-dialog [data-close]').click()"); await sleep(300);
+      assert.deepEqual(await deep.eval("[location.hash, document.getElementById('tp-home').hidden, document.getElementById('tp-item-dialog').open]"), ['#market', false, false]);
+      assert.deepEqual(unexpected(deep), []);
+    } finally { await deep.close(); }
+    // An item outside Market Watch: the home's two requests, and the item's own price and record.
+    const other = await open({ at: AT, api: api(), url: BASE + '#market/item/26332', wait: false });
+    try {
+      await other.waitFor("document.getElementById('tp-item-dialog').open && document.querySelector('#tp-item-body .tp-stats')", 15000);
+      await watchReady(other);
+      assert.deepEqual(asked(other), [...HOME_ASKED, '/v2/commerce/prices 26332', '/v2/items 26332'].sort());
+    } finally { await other.close(); }
+  });
+
+  check('Trading Post home by keyboard and screen reader: Tab goes from the search through the filters, Market Watch\'s names, every type and the notes\' pills; Enter on a type opens it with focus on its name; Trading Post home returns; pills open with Enter or Space, one at a time, and close with Escape', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
+    try {
+      await market(page); await watchReady(page);
+      await page.eval("document.getElementById('tp-find').focus()");
+      const seen = [];
+      for (let i = 0; i < 42; i++) { await key(page, 'Tab', 'Tab', 9); seen.push(await page.eval("(() => { const a = document.activeElement; return a.id || a.dataset.tpkey || a.className; })()")); }
+      const tiles = Market.typeTiles(CAT);
+      const order = ['tp-type', 'tp-rarity', 'tp-sort', 'tp-favs', 'tp-whole-btn', 'tp-watch-refresh', ...WATCH.map((id) => `watch:${id}`), 'tp-gem-refresh', ...tiles.map((t) => `cat:${t.index}`), 'tp-pill-list', 'tp-pill-fees', 'tp-pill-saved'];
+      assert.deepEqual(seen.slice(0, order.length), order, 'every one, in this order');
+      const a11y = await page.eval(`({ tile: document.querySelector('.tp-cat').textContent, svg: [...document.querySelectorAll('.tp-cat svg')].every((s) => s.getAttribute('aria-hidden') === 'true' && s.getAttribute('focusable') === 'false'),
+        list: document.getElementById('tp-watch-list').getAttribute('aria-label'), status: document.getElementById('tp-watch-text').getAttribute('role'), buy: document.querySelector('#tp-watch-list .tp-buy > .sr-only').textContent,
+        link: document.querySelector('#tp-watch-list a.tp-name').getAttribute('aria-haspopup'), regions: [...document.querySelectorAll('#tp-home section')].map((s) => document.getElementById(s.getAttribute('aria-labelledby')).textContent),
+        pills: [...document.querySelectorAll('[data-tp-pill]')].map((b) => [b.textContent, b.getAttribute('aria-expanded'), b.getAttribute('aria-controls'), document.getElementById(b.getAttribute('aria-controls')).hidden]) })`);
+      assert.deepEqual(a11y, { tile: `${tiles[0].label}${tiles[0].count.toLocaleString('en-US')} items`, svg: true, list: 'Market Watch items', status: 'status', buy: 'Highest buy order: ', link: 'dialog',
+        regions: ['Market Watch', 'Your favorites', 'Gem exchange', 'Browse by type'], pills: [['Item list', 'false', 'tp-panel-list', true], ['Fees and margin', 'false', 'tp-panel-fees', true], ['What is saved', 'false', 'tp-panel-saved', true]] });
+      const ring = await page.eval("(() => { const b = document.querySelector('.tp-cat'); b.focus(); return getComputedStyle(b).outlineStyle + ' ' + getComputedStyle(b).outlineWidth; })()");
+      assert.equal(ring, 'solid 2px', 'a visible focus ring on a type');
+      // Enter on a type: its results, focus on its name, beside the way back.
+      const T = CAT.types.indexOf('Trophy');
+      await page.eval(`document.querySelector('[data-tp-cat="${T}"]').focus()`);
+      await key(page, 'Enter', 'Enter', 13); await idle(page);
+      assert.deepEqual(await page.eval("[document.activeElement.id, document.activeElement.textContent, document.getElementById('tp-home').hidden, document.querySelectorAll('#tp-results .tp-row').length]"), ['tp-crumb', 'Trophy', true, 50]);
+      // Space on Trading Post home: the home, focus at the top, then Tab to the search.
+      await page.eval("document.getElementById('tp-home-btn').focus()");
+      await key(page, ' ', 'Space', 32); await settle();
+      assert.deepEqual(await page.eval("[document.activeElement.id, document.getElementById('tp-home').hidden, document.getElementById('tp-type').value]"), ['market-title', false, '-1']);
+      await key(page, 'Tab', 'Tab', 9);
+      assert.equal(await page.eval('document.activeElement.id'), 'tp-find');
+      // The pills: Enter opens one, Space on another switches, Escape closes it and focus stays on its pill.
+      const pills = () => page.eval("[...document.querySelectorAll('[data-tp-pill]')].map((b) => b.getAttribute('aria-expanded') + ':' + document.getElementById(b.getAttribute('aria-controls')).hidden)");
+      await page.eval("document.getElementById('tp-pill-fees').focus()");
+      await key(page, 'Enter', 'Enter', 13); await settle();
+      assert.deepEqual(await pills(), ['false:true', 'true:false', 'false:true']);
+      await page.eval("document.getElementById('tp-pill-list').focus()");
+      await key(page, ' ', 'Space', 32); await settle();
+      assert.deepEqual(await pills(), ['true:false', 'false:true', 'false:true'], 'one at a time');
+      await key(page, 'Escape', 'Escape', 27); await settle();
+      assert.deepEqual(await pills(), ['false:true', 'false:true', 'false:true']);
+      assert.equal(await page.eval('document.activeElement.id'), 'tp-pill-list');
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post: the notes are three closed pills after the home or the results, on one line; each opens its own panel: the item list\'s date, the fees and margin, what is saved', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
+    try {
+      await market(page);
+      const box = await page.eval("(() => { const n = document.getElementById('tp-notes'), p = [...n.querySelectorAll('.tp-pill')].map((b) => b.getBoundingClientRect()); return { h: n.getBoundingClientRect().height, line: p.every((r) => Math.abs(r.top - p[0].top) < 1), after: Boolean(document.getElementById('tp-home').compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING), last: n.parentNode.lastElementChild === n }; })()");
+      assert.ok(box.h < 50 && box.line && box.after && box.last, JSON.stringify(box));
+      const open1 = async (id) => { await click(page, `#${id}`); await settle(); return page.eval(`[...document.querySelectorAll('.tp-pill-panel')].filter((p) => !p.hidden).map((p) => p.id + ': ' + p.textContent.trim())`); };
+      const list = await open1('tp-pill-list');
+      assert.equal(list.length, 1);
+      assert.match(list[0], new RegExp(`^tp-panel-list: Item list as of ${esc(ASOF)}: ${COUNT} items with a Trading Post price then\\. Items added to the game since then cannot be found until the list is updated\\.$`));
+      const fees = await open1('tp-pill-fees');
+      assert.equal(fees.length, 1);
+      assert.match(fees[0], /^tp-panel-fees: Potential margin is what listing one unit .* It is not a profit: an order that is placed has not filled, someone may list lower, and prices move\. Fees: a 5% listing fee and a 10% exchange fee, each at least 1 copper.* every result after fees is an estimate\.$/);
+      assert.deepEqual(await open1('tp-pill-saved'), ['tp-panel-saved: Favorites are saved in this browser. Prices are never saved: they last while this page is open.']);
+      assert.deepEqual(await open1('tp-pill-saved'), [], 'a second press closes it');
+      // Under results too.
+      await typeTp(page, 'glob'); await idle(page);
+      assert.equal(await page.eval("Boolean(document.getElementById('tp-results').compareDocumentPosition(document.getElementById('tp-notes')) & Node.DOCUMENT_POSITION_FOLLOWING) && document.getElementById('tp-notes').getClientRects().length > 0"), true);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post: an item\'s details lead with its highest buy order, lowest sell listing and potential margin, large, then when they were fetched; the arithmetic and caveats follow, smaller; a stale price is marked there as the clock moves', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market/item/19721', wait: false });
+    try {
+      await page.waitFor("document.getElementById('tp-item-dialog').open && document.querySelector('#tp-item-body .tp-stats')", 15000);
+      const q = quoteOf(19721);
+      const stats = await page.eval("[...document.querySelectorAll('#tp-item-body .tp-stat')].map((x) => [x.querySelector('.tp-stat-k').textContent, x.querySelector('.tp-stat-v .coins .sr-only').textContent, x.querySelector('.tp-stat-sub').textContent])");
+      assert.deepEqual(stats, [['Highest buy order', Money.coins(q.buy).spoken, '391,900 units wanted in all buy orders'], ['Lowest sell listing', Money.coins(q.sell).spoken, '2,219,204 units listed in all'],
+        ['Potential margin', Money.coins(q.margin).spoken, `${Money.percent(q.marginPct)} of the highest buy order, after fees`], ['Break-even listing price', '20 silver 12 copper', 'the lowest that gives back the buy price after fees']]);
+      assert.equal(q.breakEven, 2012, 'by hand: 2012 - 101 - 201 = 1710, the 17s 10c buy order; 2011 gives 1709');
+      const look = await page.eval("({ big: parseFloat(getComputedStyle(document.querySelector('#tp-item-body .tp-stat-v')).fontSize), small: parseFloat(getComputedStyle(document.querySelector('#tp-item-body .tp-facts dd')).fontSize), first: [...document.getElementById('tp-item-body').children].slice(0, 2).map((c) => c.className), loss: document.querySelector('.tp-stat-margin .coins').classList.contains('neg') })");
+      assert.ok(look.big >= look.small + 4, JSON.stringify(look));
+      assert.deepEqual([look.first, look.loss], [['tp-detail-head', 'tp-stats-wrap'], true]);
+      assert.equal(await text(page, '#tp-item-body .tp-stat-when'), "Prices fetched 7:00 AM, just now (current). ArenaNet's API may itself be up to 2 minutes behind.");
+      const facts = await page.eval("[...document.querySelectorAll('#tp-item-body .tp-facts dt')].map((d) => d.textContent)");
+      assert.deepEqual(facts, ['Spread', 'Sell one now', 'List one', 'Potential margin', 'Break-even', 'Merchant', 'Item id', 'Chat code']);
+      assert.match((await text(page, '#tp-item-body .tp-facts')).replace(/\s+/g, ' '), /Break-even\s*Listing one unit at 20s 12c\s*20 silver 12 copper or more would give back at least the highest buy order, 17s 10c\s*17 silver 10 copper, after both fees; any lower would lose\. A gain of 1 copper or more starts at 20s 13c\s*20 silver 13 copper\. The lowest sell listing, 19s 10c\s*19 silver 10 copper, is below it: listing there now would lose\. An estimate: the fees' rounding is assumed, and an order fills only if someone takes it\./);
+      assert.match(await text(page, '#tp-item-body .tp-facts'), /Potential margin\s*Buying at the highest buy order and listing at the lowest sell listing, after fees\. The percentage is of the highest buy order, what buying one costs\. A potential margin, not a profit: neither order has filled, and prices move\./);
+      // 12 minutes on, the 30-second tick: the fetch line says stale, in the warning color.
+      await later(page, 12 * 60000);
+      await page.waitFor("/12 minutes ago \\(stale\\)/.test(document.querySelector('#tp-item-body .tp-stat-when').textContent)", 35000);
+      assert.equal(await page.eval("document.querySelector('#tp-item-body .tp-stat-when').classList.contains('is-stale')"), true);
+      assert.deepEqual(await lowContrast(page, '#tp-item-body .tp-stat *, #tp-item-body .tp-stat-when, #tp-item-body .tp-facts dt, #tp-item-body .tp-facts dd'), [], 'readable');
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post home fits 320, 360 and 390 px phones, a 768 px tablet, and 920 and 1280 px desktops in both themes: no sideways scroll, nothing spills or overlaps in a card or a type, 36 px controls on phones, readable contrast; an item\'s three figures fit, four-digit gold included', async () => {
+    const DRAGON = CAT.ids[CAT.names.indexOf('Glob of Dragonvoid Aether')];
+    for (const [width, height, mobile] of [[320, 568, true], [360, 740, true], [390, 844, true], [768, 1024, false], [920, 800, false], [1280, 900, false]]) {
+      for (const theme of ['dark', 'light']) {
+        const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false, width, height, mobile, seed: { [h.reminders.PREFS]: { theme } } });
+        try {
+          await market(page); await watchReady(page);
+          await click(page, '#tp-pill-fees'); await settle();
+          const r = await page.eval("({ page: document.documentElement.scrollWidth, boxes: [...document.querySelectorAll('.tp-watch-card, .tp-cat, .tp-pill, .tp-pill-panel, .tp-gem, .tp-favhome-empty')].every((x) => x.getBoundingClientRect().right <= innerWidth && x.getBoundingClientRect().left >= 0) })");
+          assert.ok(r.page <= width && r.boxes, `${width} ${theme}: ${JSON.stringify(r)}`);
+          const spill = await page.eval(`[...document.querySelectorAll('#tp-watch-list .tp-watch-card, #tp-cat-grid .tp-cat')].flatMap((box) => {
+            const parts = [...box.querySelectorAll('.tp-cell, .tp-name, .tp-cat-name, .tp-cat-count, .tp-icon, svg')], bad = parts.filter((c) => c.scrollWidth > c.clientWidth + 1 && c.tagName !== 'svg').map((c) => (box.dataset.id || box.dataset.tpCat) + ' ' + c.className + ' spills');
+            for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
+              const a = parts[i].getBoundingClientRect(), b = parts[j].getBoundingClientRect();
+              if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) bad.push((box.dataset.id || box.dataset.tpCat) + ' ' + (parts[i].className.baseVal ?? parts[i].className) + ' / ' + (parts[j].className.baseVal ?? parts[j].className));
+            }
+            return bad; })`);
+          assert.deepEqual(spill, [], `${width} ${theme}`);
+          if (mobile) {
+            const small = await page.eval("[...document.querySelectorAll('#market-view button, #market-view select, #market-view input, #market-view a.tp-name')].filter((x) => x.getClientRects().length && x.getBoundingClientRect().height < 36).map((x) => (x.id || x.className) + ' ' + x.getBoundingClientRect().height.toFixed(1))");
+            assert.deepEqual(small, [], `${width} ${theme}`);
+          }
+          assert.deepEqual(await lowContrast(page, '#tp-home p, #tp-home span, #tp-home a, #tp-home h3, #tp-home button, .tp-notes button, .tp-pill-panel p'), [], `${width} ${theme}`);
+          if (SHOTS && theme === 'dark' && [320, 1280].includes(width)) await page.screenshot(join(SHOTS, `market-home-${width}.png`), { height: Math.max(height, 1500) });
+          // An item's details: the three figures fit their boxes, even at four-digit gold.
+          await page.eval(`location.hash = '#market/item/${DRAGON}'`);
+          await page.waitFor("document.getElementById('tp-item-dialog').open && document.querySelector('#tp-item-body .tp-stats')", 10000);
+          const fit = await page.eval("[...document.querySelectorAll('#tp-item-body .tp-stat')].filter((x) => x.scrollWidth > x.clientWidth + 1 || x.getBoundingClientRect().right > document.getElementById('tp-item-dialog').getBoundingClientRect().right).map((x) => x.className)");
+          assert.deepEqual(fit, [], `${width} ${theme}: details`);
+          assert.deepEqual(await lowContrast(page, '#tp-item-body .tp-stat *, #tp-item-body .tp-stat-when'), [], `${width} ${theme}: details`);
+          assert.deepEqual(unexpected(page), []);
+        } finally { await page.close(); }
+      }
+    }
+  });
+
+  // ---- The home's favorites, the gem exchange, the margin % sort (post-v0.4.0 polish, scope addition) ----
+
+  check('Trading Post home: Your favorites shows the newest 8 with live prices from the home\'s one prices request, opens an item\'s details, says when a price is missing, counts favorites the list no longer has, and Show all opens every one; kept through a reload', async () => {
+    // Ten favorites (saved oldest first), one id the item list no longer has, and one item the API has no price for.
+    const FAVS = [19721, 24295, 26332, 12844, 12868, 26216, 26218, 26220, 26229, 26230], NO_PRICE = 26230;
+    const shown = FAVS.slice(-8).reverse();
+    const cardsOf = (page) => page.eval("[...document.querySelectorAll('#tp-favhome-list .tp-watch-card')].map((li) => Number(li.dataset.id))");
+    const page = await open({ at: AT, api: api({ missing: new Set([NO_PRICE]) }), url: BASE + '#market', wait: false, seed: { [FAV]: [...FAVS, 999999999] } });
+    try {
+      await market(page); await watchReady(page);
+      await page.waitFor("!/loading/.test(document.getElementById('tp-favhome-list').textContent) && document.querySelectorAll('#tp-favhome-list .tp-icon img').length >= 7", 10000);
+      const cards = await page.eval("[...document.querySelectorAll('#tp-favhome-list .tp-watch-card')].map((li) => ({ id: Number(li.dataset.id), sell: li.querySelector('.tp-sell').textContent, href: li.querySelector('a.tp-name').getAttribute('href'), key: li.querySelector('a.tp-name').dataset.tpkey }))");
+      assert.deepEqual(cards.map((c) => c.id), shown, 'the newest 8, newest first');
+      for (const c of cards) {
+        const q = quoteOf(c.id);
+        if (c.id === NO_PRICE) assert.equal(c.sell, 'Lowest sell listing: Sellnot on the Trading Post now', 'the API has no price for it: said so');
+        else assert.ok(c.sell.includes(Money.coins(q.sell).spoken), `${c.id}: ${c.sell}`);
+        assert.deepEqual([c.href, c.key], [`#market/item/${c.id}`, `favhome:${c.id}`]);
+      }
+      // Market Watch and the favorites shown share the home's one prices request and one item request.
+      const homeQ = [...new Set([...WATCH, ...shown])].sort((a, b) => a - b).join(',');
+      assert.deepEqual(asked(page).filter((x) => !/exchange/.test(x)), [`/v2/commerce/prices ${homeQ}`, `/v2/items ${homeQ}`]);
+      assert.equal(await text(page, '#tp-favhome-hint'), 'saved in this browser, newest first; 1 saved favorite is no longer in the item list, so not shown');
+      assert.equal(await text(page, '#tp-favhome-text'), 'Prices from 7:00 AM, current.');
+      assert.deepEqual(await page.eval("[document.getElementById('tp-favhome-empty').hidden, document.getElementById('tp-favhome-all').hidden, document.getElementById('tp-favhome-all').textContent, document.getElementById('tp-favhome-list').getAttribute('aria-label')]"),
+        [true, false, 'Show all 10 favorites', 'Your favorite items']);
+      // A name opens the item's details over the home; Back closes them and focus returns to the name.
+      await page.eval("document.querySelector('#tp-favhome-list a.tp-name').focus()");
+      await key(page, 'Enter', 'Enter', 13);
+      await page.waitFor("document.getElementById('tp-item-dialog').open", 10000);
+      assert.equal(await page.eval('location.hash'), `#market/item/${shown[0]}`);
+      await page.eval('history.back()'); await sleep(400);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-item-dialog').open, location.hash, document.activeElement.dataset.tpkey]"), [false, '#market', `favhome:${shown[0]}`]);
+      await page.eval('history.forward()'); await sleep(400);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-item-dialog').open, location.hash]"), [true, `#market/item/${shown[0]}`], 'Forward opens them again');
+      await page.eval('history.back()'); await sleep(400);
+      // Show all: every favorite as results (the Favorites filter), named, focus there, no history entry.
+      await click(page, '#tp-favhome-all'); await idle(page);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-home').hidden, document.getElementById('tp-crumb').textContent, document.activeElement.id, document.getElementById('tp-favs').getAttribute('aria-pressed'), location.hash]"), [true, 'Favorites', 'tp-crumb', 'true', '#market']);
+      assert.deepEqual((await shownIds(page)).sort((a, b) => a - b), [...FAVS].sort((a, b) => a - b));
+      // Unstarred in the results, it leaves the home too, and the count follows.
+      await click(page, `#tp-results [data-tp-fav="${shown[1]}"]`); await idle(page);
+      await click(page, '#tp-home-btn'); await settle();
+      const after = FAVS.filter((id) => id !== shown[1]);
+      assert.deepEqual(await cardsOf(page), after.slice(-8).reverse());
+      assert.equal(await text(page, '#tp-favhome-all'), 'Show all 9 favorites');
+      assert.equal(await page.eval(`localStorage.getItem('${FAV}')`), JSON.stringify(after), 'saved as ids, the lost one cleaned out');
+      // Kept through a reload.
+      await page.reload(); await market(page); await watchReady(page);
+      assert.deepEqual(await cardsOf(page), after.slice(-8).reverse());
+      assert.equal(await text(page, '#tp-favhome-hint'), 'saved in this browser, newest first');
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post home: with no favorites it says how to add one; one starred in an item\'s details shows there at once with the price it has, asking nothing more; a favorite the API cannot price says why', async () => {
+    let page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
+    try {
+      await market(page); await watchReady(page);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-favhome-empty').hidden, document.getElementById('tp-favhome-empty').textContent, document.getElementById('tp-favhome-list').hidden, document.getElementById('tp-favhome-prices').hidden, document.getElementById('tp-favhome-all').hidden]"),
+        [false, 'No favorites yet. Star an item (☆) in the results or in its details to keep it here, with its prices.', true, true, true]);
+      const before = page.apiRequests.length;
+      await click(page, '#tp-watch-list a[href="#market/item/68063"]');
+      await page.waitFor("document.getElementById('tp-item-dialog').open && document.querySelector('#tp-item-body .tp-stats')", 10000);
+      await click(page, '[data-tpkey="dlg:fav"]'); await settle();
+      await page.eval("document.querySelector('#tp-item-dialog [data-close]').click()"); await sleep(300);
+      assert.deepEqual(await page.eval("[...document.querySelectorAll('#tp-favhome-list .tp-watch-card')].map((li) => [Number(li.dataset.id), /gold|silver|copper/.test(li.querySelector('.tp-sell').textContent)])"), [[68063, true]]);
+      assert.equal(await page.eval("document.getElementById('tp-favhome-empty').hidden"), true);
+      assert.equal(page.apiRequests.length, before, 'its price was already here');
+      // Another tab stars an item this one has no price for: it shows here, and its price is asked for (one request).
+      await page.eval(`(() => { localStorage.setItem('${FAV}', '[68063,26332]'); window.dispatchEvent(new StorageEvent('storage', { key: '${FAV}' })); })()`);
+      await page.waitFor("(() => { const li = document.querySelector('#tp-favhome-list [data-id=\"26332\"]'); return li && /gold|silver|copper/.test(li.querySelector('.tp-sell').textContent); })()", 10000);
+      assert.deepEqual(asked(page).filter((x) => /26332/.test(x)), ['/v2/commerce/prices 26332', '/v2/items 26332']);
+      assert.deepEqual(await page.eval("[...document.querySelectorAll('#tp-favhome-list .tp-watch-card')].map((li) => Number(li.dataset.id))"), [26332, 68063]);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+    page = await open({ at: AT, url: BASE + '#market', wait: false, seed: { [FAV]: [26332] }, api: api({ answer: (n, u) => (/commerce\/prices/.test(u.pathname) ? 'offline' : 'ok') }) });
+    try {
+      await market(page);
+      await page.waitFor("/^ArenaNet's API/.test(document.getElementById('tp-favhome-text').textContent)", 30000);
+      assert.equal(await text(page, '#tp-favhome-text'), "ArenaNet's API could not be reached, so 1 item has no price here. Nothing is estimated in its place.");
+      assert.deepEqual(await page.eval("(() => { const li = document.querySelector('#tp-favhome-list [data-id=\"26332\"]'); return [li.querySelector('.tp-buy').textContent, li.querySelector('.tp-note').textContent, Boolean(li.querySelector('.coins'))]; })()"),
+        ['Highest buy order: Buynot loaded', "No price: ArenaNet's API could not be reached.", false]);
+      assert.equal(await text(page, '#tp-favhome-refresh'), 'Try again');
+      assert.deepEqual(unexpected(page, NET), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post home: the gem exchange says what 100 gold buys and what 400 gems sell for, each direction on its own line in its own units, one request each, with when; when the API fails no rate is shown and it says why, and Try again recovers; a stale rate is marked', async () => {
+    const gemLines = (page) => page.eval("[...document.querySelectorAll('.tp-gem')].map((li) => { const c = li.cloneNode(true); for (const s of c.querySelectorAll('.sr-only')) s.remove(); return c.textContent.replace(/\\s+/g, ' ').trim(); })");
+    let how = 'ok';
+    let page = await open({ at: AT, url: BASE + '#market', wait: false, api: api({ answer: (n, u) => (/exchange/.test(u.pathname) ? how : 'ok') }) });
+    try {
+      await market(page); await watchReady(page);
+      assert.deepEqual(await gemLines(page), ['Gold to gems 100 gold buys 225 gems (about 44s 44c a gem)', 'Gems to gold 400 gems sell for 119g 72s 00c (about 29s 93c a gem)']);
+      assert.deepEqual(await page.eval("[...document.querySelectorAll('.tp-gem .coins .sr-only')].map((s) => s.textContent)"), ['44 silver 44 copper', '119 gold 72 silver', '29 silver 93 copper'], 'read out in words');
+      assert.equal(await text(page, '#tp-gem-text'), 'Rates from 7:00 AM, current.');
+      assert.equal(await text(page, '.tp-gem-note'), 'The rate changes with the amount, and buying gems and selling them are different prices: neither line is the other one reversed.');
+      assert.deepEqual(asked(page).filter((x) => /exchange/.test(x)), ['/v2/commerce/exchange/coins quantity=1000000', '/v2/commerce/exchange/gems quantity=400']);
+      // 12 minutes on, the API holding: the rates stay, said stale, no Refresh while one is on its way.
+      how = 'hold';
+      await later(page, 12 * 60000);
+      await click(page, '[data-mode="timers"]'); await click(page, '[data-mode="market"]'); await sleep(400);
+      assert.equal(await text(page, '#tp-gem-text'), 'Loading the rates... Rates from 7:00 AM, 12 minutes ago: stale.');
+      assert.deepEqual([await page.eval("document.getElementById('tp-gem-prices').dataset.fresh"), await page.eval("document.getElementById('tp-gem-refresh').hidden")], ['stale', true]);
+      assert.match((await gemLines(page))[0], /100 gold buys 225 gems/, 'the older rate stays, with its age');
+      assert.deepEqual(await lowContrast(page, '#tp-gem-text, .tp-gem *'), [], 'readable');
+      assert.deepEqual(unexpected(page, NET), []);
+    } finally { await page.close(); }
+    how = 'offline';
+    page = await open({ at: AT, url: BASE + '#market', wait: false, api: api({ answer: (n, u) => (/exchange/.test(u.pathname) ? how : 'ok') }) });
+    try {
+      await market(page);
+      await page.waitFor("/^ArenaNet's API/.test(document.getElementById('tp-gem-text').textContent)", 30000);
+      assert.equal(await text(page, '#tp-gem-text'), "ArenaNet's API could not be reached, so neither rate is shown. Nothing is estimated in its place.");
+      assert.deepEqual(await gemLines(page), ["Gold to gems no rate here: ArenaNet's API could not be reached.", "Gems to gold no rate here: ArenaNet's API could not be reached."]);
+      assert.equal(await page.eval("document.querySelectorAll('.tp-gem .coins').length"), 0, 'no number without the API');
+      assert.equal(page.apiRequests.filter(isGem).length, 8, 'each tried once and three more times');
+      assert.equal(await text(page, '#tp-gem-refresh'), 'Try again');
+      how = 'ok';
+      await click(page, '#tp-gem-refresh');
+      await page.waitFor("document.getElementById('tp-gem-text').textContent === 'Rates from 7:00 AM, current.'", 10000);
+      assert.match((await gemLines(page))[1], /400 gems sell for 119g 72s 00c/);
+      assert.equal(await text(page, '#tp-gem-refresh'), 'Refresh rates');
+      assert.deepEqual(unexpected(page, NET), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post: the potential margin % sort ranks by the margin as a share of the highest buy order and says so; rows with no buy orders (no denominator) or no sell listings come after the ranked ones; over 1,000 matches it ranks only the loaded prices and never loads the whole market', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
+    try {
+      await market(page); await watchReady(page);
+      await typeTp(page, 'iron sword'); await idle(page);
+      await select(page, 'tp-sort', 'marginpct-desc');
+      await page.waitFor("/among all 358 matching items/.test(document.getElementById('tp-scope').textContent)", 15000);
+      await idle(page);
+      const want = expectedSort('iron sword', 'marginPct', 'desc');
+      const ids = want.order.map((i) => CAT.ids[i]);
+      assert.deepEqual(await shownIds(page), ids.slice(0, 50), 'the ranking worked out in Node');
+      assert.notDeepEqual(ids.slice(0, 10), expectedSort('iron sword', 'margin', 'desc').order.slice(0, 10).map((i) => CAT.ids[i]), 'not the same as the margin in copper');
+      const scope = await text(page, '#tp-scope');
+      assert.ok(scope.startsWith('Ranked by potential margin as a share of the highest buy order, largest first, among all 358 matching items. Not a ranking of the whole market.'), scope);
+      assert.ok(scope.endsWith(`${want.noSide} items with no buy orders or no sell listings come after the ranked ones.`), scope);
+      const pct = await page.eval("[...document.querySelectorAll('#tp-results .tp-row .tp-margin')].slice(0, 3).map((c) => c.textContent)");
+      pct.forEach((t, k) => assert.ok(t.includes(`${Money.percent(quoteOf(ids[k]).marginPct)} of buy`), t));
+      // Show more until the rows without a denominator: each one after every ranked row, none ranked as 0%.
+      while ((await page.eval("document.querySelectorAll('#tp-results .tp-row').length")) < Math.min(358, want.ranked + 5)) { await click(page, '#tp-more'); await sleep(300); await idle(page); }
+      const sides = await page.eval("[...document.querySelectorAll('#tp-results .tp-row')].map((r) => /no buy orders|no sell listings/.test(r.textContent))");
+      assert.ok(sides.slice(0, want.ranked).every((x) => !x) && sides.slice(want.ranked).every((x) => x), `the ranked ${want.ranked} first`);
+      assert.equal(await page.eval(`document.getElementById('tp-sort').selectedOptions[0].textContent`), 'Potential margin %, largest first');
+      // Over 1,000 matches: only the loaded prices, said so; only the 50 shown asked for; the whole market never.
+      const before = page.apiRequests.length;
+      await typeTp(page, 'sword'); await sleep(800); await idle(page);
+      assert.match(await text(page, '#tp-scope'), /^Ranked by potential margin as a share of the highest buy order, largest first, among only the [\d,]+ of 1,075 matching items whose prices are loaded\. Not a ranking of every match, or of the whole market\. To rank every match, narrow the search to 1,000 items or fewer, or load the whole market\./);
+      const more = page.apiRequests.slice(before).filter((u) => /commerce\/prices/.test(u));
+      assert.ok(more.length <= 2 && more.every((u) => new URL(u).searchParams.get('ids').split(',').length <= 50), `only shown rows: ${more.length} requests`);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-whole-progress').hidden, document.getElementById('tp-whole-status').textContent]"), [true, ''], 'no whole-market load');
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  // Found by Lighthouse in the baseline matrix of 2026-11-16 (CLS 0.049 on #market): the home's price lines grew as
+  // the prices and their Refresh button arrived, and moved the cards under them.
+  check('Trading Post home: nothing on screen moves while the home\'s prices, rates and icons arrive (layout shift 0), on a desktop and a phone', async () => {
+    const CLS = "window.__cls = 0; window.__shifts = []; new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) { window.__cls += e.value; window.__shifts.push((e.sources || []).map((x) => x.node && (x.node.id || x.node.className)).join(' ')); } }).observe({ type: 'layout-shift', buffered: true });";
+    for (const [width, height, mobile] of [[1280, 900, false], [390, 844, true]]) {
+      const page = await open({ at: AT, api: api({ delay: 300 }), url: BASE + '#market', wait: false, width, height, mobile, init: [CLS] });
+      try {
+        await market(page); await watchReady(page); await sleep(600);
+        const r = await page.eval('({ cls: window.__cls, shifts: window.__shifts })');
+        assert.ok(r.cls < 0.001, `${width}: CLS ${r.cls.toFixed(4)} from ${JSON.stringify(r.shifts)}`);
+      } finally { await page.close(); }
+    }
+  });
+
   // ---- Search and prices ----
 
   check('Trading Post: search finds items by name, by words in any order, without accents, and by id; one letter asks for more; the count is said', async () => {
     const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
     try {
       await market(page);
-      assert.match(await text(page, '#tp-empty'), /Search for an item by name or id/);
+      // Nothing typed: the home, not an empty list (its own checks are above).
+      assert.deepEqual(await page.eval("[document.getElementById('tp-home').hidden, document.getElementById('tp-empty').hidden]"), [false, true]);
       for (const q of ['glob of ecto', 'ecto glob', 'GLOB OF ÉCTO', '19721']) {
         await typeTp(page, q);
         assert.equal((await shownIds(page))[0], 19721, q);
@@ -215,7 +721,8 @@ export function marketChecks(h) {
       const ids = await shownIds(page);
       const want = Catalog.search(CAT, { query: 'iron sword' }).indexes.slice(0, 50).map((i) => CAT.ids[i]);
       assert.deepEqual(ids, want, 'the same order as the module in Node');
-      const prices = page.apiRequests.filter((u) => /commerce\/prices/.test(u)), items = page.apiRequests.filter((u) => /\/v2\/items/.test(u));
+      // The search's own requests (Market Watch asked for its eight when the home opened).
+      const prices = page.apiRequests.filter((u) => /commerce\/prices/.test(u) && !isHome(u)), items = page.apiRequests.filter((u) => /\/v2\/items/.test(u) && !isHome(u));
       assert.equal(prices.length, 1, prices.join('\n'));
       assert.equal(items.length, 1);
       const sent = new URL(prices[0]).searchParams.get('ids').split(',').map(Number);
@@ -258,7 +765,7 @@ export function marketChecks(h) {
     try {
       await market(page);
       await sleep(500);
-      assert.equal(page.apiRequests.length, 0, 'nothing is asked for before a search');
+      assert.deepEqual(page.apiRequests.filter((u) => !isHome(u)), [], 'nothing but the home\'s requests before a search');
       await typeTp(page, 'iron sword');
       await idle(page);
       await select(page, 'tp-sort', 'sell-desc');
@@ -309,7 +816,7 @@ export function marketChecks(h) {
     try {
       await market(page);
       await sleep(1500);
-      assert.equal(page.apiRequests.length, 0, 'nothing loads by itself');
+      assert.deepEqual(page.apiRequests.filter((u) => !isHome(u)), [], 'nothing loads by itself (but the home\'s requests)');
       const box = () => page.eval("[document.getElementById('tp-whole-confirm').hidden, document.getElementById('tp-whole-btn').getAttribute('aria-expanded')]");
       assert.deepEqual(await box(), [true, 'false'], 'the explanation waits to be asked for');
       await click(page, '#tp-whole-btn'); await settle();
@@ -317,7 +824,7 @@ export function marketChecks(h) {
       const ex = await text(page, '#tp-whole-explain');
       assert.match(ex, new RegExp(`${COUNT} items, ${REQS} requests of 200 \\(Phase A measured about 142 for the whole Trading Post\\)`));
       assert.match(ex, /kept only while this page is open, and nothing is saved/);
-      assert.equal(page.apiRequests.length, 0, 'still nothing before Load');
+      assert.deepEqual(page.apiRequests.filter((u) => !isHome(u)), [], 'still nothing before Load');
       assert.equal(await page.eval("document.activeElement.id"), 'tp-whole-start');
       // Cancel after a few requests.
       await click(page, '#tp-whole-start');
@@ -483,12 +990,23 @@ export function marketChecks(h) {
       for (const want of [`Highest buy order ${c(1)}`, `Lowest sell listing ${c(2)}`, `Spread ${c(1)}`,
         `would give you about ${c(-1)} after the listing fee of ${c(1)} and the exchange fee of ${c(1)}. ${all}`,
         `would give you about ${c(0)} after fees, only if it sells: someone may list lower, and it may not sell. ${all}`,
-        `${c(-1)} (${Money.percent(-1)} of the buy price)`, 'A potential margin, not a profit']) {
+        `Potential margin ${c(-1)} ${Money.percent(-1)} of the highest buy order, after fees`, `Break-even listing price ${c(3)}`, `Listing one unit at ${c(3)}`, `A gain of 1 copper or more starts at ${c(4)}`, `The lowest sell listing, ${c(2)}`, 'is below it: listing there now would lose', 'A potential margin, not a profit']) {
         assert.ok(body.replace(/\s+/g, '').includes(want.replace(/\s+/g, '')), `${want}\n in: ${body}`);
       }
       assert.match(await page.eval("document.getElementById('tp-item-body').textContent"), /a loss of 1 copper/, 'a screen reader hears a loss');
       assert.deepEqual(unexpected(page, NET), []);
     } finally { await page.close(); }
+    // The lowest sell listing exactly at the break-even (17s 10c buy, 20s 12c sell): at or above it, not below.
+    const even = new Map([[24295, { id: 24295, whitelisted: false, buys: { quantity: 40, unit_price: 1710 }, sells: { quantity: 12, unit_price: 2012 } }]]);
+    const p2 = await open({ at: AT, url: BASE + '#market/item/24295', wait: false, api: api({ prices: even }) });
+    try {
+      await p2.waitFor("document.getElementById('tp-item-dialog').open && document.querySelector('#tp-item-body .tp-stats')", 15000);
+      const b2 = await p2.eval("(() => { const c = document.getElementById('tp-item-body').cloneNode(true); for (const s of c.querySelectorAll('.sr-only')) s.remove(); return c.textContent.replace(/\\s+/g, ' '); })()");
+      const flat = b2.replace(/\s+/g, '');
+      assert.ok(flat.includes('Thelowestselllisting,20s12c,isatoraboveit.'), b2);
+      assert.ok(flat.includes('Potentialmargin0c0.0%ofthehighestbuyorder'), 'listing at the break-even gives back the cost: 0c');
+      assert.ok(flat.includes('Break-evenlistingprice20s12c'), b2);
+    } finally { await p2.close(); }
   });
 
   check('Trading Post: a 429 holds the whole queue for its wait, then the prices come; a new search cancels the requests of the one it replaces', async () => {
@@ -536,9 +1054,9 @@ export function marketChecks(h) {
       const body = await page.eval("(() => { const c = document.getElementById('tp-item-body').cloneNode(true); for (const s of c.querySelectorAll('.sr-only')) s.remove(); return c.textContent.replace(/\\s+/g, ' '); })()");
       const q = quoteOf(19721);
       const c = (n) => Money.coins(n).text;
-      for (const want of [`Highest buy order ${c(q.buy)} (391,900 units wanted in all buy orders)`, `Lowest sell listing ${c(q.sell)} (2,219,204 units listed in all)`,
+      for (const want of [`Highest buy order ${c(q.buy)} 391,900 units wanted in all buy orders`, `Lowest sell listing ${c(q.sell)} 2,219,204 units listed in all`,
         `Spread ${c(q.spread)}`, `would give you about ${c(q.sellNow.net)} after the listing fee of ${c(q.sellNow.listing)} and the exchange fee of ${c(q.sellNow.exchange)}`,
-        `would give you about ${c(q.listAtLowest.net)} after fees, only if it sells`, `${c(q.margin)} (${Money.percent(q.marginPct)} of the buy price)`, 'A potential margin, not a profit', 'Item id 19721', 'Chat code [&AgEJTQAA]']) {
+        `would give you about ${c(q.listAtLowest.net)} after fees, only if it sells`, `Potential margin ${c(q.margin)} ${Money.percent(q.marginPct)} of the highest buy order, after fees`, 'A potential margin, not a profit', 'Item id 19721', 'Chat code [&AgEJTQAA]']) {
         assert.ok(body.replace(/\s+/g, '').includes(want.replace(/\s+/g, '')), `${want}\n in: ${body}`);
       }
       assert.equal([q.sellNow.net, q.listAtLowest.net, q.margin].join(), '1453,1623,-87', 'the fee arithmetic, by hand: 1710 - 86 - 171; 1910 - 96 - 191; 1623 - 1710');
@@ -767,7 +1285,8 @@ export function marketChecks(h) {
     const settled = "!/not requested yet|loading\\.\\.\\./.test(document.getElementById('tp-results').textContent) && !document.querySelector('#tp-results[aria-busy=\"true\"]')";
     try {
       await market(page);
-      for (const [q, ids] of [['glob of ecto', [19721]], ['mystic coin', null]]) {
+      // Items outside Market Watch: the home has already loaded Market Watch's prices and item records, which would hide the race.
+      for (const [q, ids] of [['vial of potent blood', [24294]], ['elder wood log', null]]) {
         // 150 ms a key: each search starts 100 ms after its key, so 50 ms into it every row shown is priced or
         // loading. A row "not requested yet" then was dropped, or let go of by a request that no longer held it.
         const dropped = [];

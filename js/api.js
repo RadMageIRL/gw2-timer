@@ -164,6 +164,22 @@
         const list = (a) => (Array.isArray(a) ? a.filter(tier) : []);
         return { ok: true, book: { buys: list(r.data.buys), sells: list(r.data.sells), at: now() } };
       },
+      /**
+       * A gem exchange quote (/v2/commerce/exchange/coins or /gems), for one direction and one amount, as ArenaNet's
+       * exchange would give it now. 'coins': you give `quantity` copper and get gems; 'gems': you give `quantity` gems
+       * and get copper. The API answers { coins_per_gem, quantity }, where quantity is what you GET, in the other
+       * currency. The rate depends on the amount, and each direction has its own: neither is the other reversed.
+       * { ok: true, quote: { direction, give, get, coinsPerGem, at } } or { ok: false, error } (an amount the
+       * exchange refuses, such as too few coins, is 'http' with the status 400).
+       */
+      async exchange(direction, quantity, opts) {
+        if ((direction !== 'coins' && direction !== 'gems') || !Number.isSafeInteger(quantity) || quantity <= 0) return { ok: false, error: 'http' };
+        const r = await get(`/v2/commerce/exchange/${direction}`, { quantity }, opts);
+        if (!r.ok) return r;
+        const d = r.data;
+        if (r.notFound || !d || !Number.isSafeInteger(d.coins_per_gem) || d.coins_per_gem <= 0 || !Number.isSafeInteger(d.quantity) || d.quantity < 0) return { ok: false, error: 'bad-data', status: r.status };
+        return { ok: true, quote: { direction, give: quantity, get: d.quantity, coinsPerGem: d.coins_per_gem, at: now() } };
+      },
       /** How many requests a set of ids takes. */
       requestsFor: (ids) => chunks(ids).length,
       stats: () => Object.assign({ inFlight, queued: queue.length, pausedUntil }, stats),

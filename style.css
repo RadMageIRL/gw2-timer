@@ -587,13 +587,21 @@ body { padding-bottom: var(--tray-space, 0px); }
 .tp-boot-actions .btn[hidden] { display: none; }
 .tp-app { display: grid; gap: 12px; min-width: 0; }
 .tp-app[hidden] { display: none; }
-.tp-controls .find-box { flex: 0 1 420px; }
+/* The item search is the Trading Post's first control: wider and taller than the timer's Find. */
+.tp-controls .find-box { flex: 0 1 560px; }
+.tp-controls .find-box input { min-height: 40px; font-size: 15px; padding-left: 12px; }
 .tp-fav-unsaved { margin: 0; color: var(--warn); font-size: 13px; }
 .tp-fav-unsaved[hidden] { display: none; }
 .tp-status { display: grid; gap: 4px; color: var(--text-dim); font-size: 13px; }
 .tp-status p { margin: 0; max-width: 90ch; }
 .tp-count { color: var(--text); }
-.tp-prices[data-fresh="stale"] #tp-prices-text, .tp-prices[data-fresh="old"] #tp-prices-text { color: var(--warn); }
+.tp-prices[data-fresh="stale"] > [role="status"], .tp-prices[data-fresh="old"] > [role="status"] { color: var(--warn); }
+/* Beside the results: the way back to the home, and what the results are. */
+.tp-status .tp-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 0 4px; }
+.tp-crumbs[hidden] { display: none; }
+.tp-crumb-sep { color: var(--text-faint); }
+.tp-crumb { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+.tp-crumb:focus { outline: none; }
 .tp-whole { display: grid; gap: 6px; justify-items: start; margin-top: 4px; }
 .tp-whole[hidden], .tp-whole [hidden] { display: none; }
 .tp-whole-confirm { padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: 8px; max-width: 75ch; }
@@ -612,13 +620,13 @@ body { padding-bottom: var(--tray-space, 0px); }
   --rarity: var(--line-strong);
   padding: 8px 12px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--rarity); border-radius: var(--radius);
 }
-.tp-row.rarity-basic { --rarity: #b9b9b9; }
-.tp-row.rarity-fine { --rarity: #62a4da; }
-.tp-row.rarity-masterwork { --rarity: #1a9306; }
-.tp-row.rarity-rare { --rarity: #fcd00b; }
-.tp-row.rarity-exotic { --rarity: #ffa405; }
-.tp-row.rarity-ascended { --rarity: #fb3e8d; }
-.tp-row.rarity-legendary { --rarity: #9a5cff; }
+:is(.tp-row, .tp-watch-card).rarity-basic { --rarity: #b9b9b9; }
+:is(.tp-row, .tp-watch-card).rarity-fine { --rarity: #62a4da; }
+:is(.tp-row, .tp-watch-card).rarity-masterwork { --rarity: #1a9306; }
+:is(.tp-row, .tp-watch-card).rarity-rare { --rarity: #fcd00b; }
+:is(.tp-row, .tp-watch-card).rarity-exotic { --rarity: #ffa405; }
+:is(.tp-row, .tp-watch-card).rarity-ascended { --rarity: #fb3e8d; }
+:is(.tp-row, .tp-watch-card).rarity-legendary { --rarity: #9a5cff; }
 .tp-icon { width: 32px; height: 32px; border-radius: 5px; background: var(--surface-2); overflow: hidden; }
 .tp-icon img { display: block; width: 32px; height: 32px; }
 .tp-item { min-width: 0; }
@@ -638,8 +646,67 @@ body { padding-bottom: var(--tray-space, 0px); }
 .tp-extra { display: contents; }
 .tp-more-line { margin: 0; }
 .tp-more-line .btn[hidden] { display: none; }
-.tp-notes { color: var(--text-faint); font-size: 12.5px; }
-.tp-notes p { margin: 0 0 6px; max-width: 90ch; }
+
+/* The home: Market Watch, then the item list's types. */
+.tp-home { display: grid; gap: 20px; min-width: 0; }
+.tp-home[hidden] { display: none; }
+.tp-home .section-head { margin-bottom: 6px; }
+.tp-home h3 { margin: 0; font: 600 16px/1.2 var(--serif); letter-spacing: 0.02em; }
+.tp-watch-prices { margin: 0 0 8px; color: var(--text-dim); font-size: 13px; }
+.tp-watch-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+.tp-watch-card {
+  --rarity: var(--line-strong);
+  display: grid; grid-template-columns: 32px minmax(0, 1fr); grid-template-areas: "icon name" ". buy" ". sell" ". note";
+  align-items: center; gap: 2px 10px; padding: 10px 12px;
+  background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--rarity); border-radius: var(--radius);
+}
+.tp-watch-card .tp-icon { grid-area: icon; }
+.tp-watch-card .tp-name { grid-area: name; }
+.tp-watch-card .tp-buy { grid-area: buy; }
+.tp-watch-card .tp-sell { grid-area: sell; }
+.tp-watch-card .tp-note { grid-area: note; }
+.tp-watch-card .tp-k { display: inline-block; min-width: 34px; margin-right: 6px; color: var(--text-faint); font-size: 12px; }
+.tp-watch-card.is-old .coin { color: var(--text-faint); }
+/* The home's price lines keep one line's height (the Refresh button's) from the start, so the prices and the button
+   arriving move nothing under them (Lighthouse found the cards shifting: CLS 0.049 on desktop). */
+.tp-home .tp-prices { display: flex; flex-wrap: wrap; align-items: center; gap: 0 4px; min-height: 30px; }
+.tp-watch-list[hidden], .tp-home .tp-prices[hidden], .tp-favhome-more .btn[hidden] { display: none; }
+/* Your favorites: the same cards as Market Watch; one line saying what to do when there are none. */
+.tp-favhome-empty { margin: 0; padding: 10px 12px; color: var(--text-dim); font-size: 13px; border: 1px dashed var(--line); border-radius: var(--radius); }
+.tp-favhome-empty[hidden] { display: none; }
+.tp-favhome-more { margin: 8px 0 0; }
+/* The gem exchange: a line a direction, each naming what is given and what is got. */
+.tp-gem-list { list-style: none; margin: 0 0 6px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
+.tp-gem { display: grid; gap: 2px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
+.tp-gem-k { color: var(--text-faint); font-size: 12px; }
+.tp-gem-v { color: var(--text); font-size: 14px; overflow-wrap: anywhere; }
+.tp-gem-note { margin: 4px 0 0; color: var(--text-faint); font-size: 12px; max-width: 90ch; }
+.tp-cat-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+.tp-cat-grid li { display: flex; min-width: 0; }
+.tp-cat {
+  flex: 1; min-width: 0; min-height: 96px; display: grid; justify-items: center; align-content: center; gap: 4px; padding: 10px 6px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; text-align: center;
+}
+.tp-cat:hover { border-color: color-mix(in srgb, var(--boss) 60%, transparent); background: var(--surface-2); }
+.tp-cat-ic { color: var(--boss); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.tp-cat-name { font-size: 13px; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
+.tp-cat-count { font-size: 11.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+
+/* The notes: pills that open one panel at a time, so they take a line until asked for. */
+.tp-notes { display: grid; gap: 8px; color: var(--text-dim); font-size: 12.5px; }
+.tp-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.tp-pill {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text-dim); font-size: 12.5px;
+}
+.tp-pill:hover { color: var(--text); border-color: var(--text-faint); }
+.tp-pill[aria-expanded="true"] { color: var(--text); border-color: var(--focus); }
+.tp-pill-ic { display: inline-block; width: 10px; text-align: center; color: var(--text-faint); }
+.tp-pill-ic::before { content: "+"; content: "+" / ""; }
+.tp-pill[aria-expanded="true"] .tp-pill-ic::before { content: "\00D7"; content: "\00D7" / ""; }
+.tp-pill-panel { padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.tp-pill-panel[hidden] { display: none; }
+.tp-pill-panel p { margin: 0; max-width: 90ch; }
 
 /* One item's details. */
 .tp-dialog .tp-detail-head { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
@@ -647,6 +714,19 @@ body { padding-bottom: var(--tray-space, 0px); }
 .tp-big-icon { width: 48px; height: 48px; border-radius: 6px; flex: none; }
 .tp-rarity-badge { color: var(--text); }
 .tp-desc { margin: 0 0 10px; white-space: pre-line; }
+/* The three figures first and large; the arithmetic and caveats under them, smaller. */
+.tp-stats-wrap { margin: 0 0 12px; }
+.tp-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tp-stat { display: grid; align-content: start; gap: 2px; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.tp-stat-k { color: var(--text-faint); font-size: 12px; }
+.tp-stat-v { color: var(--text); font-size: 17px; font-weight: 600; line-height: 1.25; }
+.tp-stat-v .coins { white-space: normal; }
+.tp-stat-v .tp-none { font-size: 13px; font-weight: 400; }
+.tp-stat-sub { color: var(--text-faint); font-size: 11.5px; }
+.tp-stats.is-old .coin { color: var(--text-faint); }
+.tp-dialog .tp-stat-when { margin: 6px 0 0; color: var(--text-faint); font-size: 12px; }
+.tp-dialog .tp-stat-when.is-stale, .tp-dialog .tp-stat-when.is-old { color: var(--warn); }
+.tp-dialog .tp-facts { font-size: 12.5px; }
 .tp-facts dd .tp-none { font-size: inherit; }
 .tp-book { margin: 4px 0 10px; }
 .tp-book h3 { margin-top: 4px; }
@@ -686,4 +766,22 @@ body { padding-bottom: var(--tray-space, 0px); }
   .tp-filters #tp-favs { justify-self: start; }
   .tp-name { display: inline-block; padding: 8px 0; }
   .tp-whole-progress progress { width: 120px; }
+  /* Phones: one card a line, the two prices side by side; types two a line, the drawing beside the name. */
+  .tp-watch-list { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .tp-watch-card { grid-template-columns: 32px minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "icon name name" "icon buy sell" ". note note"; padding: 6px 10px; gap: 0 10px; }
+  .tp-watch-card .tp-k { min-width: 0; }
+  .tp-cat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .tp-cat {
+    min-height: 52px; grid-template-columns: 28px minmax(0, 1fr); grid-template-areas: "ic name" "ic count";
+    justify-items: start; align-items: center; align-content: center; gap: 0 8px; padding: 8px 10px; text-align: left;
+  }
+  .tp-cat-ic { grid-area: ic; }
+  .tp-cat-name { grid-area: name; }
+  .tp-cat-count { grid-area: count; }
+  .tp-pill { min-height: 36px; }
+  .tp-home .tp-prices { min-height: 36px; }
+  .tp-controls .find-box { flex: 1 1 auto; }
+}
+@media (min-width: 641px) and (max-width: 1099px) {
+  .tp-cat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
