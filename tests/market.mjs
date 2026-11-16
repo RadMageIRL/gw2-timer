@@ -76,6 +76,27 @@ test('every sort the page offers has its words; name and best match say so', () 
   assert.equal(Market.scopeText({ ...base, sort: 'relevance' }), 'Best matches first, then by name.');
 });
 
+test('an item list that does not load: opened as a file it says the site must be served over HTTP or HTTPS, with no retry; served, the connection and reading messages stay', () => {
+  const SITE = 'https://radmagelabs.com/gw2-timer/';
+  const CONNECTION = 'The item list could not be loaded. Check your connection and try again. The timer is not affected.';
+  const UNREADABLE = 'The item list that arrived could not be read, so nothing is searched. Try again later. The timer is not affected.';
+  const FROM_FILE = 'The Trading Post needs this site to be served over HTTP or HTTPS. This copy was opened as a file, and this browser does not let a page opened that way request its own data, such as the item list. Open https://radmagelabs.com/gw2-timer/#market instead, or serve this folder with a local web server. The timer is not affected.';
+  // Opened as a file (or from a phone's file viewer): no answer is a browser rule, not the connection.
+  for (const protocol of ['file:', 'content:']) assert.deepEqual(Market.listFailure('network', protocol, SITE), { retry: false, text: FROM_FILE }, protocol);
+  assert.doesNotMatch(FROM_FILE, /connection|try again/i);
+  assert.match(Market.listFailure('network', 'file:', '').text, /Open the site from its web address instead, or serve this folder/);
+  // Served over HTTP or HTTPS: a real network failure or an HTTP error is the connection's, and Try again is offered.
+  for (const protocol of ['http:', 'https:']) {
+    for (const error of ['network', 'HTTP 404', 'HTTP 503']) assert.deepEqual(Market.listFailure(error, protocol, SITE), { retry: true, text: CONNECTION }, `${protocol} ${error}`);
+    assert.deepEqual(Market.listFailure('not the item list format', protocol, SITE), { retry: true, text: UNREADABLE });
+  }
+  // A list that did arrive from a file but cannot be read is still an unreadable list, not a file problem.
+  assert.deepEqual(Market.listFailure('not the item list format', 'file:', SITE), { retry: true, text: UNREADABLE });
+  // The page passes its own address and the site's, and offers Try again only when it is offered.
+  const mk = readFileSync(join(ROOT, 'js', 'market.js'), 'utf8');
+  assert.ok(mk.includes('const f = listFailure(r.error, location.protocol, canonical);\n        setBoot(f.text, f.retry);'));
+});
+
 test('item types read as words', () => {
   assert.deepEqual(['CraftingMaterial', 'UpgradeComponent', 'MiniPet', 'Back', 'JadeTechModule', 'SomethingNew'].map(Market.typeLabel), ['Crafting material', 'Upgrade component', 'Miniature', 'Back item', 'Jade Tech module', 'Something New']);
 });

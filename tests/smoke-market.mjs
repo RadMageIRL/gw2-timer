@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -734,7 +735,7 @@ export function marketChecks(h) {
   });
 
   check('Trading Post: when its code or its item list cannot load, it says so, the timer keeps working, and Try again loads it', async () => {
-    for (const [file, how, said] of [['js/market.js', 'fail', /^The Trading Post could not load\./], ['data/tp-items.json', 'fail', /^The item list could not be loaded\./], ['data/tp-items.json', 'garbage', /^The item list that arrived could not be read/]]) {
+    for (const [file, how, said] of [['js/market.js', 'fail', /^The Trading Post could not load\./], ['data/tp-items.json', 'fail', /^The item list could not be loaded\. Check your connection and try again\. The timer is not affected\.$/], ['data/tp-items.json', 'garbage', /^The item list that arrived could not be read/]]) {
       let mode = how;
       const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false, local: { patterns: [`*${file}*`], handler: async (pg, p) => {
         if (mode === 'pass') await pg.send('Fetch.continueRequest', { requestId: p.requestId });
@@ -755,6 +756,42 @@ export function marketChecks(h) {
         assert.deepEqual(unexpected(page, [/^failed: net::ERR_INTERNET_DISCONNECTED/, /^log: Failed to load resource/]), []);
       } finally { await page.close(); }
     }
+  });
+
+  // v0.4.0 final correction: the downloaded site opened from disk. The browser refuses a file page's request for its
+  // own item list, which is no connection problem: the page says the site must be served over HTTP or HTTPS.
+  check('Trading Post: opened as a file, it says the site must be served over HTTP or HTTPS, not to check the connection, with no Try again; the timer keeps working', async () => {
+    const FROM_FILE = 'The Trading Post needs this site to be served over HTTP or HTTPS. This copy was opened as a file, and this browser does not let a page opened that way request its own data, such as the item list. Open https://radmagelabs.com/gw2-timer/#market instead, or serve this folder with a local web server. The timer is not affected.';
+    const FILE = pathToFileURL(join(DIR, 'index.html')).href;
+    // Chrome's own words for the refused request: the only problem these pages may show.
+    const REFUSED = [/^log: Access to fetch at 'file:\/\/\/[^']*\/data\/tp-items\.json\?v=[\d.]+' from origin 'null' has been blocked by CORS policy: /, /^log: Failed to load resource: net::ERR_FAILED$/, /^failed: net::ERR_FAILED /];
+    // By the switch: the code loads (scripts work from a file), then the list request is refused.
+    let page = await open({ at: AT, api: api(), url: FILE });
+    try {
+      await click(page, 'button[data-mode="market"]');
+      await page.waitFor("/HTTP or HTTPS/.test(document.getElementById('tp-boot').textContent)", 15000);
+      assert.equal(await text(page, '#tp-boot'), FROM_FILE);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-boot').hidden, document.getElementById('tp-retry').hidden, document.getElementById('tp-app').hidden, location.hash]"), [false, true, true, '#market']);
+      assert.deepEqual(page.apiRequests, [], 'nothing asked of the API');
+      const c1 = await text(page, '#local-time'); await sleep(1100);
+      assert.notEqual(await text(page, '#local-time'), c1, 'the timer ticks on');
+      await click(page, 'button[data-mode="timers"]'); await settle();
+      assert.equal(await page.eval("document.getElementById('timers-view').hidden"), false);
+      assert.ok((await page.eval("document.querySelectorAll('#next-list .row').length")) > 10, 'the timer shows its rows');
+      // Back on the Trading Post it says the same, and still offers no retry that cannot work.
+      await click(page, 'button[data-mode="market"]'); await settle();
+      assert.deepEqual([await text(page, '#tp-boot'), await page.eval("document.getElementById('tp-retry').hidden")], [FROM_FILE, true]);
+      assert.deepEqual(unexpected(page, REFUSED), []);
+    } finally { await page.close(); }
+    // By a link to an item, opened from the file: the same words, no details over them.
+    page = await open({ at: AT, api: api(), url: FILE + '#market/item/19721', wait: false });
+    try {
+      await page.waitFor("/HTTP or HTTPS/.test(document.getElementById('tp-boot').textContent)", 15000);
+      assert.equal(await text(page, '#tp-boot'), FROM_FILE);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-retry').hidden, document.getElementById('tp-item-dialog').open, document.getElementById('market-view').hidden]"), [true, false, false]);
+      assert.deepEqual(page.apiRequests, []);
+      assert.deepEqual(unexpected(page, REFUSED), []);
+    } finally { await page.close(); }
   });
 
   check('Trading Post: the item list is read and searched quickly at 6x CPU slowdown (an emulated slow device, not a real phone)', async () => {

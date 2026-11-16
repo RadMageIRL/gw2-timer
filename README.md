@@ -111,7 +111,7 @@ See [CHANGELOG.md](CHANGELOG.md). The schedule data has its own revision numbers
 
 ## Run it locally
 
-Open `index.html` in a browser, or serve the folder:
+Open `index.html` in a browser, or serve the folder. Opened as a file, the timer works, but most browsers do not let the page load the Trading Post's item list, so the Trading Post says the site must be served over HTTP or HTTPS. Serve the folder to use it:
 
 ```
 node tools/serve.mjs . 8080

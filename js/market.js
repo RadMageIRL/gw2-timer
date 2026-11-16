@@ -94,6 +94,22 @@
     'bad-data': "ArenaNet's API sent something this page cannot read",
   };
 
+  /**
+   * What the Trading Post says when its item list does not load, and whether it offers Try again. error: 'network'
+   * (no answer), 'HTTP <status>', or why the answer could not be read; protocol: the page's (location.protocol);
+   * canonical: the site's address. On a page opened as a file (any address that is not http or https), no answer
+   * for its own data means the browser refused the request, not that the connection failed (Chrome, Edge and WebKit
+   * refuse it; Firefox allows it), so the reader is told what does work, and offered no retry that cannot.
+   */
+  function listFailure(error, protocol, canonical) {
+    if (error === 'network' && !/^https?:$/.test(String(protocol))) {
+      return { retry: false, text: `The Trading Post needs this site to be served over HTTP or HTTPS. This copy was opened as a file, and this browser does not let a page opened that way request its own data, such as the item list. Open ${canonical ? `${canonical}#market` : 'the site from its web address'} instead, or serve this folder with a local web server. The timer is not affected.` };
+    }
+    return { retry: true, text: error === 'network' || /^HTTP/.test(error)
+          ? 'The item list could not be loaded. Check your connection and try again. The timer is not affected.'
+          : 'The item list that arrived could not be read, so nothing is searched. Try again later. The timer is not affected.' };
+  }
+
   function mount(ctx) {
     const Money = root.GW2Money, Catalog = root.GW2Catalog, Api = root.GW2Api;
     const { h, storage, Store, now, copyText, canonical, version } = ctx;
@@ -137,9 +153,8 @@
       } catch (e) { r = { ok: false, error: 'network' }; }
       if (!r.ok) {
         listState = 'failed';
-        setBoot(r.error === 'network' || /^HTTP/.test(r.error)
-          ? 'The item list could not be loaded. Check your connection and try again. The timer is not affected.'
-          : 'The item list that arrived could not be read, so nothing is searched. Try again later. The timer is not affected.', true);
+        const f = listFailure(r.error, location.protocol, canonical);
+        setBoot(f.text, f.retry);
         return;
       }
       cat = r.catalog;
@@ -659,7 +674,7 @@
     };
   }
 
-  const Market = { LIST_URL, PAGE, SORT_CAP, CURRENT_MS, OLD_MS, FAV_KEY, FAV_MAX, SORTS, TYPE_LABEL, typeLabel, sanitizeFavorites, freshness, scopeText, mount };
+  const Market = { LIST_URL, PAGE, SORT_CAP, CURRENT_MS, OLD_MS, FAV_KEY, FAV_MAX, SORTS, TYPE_LABEL, typeLabel, sanitizeFavorites, freshness, scopeText, listFailure, mount };
   if (typeof module === 'object' && module.exports) module.exports = Market;
   else root.GW2Market = Market;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
