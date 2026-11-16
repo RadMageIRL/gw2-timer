@@ -4,7 +4,7 @@ Every version of GW2 Timer and what changed in it, newest first. Dates are the d
 
 The schedule data has its own revision numbers (r1, r2, ...), listed under "Schedule data" below. A revision is either a **schedule change** (a start time, cycle or event added or removed) or **metadata only** (a label, note or verification status changed; no time moved).
 
-## v0.4.1 (unreleased)
+## v0.4.1 (2026-11-16)
 
 A home for the Trading Post. Settings and favorites saved by earlier versions carry over unchanged, and the schedule data is still r1.
 
