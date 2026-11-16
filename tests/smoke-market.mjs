@@ -758,6 +758,53 @@ export function marketChecks(h) {
     }
   });
 
+  // v0.4.0 final correction 2: a search or sort cancels the requests before it and asks again at once. The ids those
+  // requests held must be asked for again, not skipped as still on their way (found in the production-check trial:
+  // rows left "not requested yet"). Typed one key at a time, as a reader types, on an API slower than the keys.
+  check('Trading Post: typing one key at a time, and a price sort right after a search, on an API slower than the keys: every row shown gets its price and icon, none left "not requested yet"', async () => {
+    const page = await open({ at: AT, api: api({ delay: 400 }), url: BASE + '#market', wait: false });
+    const STUCK = /not requested yet/;
+    const settled = "!/not requested yet|loading\\.\\.\\./.test(document.getElementById('tp-results').textContent) && !document.querySelector('#tp-results[aria-busy=\"true\"]')";
+    try {
+      await market(page);
+      for (const [q, ids] of [['glob of ecto', [19721]], ['mystic coin', null]]) {
+        // 150 ms a key: each search starts 100 ms after its key, so 50 ms into it every row shown is priced or
+        // loading. A row "not requested yet" then was dropped, or let go of by a request that no longer held it.
+        const dropped = [];
+        for (let k = 1; k <= q.length; k++) {
+          await page.eval(`(() => { const i = document.getElementById('tp-find'); i.value = ${JSON.stringify(q.slice(0, k))}; i.dispatchEvent(new Event('input', { bubbles: true })); return 1; })()`);
+          await sleep(150);
+          if (STUCK.test(await text(page, '#tp-results'))) dropped.push(q.slice(0, k));
+        }
+        assert.deepEqual(dropped, [], `"${q}": rows "not requested yet" while their search was loading`);
+        // Item records (icons) are requests of their own and may come a moment after the prices.
+        await page.waitFor(`${settled} && [...document.querySelectorAll('#tp-results .tp-row')].every((li) => li.querySelector('.tp-icon img'))`, 10000).catch(() => {});
+        const r = await page.eval("[...document.querySelectorAll('#tp-results .tp-row')].map((li) => ({ id: Number(li.dataset.id), sell: li.querySelector('.tp-sell').textContent, icon: Boolean(li.querySelector('.tp-icon img')) }))");
+        if (ids) assert.deepEqual(r.map((x) => x.id), ids);
+        assert.ok(r.length >= 1, q);
+        assert.deepEqual(r.filter((x) => STUCK.test(x.sell) || !/silver|copper|gold|no sell listings/.test(x.sell)).map((x) => [x.id, x.sell]), [], `"${q}" typed key by key: rows without a price`);
+        assert.deepEqual(r.filter((x) => !x.icon).map((x) => x.id), [], `"${q}" typed key by key: rows without an icon`);
+      }
+      assert.match(await text(page, '#tp-results .tp-row .tp-sell'), /silver|copper|gold/);
+      // A price sort 300 ms after a search, while the search's prices are still on their way: every match is
+      // priced and ranked, and the scope line says so.
+      await typeTp(page, ''); await page.waitFor(settled, 10000).catch(() => {});
+      await page.eval("(() => { const i = document.getElementById('tp-find'); i.value = 'mystic'; i.dispatchEvent(new Event('input', { bubbles: true })); return 1; })()");
+      await sleep(300);
+      await select(page, 'tp-sort', 'sell-desc');
+      const all = Catalog.search(CAT, { query: 'mystic' }).indexes.length;
+      await page.waitFor(`/^Ranked by lowest sell listing, high to low, among all ${all} matching items\\./.test(document.getElementById('tp-scope').textContent)`, 15000);
+      await page.waitFor(settled, 10000);
+      const sells = await page.eval("[...document.querySelectorAll('#tp-results .tp-row')].map((li) => li.querySelector('.tp-sell').textContent)");
+      assert.deepEqual(sells.filter((x) => STUCK.test(x) || !/silver|copper|gold|no sell listings/.test(x)), [], 'every row shown is priced');
+      const order = (await shownIds(page)).map((id) => priceOf(id).sells.unit_price || -1);
+      const priced = order.filter((v) => v > 0), firstNone = order.indexOf(-1);
+      assert.ok(priced.every((v, i) => !i || priced[i - 1] >= v), `in order: ${priced.slice(0, 8)}`);
+      assert.ok(firstNone < 0 || order.slice(firstNone).every((v) => v === -1), 'no sell listings after the ranked ones');
+      assert.deepEqual(unexpected(page, NET), []);
+    } finally { await page.close(); }
+  });
+
   // v0.4.0 final correction: the downloaded site opened from disk. The browser refuses a file page's request for its
   // own item list, which is no connection problem: the page says the site must be served over HTTP or HTTPS.
   check('Trading Post: opened as a file, it says the site must be served over HTTP or HTTPS, not to check the connection, with no Try again; the timer keeps working', async () => {

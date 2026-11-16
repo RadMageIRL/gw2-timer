@@ -128,7 +128,14 @@
     // A price is one of: loaded (cache q, current, stale or old), confirmed absent (cache none: the API answered
     // that it has no price), on its way (pending; "waiting" while a 429 holds the queue), failed (failed: id ->
     // the API error, kept beside an older price if there is one), or not requested yet (none of these).
-    const pending = new Set(), itemPending = new Set(), failed = new Map();
+    const pending = new Map(), itemPending = new Map(), failed = new Map();
+    // pending and itemPending: id -> the signal of the request that holds it. An id is on its way only while that
+    // request is not cancelled: a search or sort that cancels the requests before it asks again at once, so the ids
+    // those requests held must count as free then, not only when their cancelled answer comes back (after the new
+    // request was made, which left them never asked for). A request lets go only of the ids it still holds.
+    const live = (m, id) => { const s = m.get(id); return Boolean(s) && !s.aborted; };
+    const hold = (m, ids, signal) => { const own = signal || { aborted: false }; for (const id of ids) m.set(id, own); return own; };
+    const release = (m, ids, own) => { for (const id of ids) if (m.get(id) === own) m.delete(id); };
     let lastError = null, viewCtl = null, sortCtl = null, wholeCtl = null, detailCtl = null;
     const whole = { state: 'idle', done: 0, total: 0, answered: 0, failedReq: 0, started: 0, ended: 0, all: false };
     let favs = [], favUnsaved = !storage;
@@ -222,12 +229,12 @@
     // page can always say how old what it shows is.
     async function loadPrices(ids, signal, onBatch, force) {
       const t = now();
-      const need = ids.filter((id) => { const c = cache.get(id); return (force || !c || t - c.at >= CURRENT_MS) && !pending.has(id); });
+      const need = ids.filter((id) => { const c = cache.get(id); return (force || !c || t - c.at >= CURRENT_MS) && !live(pending, id); });
       if (!need.length) return null;
-      for (const id of need) pending.add(id);
+      const own = hold(pending, need, signal);
       drawSoon();
       const r = await client.prices(need, { signal, onBatch });
-      for (const id of need) pending.delete(id);
+      release(pending, need, own);
       for (const [id, row] of r.rows) { cache.set(id, { at: row.at, q: Money.quote(row) }); failed.delete(id); }
       for (const id of r.missing) { cache.set(id, { at: now(), none: true }); failed.delete(id); }
       noteFailures(r);
@@ -241,11 +248,11 @@
       for (const id of r.failed) { const why = r.errors.get(id) || r.error; if (why !== 'aborted') failed.set(id, why); }
     }
     async function loadItems(ids, signal) {
-      const need = ids.filter((id) => !items.has(id) && !itemPending.has(id));
+      const need = ids.filter((id) => !items.has(id) && !live(itemPending, id));
       if (!need.length) return;
-      for (const id of need) itemPending.add(id);
+      const own = hold(itemPending, need, signal);
       const r = await client.items(need, { signal });
-      for (const id of need) itemPending.delete(id);
+      release(itemPending, need, own);
       for (const [id, row] of r.rows) items.set(id, row);
       draw();
     }
@@ -416,11 +423,11 @@
       draw();
       $('tp-whole-cancel').focus();
       // Every id, even ones with a current price: the point is one consistent set of prices.
-      const ids = cat.ids.filter((id) => !pending.has(id));
+      const ids = cat.ids.filter((id) => !live(pending, id));
       const t0 = now();
-      for (const id of ids) pending.add(id);
+      const own = hold(pending, ids, sig);
       const r = await client.prices(ids, { signal: sig, onBatch: (p) => { whole.done = p.done; whole.answered = p.answered; whole.failedReq = p.done - p.answered; drawWhole(); } });
-      for (const id of ids) pending.delete(id);
+      release(pending, ids, own);
       for (const [id, row] of r.rows) { cache.set(id, { at: row.at, q: Money.quote(row) }); failed.delete(id); }
       for (const id of r.missing) { cache.set(id, { at: now(), none: true }); failed.delete(id); }
       noteFailures(r);
