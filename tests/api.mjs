@@ -250,6 +250,7 @@ await test('items and listings: the record fields, and an order book cut to well
     const u = new URL(url);
     if (u.pathname === '/v2/items') return json(200, ids(url).map((id) => ({ id, name: `Item ${id}`, icon: 'https://render.guildwars2.com/file/X/1.png' })).concat([{ id: 5 }]));
     if (u.searchParams.get('id') === '9') return json(404, { text: 'no such id' });
+    if (u.searchParams.get('id') === '7') return json(200, { id: 7, buys: 'none', sells: [] });
     return json(200, { id: 19721, buys: [{ listings: 1, unit_price: 1706, quantity: 133 }, { listings: 1, unit_price: 0, quantity: 5 }, { listings: 1, unit_price: 'x', quantity: 5 }, { listings: 1, unit_price: 9, quantity: 0 }], sells: [{ listings: 2, unit_price: 1895, quantity: 231 }, { unit_price: 5, quantity: 5 }] });
   });
   const c = Api.createClient({ fetch, ...clock });
@@ -258,6 +259,13 @@ await test('items and listings: the record fields, and an order book cut to well
   assert.match(fetch.calls[0].url, /\/v2\/items\?ids=3,4&lang=en&v=/);
   const b = await c.listings(19721);
   assert.deepEqual([b.ok, b.book.buys.length, b.book.sells.length, b.book.at], [true, 1, 1, clock.now()]);
+  // The rows left out are counted, a side: three buy rows here are not price levels (a price of 0, a price that is text, no units).
+  assert.equal(b.book.dropped.buys, 3);
+  assert.equal(b.book.buys.length + b.book.dropped.buys, 4, 'every buy row is either kept or counted');
+  assert.equal(b.book.dropped.sells, 1, 'a sell row with no count of orders is not a price level either');
+  // A side that is not a list at all is one thing that could not be read; an empty list is simply empty.
+  const odd = await c.listings(7);
+  assert.deepEqual([odd.ok, odd.book.buys, odd.book.sells, odd.book.dropped], [true, [], [], { buys: 1, sells: 0 }]);
   assert.match(fetch.calls[1].url, /\/v2\/commerce\/listings\?id=19721&v=/);
   assert.deepEqual(await c.listings(9), { ok: true, notFound: true });
   assert.equal((await c.listings(-1)).ok, false);

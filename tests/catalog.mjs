@@ -211,5 +211,111 @@ test('on the real list, searches take well under 50 ms here, and the ranking hol
   assert.equal(Catalog.search(real, { query: 'deldrimor plate bottom' }).indexes.length > 0, true, 'a name that had a dash');
 });
 
+// ---- The price filters (v0.5.0 Phase 2) ----
+// Checked against an oracle written here another way than the module: one plain predicate for each filter over the
+// raw API row (not the quote), with the percentage in BigInt and the fees worked out again from the documented rule.
+
+/** The oracle: does a raw /v2/commerce/prices row pass one filter? null for "the filter is not set". */
+const oracleNet = (price) => { const big = BigInt(price); const fee = (pct) => { const f = (big * BigInt(pct) * 2n + 100n) / 200n; return f < 1n ? 1n : f; }; return big - fee(5) - fee(10); };
+const ORACLE = {
+  buyMin: (r, v) => r.buys.quantity > 0 && r.buys.unit_price >= v,
+  buyMax: (r, v) => r.buys.quantity > 0 && r.buys.unit_price <= v,
+  sellMin: (r, v) => r.sells.quantity > 0 && r.sells.unit_price >= v,
+  sellMax: (r, v) => r.sells.quantity > 0 && r.sells.unit_price <= v,
+  marginMin: (r, v) => r.buys.quantity > 0 && r.sells.quantity > 0 && oracleNet(r.sells.unit_price) - BigInt(r.buys.unit_price) >= BigInt(v),
+  pctMin: (r, v) => r.buys.quantity > 0 && r.sells.quantity > 0 && (oracleNet(r.sells.unit_price) - BigInt(r.buys.unit_price)) * 1000n >= BigInt(v) * BigInt(r.buys.unit_price),
+  wantedMin: (r, v) => r.buys.quantity >= v,
+  listedMin: (r, v) => r.sells.quantity >= v,
+};
+const oraclePass = (row, f) => Object.keys(ORACLE).every((k) => f[k] === undefined || f[k] === null || ORACLE[k](row, f[k]));
+
+test('the price filters give three answers: pass, fail, and not checked for an item with no price loaded; an item the API has no price for fails', () => {
+  const P = {
+    19721: { buys: { quantity: 400000, unit_price: 1710 }, sells: { quantity: 2000000, unit_price: 1910 } },
+    19976: { buys: { quantity: 9, unit_price: 21000 }, sells: { quantity: 0, unit_price: 0 } },
+    24295: { buys: { quantity: 0, unit_price: 0 }, sells: { quantity: 4, unit_price: 1910 } },
+    46731: { buys: { quantity: 9, unit_price: 50 }, sells: { quantity: 9, unit_price: 80 } },
+    100: { buys: { quantity: 9, unit_price: 1 }, sells: { quantity: 9, unit_price: 3 } },
+  };
+  const GONE = new Set([101]); // the API answered: no price for it
+  const priceOf = (id) => (P[id] ? Money.quote(P[id]) : GONE.has(id) ? null : undefined);
+  const all = Catalog.search(CAT, { only: new Set(CAT.ids) }).indexes;
+  const run = (f) => { const r = Catalog.priceFilter(CAT, all, f, priceOf); return { pass: r.pass.map((i) => CAT.names[i]), unchecked: r.unchecked.map((i) => CAT.names[i]), n: [r.passed, r.failed, r.uncheckedCount, r.checked] }; };
+  const UNCHECKED = ['Ectoplasmic Glob Remnant', 'Frostfang', 'Sword of the Ecto Lord', "Zojja's Café Sword"];
+  // Sell listing from 80c to 19s 10c, both ends included: ecto, blood and dust; the coin has no sell listings, "Glob" is 3c, "Ecto" has no price.
+  assert.deepEqual(run({ sellMin: 80, sellMax: 1910 }), { pass: ['Glob of Ectoplasm', 'Pile of Bloodstone Dust', 'Vial of Powerful Blood'], unchecked: UNCHECKED, n: [3, 3, 4, 6] });
+  // One copper tighter at each end drops the item that sat on it.
+  assert.deepEqual(run({ sellMin: 81, sellMax: 1910 }).pass, ['Glob of Ectoplasm', 'Vial of Powerful Blood']);
+  assert.deepEqual(run({ sellMin: 80, sellMax: 1909 }).pass, ['Pile of Bloodstone Dust']);
+  // A filter on a side an item lacks fails it: no buy orders is never a buy price of 0, even for "at most".
+  assert.deepEqual(run({ buyMax: 100 }).pass, ['Glob', 'Pile of Bloodstone Dust'], 'the vial has no buy orders: it does not pass "at most 1s"');
+  assert.deepEqual(run({ buyMin: 0 }).pass, ['Glob', 'Glob of Ectoplasm', 'Mystic Coin', 'Pile of Bloodstone Dust'], 'a bound of 0 is still a filter on the buy side');
+  // Margins: dust 80 - 4 - 8 - 50 = 18 (36%), glob 3 - 1 - 1 - 1 = 0 (0%), ecto 1623 - 1710 = -87.
+  assert.deepEqual(run({ marginMin: 0 }).pass, ['Glob', 'Pile of Bloodstone Dust']);
+  assert.deepEqual(run({ marginMin: 18 }).pass, ['Pile of Bloodstone Dust']);
+  assert.deepEqual(run({ marginMin: 19 }).pass, []);
+  assert.deepEqual(run({ pctMin: 360 }).pass, ['Pile of Bloodstone Dust'], '36.0% exactly passes "at least 36"');
+  assert.deepEqual(run({ pctMin: 361 }).pass, []);
+  assert.deepEqual(run({ pctMin: 0 }).pass, ['Glob', 'Pile of Bloodstone Dust'], 'a loss does not pass "at least 0%", and no margin at all does not either');
+  // The two quantity filters are on the API's totals for the whole side.
+  assert.deepEqual(run({ wantedMin: 10 }).pass, ['Glob of Ectoplasm']);
+  assert.deepEqual(run({ wantedMin: 9 }).pass, ['Glob', 'Glob of Ectoplasm', 'Mystic Coin', 'Pile of Bloodstone Dust']);
+  assert.deepEqual(run({ listedMin: 4, wantedMin: 0 }).pass, ['Glob', 'Glob of Ectoplasm', 'Pile of Bloodstone Dust', 'Vial of Powerful Blood'], 'no buy orders is 0 units wanted: it passes "at least 0"');
+  assert.deepEqual(run({ listedMin: 1 }).n, [4, 2, 4, 6], 'the coin has none listed; "Ecto" has no price at all: both fail, neither is unchecked');
+  // Together: every filter must hold.
+  assert.deepEqual(run({ sellMin: 80, sellMax: 1910, wantedMin: 9, marginMin: 0 }).pass, ['Pile of Bloodstone Dust']);
+  // Unchecked is never pass and never fail, whatever the filter.
+  for (const f of [{ buyMin: 1 }, { sellMax: 1 }, { marginMin: -100000 }, { wantedMin: 0 }, { listedMin: 0 }]) assert.deepEqual(run(f).unchecked, UNCHECKED, JSON.stringify(f));
+  assert.deepEqual(run({ wantedMin: 0, listedMin: 0 }).n, [5, 1, 4, 6], 'bounds of 0 pass every priced item; the one with no price still fails');
+  // No filter set: everything passes, nothing is unchecked, and the order is the one given.
+  for (const f of [{}, null, undefined, { buyMin: null }, { buyMin: undefined, pctMin: 'x', sellMax: 1.5 }]) {
+    const r = Catalog.priceFilter(CAT, all, f, priceOf);
+    assert.deepEqual([r.pass, r.unchecked, r.passed, r.failed, r.uncheckedCount], [all, [], all.length, 0, 0], JSON.stringify(f));
+  }
+  assert.deepEqual(Catalog.FILTER_KEYS, ['buyMin', 'buyMax', 'sellMin', 'sellMax', 'marginMin', 'pctMin', 'wantedMin', 'listedMin']);
+  assert.deepEqual(Catalog.setFilters({ buyMin: 5, pctMin: 0, sellMax: null, wantedMin: '3' }), ['buyMin', 'pctMin']);
+  // The order given is kept on both sides (a price sort is applied afterwards, by the page).
+  const rev = all.slice().reverse(), r = Catalog.priceFilter(CAT, rev, { sellMin: 80, sellMax: 1910 }, priceOf);
+  assert.deepEqual([r.pass.map((i) => CAT.names[i]), r.unchecked.map((i) => CAT.names[i])], [['Vial of Powerful Blood', 'Pile of Bloodstone Dust', 'Glob of Ectoplasm'], UNCHECKED.slice().reverse()]);
+});
+
+test('a margin percentage is compared exactly, never by what the page would show after rounding', () => {
+  // Buy 10,000c. A sell of 12,936c leaves 12936 - 647 - 1294 - 10000 = 995: 9.95%, which is shown as "10.0%" and is under 10%.
+  const q = Money.quote({ buys: { quantity: 1, unit_price: 10000 }, sells: { quantity: 1, unit_price: 12936 } });
+  assert.deepEqual([q.margin, Money.percent(q.marginPct)], [995, '10.0%']);
+  assert.equal(Catalog.quotePasses(q, { pctMin: 100 }), false, 'shown as 10.0%, but 9.95% is not at least 10%');
+  assert.equal(Catalog.quotePasses(q, { pctMin: 99 }), true);
+  const q2 = Money.quote({ buys: { quantity: 1, unit_price: 10000 }, sells: { quantity: 1, unit_price: 12941 } }); // 12941 - 647 - 1294 - 10000 = 1000
+  assert.deepEqual([q2.margin, Catalog.quotePasses(q2, { pctMin: 100 }), Catalog.quotePasses(q2, { pctMin: 101 })], [1000, true, false], 'exactly 10% passes "at least 10"');
+});
+
+test('against the oracle: made-up prices and made-up filters, every filter alone and in combination', () => {
+  let a = 77;
+  const rnd = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const pick = (max) => Math.floor(rnd() * max);
+  const rows = [];
+  for (let k = 0; k < 600; k++) {
+    const buy = 1 + pick(k % 4 ? 5000 : 40), gap = pick(3) ? pick(buy + 20) : -pick(10);
+    rows.push({ buys: rnd() < 0.12 ? { quantity: 0, unit_price: 0 } : { quantity: 1 + pick(5000), unit_price: buy }, sells: rnd() < 0.12 ? { quantity: 0, unit_price: 0 } : { quantity: 1 + pick(5000), unit_price: Math.max(1, buy + gap) } });
+  }
+  const quotes = rows.map((r) => Money.quote(r));
+  const fake = { ids: rows.map((x, i) => i + 1) }, idx = rows.map((x, i) => i);
+  const bound = { buyMin: 5000, buyMax: 5000, sellMin: 5000, sellMax: 5000, marginMin: 400, pctMin: 400, wantedMin: 5000, listedMin: 5000 };
+  let runs = 0, some = 0, none = 0;
+  for (let k = 0; k < 900; k++) {
+    const f = {};
+    // One filter alone for the first runs, then two to five together.
+    const keys = k < 240 ? [Catalog.FILTER_KEYS[k % 8]] : Catalog.FILTER_KEYS.filter(() => rnd() < 0.4);
+    for (const key of keys) f[key] = key === 'marginMin' ? pick(bound[key]) - 150 : pick(bound[key]);
+    if (!Object.keys(f).length) continue;
+    const r = Catalog.priceFilter(fake, idx, f, (id) => quotes[id - 1]);
+    const want = idx.filter((i) => oraclePass(rows[i], f));
+    assert.deepEqual(r.pass, want, JSON.stringify(f));
+    assert.deepEqual([r.failed, r.uncheckedCount], [rows.length - want.length, 0]);
+    runs++; if (want.length) some++; else none++;
+  }
+  assert.ok(runs > 700 && some > 300 && none > 20, JSON.stringify({ runs, some, none }));
+});
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

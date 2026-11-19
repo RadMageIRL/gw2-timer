@@ -736,6 +736,61 @@ body { padding-bottom: var(--tray-space, 0px); }
 .tp-book-table th { text-align: left; font-weight: 600; color: var(--text-faint); border-bottom: 1px solid var(--line); padding: 3px 6px 3px 0; }
 .tp-book-table td { padding: 3px 6px 3px 0; border-bottom: 1px solid var(--line); }
 .tp-dialog .tp-book p { font-size: 12.5px; }
+/* The price filters: a panel under the other controls, closed until asked for; and the rows they could not check. */
+.tp-pf { margin-top: 8px; }
+.tp-pf-panel { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.tp-pf-panel p { margin: 0 0 8px; max-width: 90ch; }
+.tp-pf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-items: start; gap: 8px 12px; margin: 0 0 8px; }
+.tp-pf-set { display: flex; flex-wrap: wrap; align-items: center; align-content: flex-start; gap: 6px 12px; margin: 0; padding: 4px 12px 8px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.tp-pf-set legend { padding: 0 4px; font-size: 12.5px; color: var(--text-faint); }
+.tp-pf-set .field { flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+.tp-pf-set .field input { width: 9.5em; max-width: 100%; font-variant-numeric: tabular-nums; }
+.tp-pf-set .field input[aria-invalid="true"] { border-color: var(--warn); }
+.tp-pf-set .hint { flex-basis: 100%; margin: 0; }
+.tp-pf-panel .tp-pf-err { color: var(--warn); font-size: 13px; }
+.tp-pf-panel .tp-pf-said { color: var(--text-dim); font-size: 13px; }
+.tp-pf-panel .tp-pf-actions { margin: 0; }
+.tp-pf-panel[hidden], .tp-pf-panel [hidden], .tp-fscope[hidden] { display: none; }
+.tp-row.is-unchecked .tp-note { color: var(--warn); }
+.tp-row.is-unchecked { border-style: dashed; }
+
+/* The quantity calculator, under the order book's own time: the amount, the two choices, the figures, the book. */
+.tp-dialog .tp-book-when { margin: 0 0 6px; color: var(--text-faint); }
+.tp-dialog .tp-book-when.is-stale, .tp-dialog .tp-book-when.is-old, .tp-dialog .tp-calc-stale, .tp-dialog .tp-calc-err { color: var(--warn); }
+.tp-dialog .tp-book-actions { margin: 0 0 8px; }
+.tp-book [hidden] { display: none; }
+.tp-book-warn { margin: 0 0 8px; padding: 6px 10px; border: 1px solid var(--warn); border-radius: 8px; }
+.tp-dialog .tp-book-warn p { margin: 0; color: var(--warn); }
+.tp-dialog .tp-book-warn p + p { margin-top: 4px; }
+.tp-calc-units { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 4px; }
+.tp-calc-k { color: var(--text-faint); font-size: 12.5px; margin-right: 2px; }
+.tp-calc-chip { min-width: 40px; justify-content: center; }
+.tp-calc-chip[aria-pressed="true"] { background: var(--surface-2); font-weight: 600; }
+.tp-calc-custom { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); }
+.tp-calc-custom input { width: 6.5em; min-height: 30px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; }
+.tp-calc-custom input[aria-invalid="true"] { border-color: var(--warn); }
+.tp-dialog .tp-calc-hint { margin: 0 0 6px; }
+.tp-dialog .tp-calc-err { margin: 0 0 6px; }
+.tp-calc-way { display: grid; gap: 0; margin: 0 0 8px; padding: 4px 12px 6px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.tp-calc-way legend { padding: 0 4px; font-size: 12.5px; color: var(--text-faint); }
+.tp-calc-way .rm-option { align-items: flex-start; font-size: 13px; padding: 4px 0; }
+.tp-calc-way .rm-option input { margin-top: 1px; }
+.tp-calc-way .rm-option span { min-width: 0; }
+.tp-calc-way .coins { white-space: normal; }
+.tp-dialog .tp-calc-stale { margin: 0 0 6px; }
+.tp-calc-facts { margin-top: 2px; }
+.tp-calc-facts dt { color: var(--text); }
+.tp-book-table tr.is-taken td { color: var(--text); }
+.tp-book-table td:last-child, .tp-book-table th:last-child { text-align: right; padding-right: 0; }
+/* Observed book depth near the best price (v0.5.0 Phase 3): from the book alone, above its tables. */
+.tp-near { margin: 0 0 10px; }
+.tp-near h4 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--text); }
+.tp-near-facts { margin: 0 0 4px; }
+.tp-near-facts dt { color: var(--text); }
+.tp-dialog .tp-near-note { margin: 0; }
+@media (max-width: 640px), (pointer: coarse) {
+  .tp-calc-custom input { min-height: 36px; }
+}
 .tp-fee-note { font-size: 12.5px; color: var(--text-faint); }
 
 @media (max-width: 899px) {

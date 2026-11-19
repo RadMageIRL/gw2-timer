@@ -3,8 +3,10 @@
 // Trading Post is opened, after js/money.js, js/catalog.js and js/api.js; never with the timer.
 //
 // What it promises, and the code keeps:
-// - Prices come only from the API, with the time they were fetched. When the API does not answer, no price is
-//   shown and nothing is estimated; an older price stays, with its time and its age in words.
+// - Prices come only from the API, with the time this page received them. That is the only time known: ArenaNet's
+//   answers carry none, so when ArenaNet last updated a price, an order book or a gem rate is never claimed (v0.5.0).
+//   When the API does not answer, no price is shown and nothing is estimated; an older price stays, with its time
+//   and its age in words.
 // - A price sort says what it covers: every match, or only the matches whose prices are loaded. It is never
 //   presented as a ranking of the whole market unless the whole market was loaded, which only the reader starts.
 // - Proceeds and margins are estimates for one unit: the fees' rounding is not documented, and an order that is
@@ -21,9 +23,16 @@
   const PAGE = 50;
   /** A price sort loads the price of every match up to this many (5 requests); past it the reader narrows the search or loads the whole market. */
   const SORT_CAP = 1000;
-  /** Prices are current under 5 minutes old, stale up to an hour, then old (decision D3). */
+  /** Prices are current under 5 minutes after this page received them, stale up to an hour, then old (decision D3). */
   const CURRENT_MS = 5 * 60000;
   const OLD_MS = 60 * 60000;
+  /**
+   * How long ArenaNet lets an answer be reused, in minutes, by its Cache-Control header (public, max-age; checked on
+   * the real API 2026-11-15 and 2026-11-18): prices 120 s, an order book 1,200 s. The browser's cache may answer a
+   * request with a copy that old, so what the page received at a time can date from before it; the page says so and
+   * does not ask past the cache (decision D5). The gem exchange sends no such header, so no reuse is claimed for it.
+   */
+  const REUSE_MIN = { prices: 2, book: 20 };
   /** A whole-market load can be started again once this long has passed since the last one began. */
   const WHOLE_GAP_MS = 5 * 60000;
   const FAV_KEY = 'tp-favorites';
@@ -95,7 +104,67 @@
     if (s.favOnly) parts.push('Favorites');
     const q = String(s.query || '').trim();
     if (q) parts.push(`“${q}”`);
+    // The price filters are named last; alone, they are filters over every item.
+    if (s.pfCount > 0) { if (!parts.length) parts.push('Every item'); parts.push(`${s.pfCount} price ${s.pfCount === 1 ? 'filter' : 'filters'}`); }
     return parts.length ? parts.join(' · ') : 'Every item';
+  }
+
+  /**
+   * The price filters as the page offers them (v0.5.0 Phase 2): each field's key (js/catalog.js FILTER_KEYS), how it
+   * is typed, and what it bounds, in the words the page uses for it. The two quantity filters are on the totals the
+   * API reports for every buy order and every sell listing together: queued units at any price, not what can be
+   * bought or sold near the best price, and each is named so wherever it appears.
+   */
+  const PF_FIELDS = [
+    { key: 'buyMin', kind: 'coins', what: 'highest buy order from' },
+    { key: 'buyMax', kind: 'coins', what: 'highest buy order to' },
+    { key: 'sellMin', kind: 'coins', what: 'lowest sell listing from' },
+    { key: 'sellMax', kind: 'coins', what: 'lowest sell listing to' },
+    { key: 'marginMin', kind: 'coins', what: 'potential margin at least' },
+    { key: 'pctMin', kind: 'percent', what: 'potential margin % at least' },
+    { key: 'wantedMin', kind: 'count', what: 'total queued units wanted, in all buy orders, at least' },
+    { key: 'listedMin', kind: 'count', what: 'total queued units listed, in all sell listings, at least' },
+  ];
+  const PF_RANGES = [['buyMin', 'buyMax', 'Highest buy order'], ['sellMin', 'sellMax', 'Lowest sell listing']];
+  const upFirst = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+
+  /**
+   * What is typed in the price filters, read: { filters, errors, set, said }. raw: key -> text. filters: key -> a
+   * whole number (copper, units, or tenths of a percent for pctMin) for every field that holds a readable value, in
+   * the shape js/catalog.js priceFilter() takes. errors: [{ key, text }] for every field that could not be read, and
+   * for a range whose from is above its to (both ends named): such a field is NOT applied, and the text says so; it
+   * is never bent into something that can be. set: how many filters are applied. said: the applied filters in one
+   * sentence, or ''. Money is js/money.js (its parseCoins, coins and count).
+   */
+  function readFilters(raw, Money) {
+    const filters = {}, errors = [];
+    for (const fd of PF_FIELDS) {
+      const v = raw ? raw[fd.key] : '';
+      const text = String(v === undefined || v === null ? '' : v).trim();
+      if (!text) continue;
+      const shown = text.length > 24 ? `${text.slice(0, 24)}...` : text;
+      if (fd.kind === 'coins') {
+        const r = Money.parseCoins(text);
+        if (r.error) errors.push({ key: fd.key, text: `${upFirst(fd.what)}: “${shown}” ${r.error === 'too-large' ? 'is more than this page can work with' : 'is not a coin amount. Type one like 2g 50s 10c, 75s or 40c'}. It is not applied.` });
+        else filters[fd.key] = r.copper;
+      } else if (fd.kind === 'percent') {
+        const m = /^(\d{1,6})(?:\.(\d))?\s*%?$/.exec(text);
+        if (!m) errors.push({ key: fd.key, text: `${upFirst(fd.what)}: “${shown}” is not a percentage. Type a number like 10 or 12.5. It is not applied.` });
+        else filters[fd.key] = Number(m[1]) * 10 + (m[2] === undefined ? 0 : Number(m[2]));
+      } else {
+        const m = /^(?:\d{1,3}(?:,\d{3})+|\d{1,12})$/.exec(text);
+        if (!m) errors.push({ key: fd.key, text: `${upFirst(fd.what)}: “${shown}” is not a whole number of units. It is not applied.` });
+        else filters[fd.key] = Number(text.replace(/,/g, ''));
+      }
+    }
+    for (const [lo, hi, name] of PF_RANGES) {
+      if (filters[lo] !== undefined && filters[hi] !== undefined && filters[lo] > filters[hi]) {
+        errors.push({ key: lo, also: hi, text: `${name}: from ${Money.coins(filters[lo]).text} is above to ${Money.coins(filters[hi]).text}, so nothing could pass. Neither is applied.` });
+        delete filters[lo]; delete filters[hi];
+      }
+    }
+    const parts = PF_FIELDS.filter((fd) => filters[fd.key] !== undefined).map((fd) => `${fd.what} ${fd.kind === 'coins' ? Money.coins(filters[fd.key]).text : fd.kind === 'percent' ? `${(filters[fd.key] / 10).toFixed(1)}%` : Money.count(filters[fd.key])}`);
+    return { filters, errors, set: parts.length, said: parts.length ? `Applied: ${parts.join('; ')}.` : '' };
   }
 
   const SORTS = {
@@ -123,10 +192,22 @@
     return out;
   }
 
-  /** 'current', 'stale' or 'old' for a price fetched at `at` (local ms), seen at `now`. */
+  /** 'current', 'stale' or 'old' for a price, order book or rate this page received at `at` (local ms), seen at `now`. */
   const freshness = (at, now) => (now - at < CURRENT_MS ? 'current' : now - at < OLD_MS ? 'stale' : 'old');
   const ago = (ms) => { const m = Math.max(0, Math.round(ms / 60000)); return m < 1 ? 'just now' : m === 1 ? '1 minute ago' : m < 120 ? `${m} minutes ago` : `${Math.floor(m / 60)} hours ago`; };
   const plural = (n, one, many) => `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`;
+
+  /**
+   * The long form of the freshness words, for item details (v0.5.0 Phase 3). kind: 'prices' or 'book'; when: the
+   * time this page received the answer, as the reader's clock writes it; ms: how long ago; f: freshness(). That
+   * time is the only one known: ArenaNet's answers carry none, so when ArenaNet last updated what they hold is said
+   * to be unknown, and its reuse window (REUSE_MIN) says how what was received can date from before it.
+   */
+  function receivedText(kind, when, ms, f) {
+    const book = kind === 'book', it = book ? 'it' : 'them';
+    return `${book ? 'Order book' : 'Prices'} received at ${when}, ${ago(ms)} (${f}). That is when this page got ${it}; when ArenaNet last updated ${it} is not known: `
+      + `the answer carries no time, and ArenaNet lets an answer be reused for up to ${REUSE_MIN[book ? 'book' : 'prices']} minutes, so ${book ? 'it' : 'they'} may date from before ${when}${book ? ' and be older than the prices above' : ''}.`;
+  }
 
   /**
    * What a sort covers, in words. s: { sort, matches, ranked, noSide, unpriced, loading, failed, wholeAll,
@@ -137,6 +218,12 @@
     const sort = SORTS[s.sort];
     if (!sort || !sort.key) return s.sort === 'name' ? 'Sorted by name.' : 'Best matches first, then by name.';
     const head = `Ranked by ${sort.what}, ${sort.how}`;
+    // With price filters set, the ranking is of the items that pass them (all of which have a loaded price); while
+    // some matches are not checked yet it is the ranking of those that pass so far, and says so.
+    if (s.pf) {
+      return `${head}, among the ${plural(s.matches, 'item that passes', 'items that pass')} the price filters${s.pf.unchecked ? ' so far' : ''}. Not a ranking of the whole market.`
+        + (s.noSide ? ` ${plural(s.noSide, 'item', 'items')} with ${sort.none} come after the ranked ones.` : '');
+    }
     const all = s.unpriced === 0;
     const everything = all && !s.filtered && s.matches === s.listCount;
     let t;
@@ -151,6 +238,51 @@
     }
     if (s.noSide) t += ` ${plural(s.noSide, 'item', 'items')} with ${sort.none} come after the ranked ones.`;
     return t;
+  }
+
+  /**
+   * What the price filters cover, in words: three counts, never two. s: { matches, passed, failed, unchecked,
+   * loading, failedLoad, listCount, filtered, wholeAll }. Items whose price is not loaded are "not checked": they
+   * are not known to pass or to fail, and the line never lets them stand as either. Only when every match was
+   * checked does it say "all", and only with no search and no other filter is that the whole item list.
+   */
+  function filterText(s) {
+    if (!s.matches) return '';
+    const n = (x) => x.toLocaleString('en-US');
+    if (s.unchecked === 0) {
+      if (!s.filtered && s.matches === s.listCount) return `Price filters: ${n(s.passed)} of all ${plural(s.matches, 'item', 'items')} in the item list ${s.passed === 1 ? 'passes' : 'pass'}${s.wholeAll ? ', from the whole-market load' : ''}; ${n(s.failed)} ${s.failed === 1 ? 'does' : 'do'} not.`;
+      return `Price filters: ${n(s.passed)} of all ${plural(s.matches, 'matching item', 'matching items')} ${s.passed === 1 ? 'passes' : 'pass'}; ${n(s.failed)} ${s.failed === 1 ? 'does' : 'do'} not. Every match was checked. Not a filter of the whole market.`;
+    }
+    let t = `Price filters: ${n(s.passed)} ${s.passed === 1 ? 'passes' : 'pass'} and ${n(s.failed)} ${s.failed === 1 ? 'does' : 'do'} not, among only the ${n(s.passed + s.failed)} of ${plural(s.matches, 'matching item', 'matching items')} whose prices are loaded. `
+      + `The other ${n(s.unchecked)} ${s.unchecked === 1 ? 'is' : 'are'} not checked: listed after the ones that pass, and not known to pass or to fail.`;
+    if (s.loading) t += ' Loading their prices...';
+    else if (s.matches > SORT_CAP) t += ` To check every match, narrow the search to ${SORT_CAP.toLocaleString('en-US')} items or fewer, or load the whole market.`;
+    else if (s.failedLoad) t += ' Their prices could not be loaded.';
+    return t;
+  }
+
+  /** A sentence for prices that are no longer current, by the oldest one used (received at `oldest`); '' while all are current or none is used. */
+  function ageNote(oldest, now) {
+    if (!Number.isFinite(oldest)) return '';
+    const f = freshness(oldest, now);
+    return f === 'current' ? '' : ` The oldest price used was received ${ago(now - oldest)}: ${f}, and may have changed.`;
+  }
+
+  /** The quantity calculator's ready amounts; any other whole number up to one transaction's 250 can be typed. */
+  const CALC_CHIPS = [1, 5, 10, 50, 100];
+  /** The order book's tables show this many price levels a side, or as many as the amount reaches, up to BOOK_MOST. */
+  const BOOK_ROWS = 5, BOOK_MOST = 12;
+  /**
+   * The amount the calculator works with: what is typed, or with nothing typed the chosen ready amount.
+   * { n } for a whole number from 1 to `max`; { error: 'not-whole' } for anything that is not plain digits (a
+   * fraction, a sign, letters, an exponent); { error: 'range' } for 0 or more than `max`. Never a guess.
+   */
+  function readAmount(text, chip, max) {
+    const t = String(text === undefined || text === null ? '' : text).trim();
+    if (!t) return { n: chip };
+    if (!/^\d{1,9}$/.test(t)) return { error: 'not-whole' };
+    const n = Number(t);
+    return n >= 1 && n <= max ? { n } : { error: 'range' };
   }
 
   const API_SAYS = {
@@ -190,6 +322,11 @@
 
     let cat = null, listState = 'idle';
     const st = { query: '', type: -1, rarity: -1, sort: 'relevance', favOnly: false, shown: PAGE };
+    // The price filters: what is typed in each field (st.pf, in memory like every other filter: never saved, never in
+    // the address), and what that reads as (pf: js/market.js readFilters). fcounts: how the matches stand against
+    // them (js/catalog.js priceFilter), or null with none set. uncheckedSet: the matches not checked, for their rows.
+    const pfRaw = {};
+    let pf = readFilters(pfRaw, Money), fcounts = null, uncheckedSet = new Set(), oldestUsed = NaN;
     let matches = [], order = [], counts = null, searchStatus = 'idle';
     const cache = new Map();     // id -> { at, q (Money.quote) } or { at, none: true }: prices, this tab only
     const items = new Map();     // id -> item record (icon, description, vendor value, chat code, flags)
@@ -211,7 +348,13 @@
     const gem = { coins: null, gems: null }, gemPending = { coins: false, gems: false }, gemFailed = { coins: null, gems: null };
     let gemCtl = null;
     let detailId = null, opener = null, closingByHash = false, pendingRoute = '';
-    let book = null;
+    let book = null, bookCtl = null;
+    // The quantity calculator's choices: the ready amount, what is typed in its place, and how the units are got and
+    // given. Kept here, not in the page, so no redraw can lose them; never saved, never in the address.
+    const calc = { chip: 1, text: '', get: 'now', give: 'now' };
+    // The details' own nodes: `main` is redrawn whole; `book` (the order book and the calculator) is kept and updated
+    // in place, so its field keeps what is typed, its caret and its focus while prices arrive and the clock ticks.
+    let detailEls = null;
 
     // ---- The item list ----
 
@@ -258,48 +401,74 @@
 
     const filtered = () => st.type >= 0 || st.rarity >= 0 || st.favOnly;
     const quoteOf = (id) => { const c = cache.get(id); return c && c.q ? c.q : undefined; };
+    /** For the price filters: an item's quote; null when the API has answered that it has no price for it; undefined when no price is loaded. */
+    const priceOf = (id) => { const c = cache.get(id); return !c ? undefined : c.q ? c.q : null; };
     const sortDef = () => SORTS[st.sort];
+    /** A price sort or a price filter is at work: both need every match's price, and both say what they cover. */
+    const priceWork = () => { const s = sortDef(); return Boolean(s && s.key) || pf.set > 0; };
 
-    /** Recomputes what matches and its order; with `fetch`, asks for the prices and icons that are needed. */
-    function apply(fetch) {
+    /**
+     * Recomputes what matches and its order; with `fetch`, asks for the prices and icons that are needed. `keep`
+     * leaves the requests already on their way alone (a price filter being typed changes no search, so it cancels
+     * nothing and asks only for what is not here).
+     */
+    function apply(fetch, keep) {
       if (!cat) return;
       const r = Catalog.search(cat, { query: st.query, type: st.type, rarity: st.rarity, only: st.favOnly ? new Set(favs) : null, sort: st.sort === 'name' ? 'name' : 'relevance' });
-      // A price sort with nothing typed and no filter ranks the whole list: across the whole market once
-      // every price is loaded, otherwise among the loaded ones, and the scope line says which.
-      const s = sortDef();
-      if (r.status === 'idle' && s && s.key) { searchStatus = 'ok'; matches = cat.order.slice(); }
+      // A price sort or a price filter with nothing typed and no other filter works on the whole list: across the
+      // whole market once every price is loaded, otherwise among the loaded ones, and the lines under it say which.
+      if (r.status === 'idle' && priceWork()) { searchStatus = 'ok'; matches = cat.order.slice(); }
       else { searchStatus = r.status; matches = r.indexes; }
       resort();
       draw();
-      if (fetch) fetchNeeded(true);
+      if (fetch) fetchNeeded(!keep);
     }
+    /**
+     * The order shown: the matches that pass the price filters (all of them with none set), ranked by the price sort
+     * if there is one, then the matches the filters could not check, by name. A match that fails is not shown, and is
+     * counted. Nothing unchecked is ever placed among the ones that pass.
+     */
     function resort() {
       const s = sortDef();
-      if (s && s.key) { const p = Catalog.priceSort(cat, matches, s.key, s.dir, quoteOf); order = p.order; counts = p; }
-      else { order = matches; counts = null; }
+      let base = matches;
+      fcounts = null; uncheckedSet = new Set();
+      if (pf.set > 0) { fcounts = Catalog.priceFilter(cat, matches, pf.filters, priceOf); base = fcounts.pass; uncheckedSet = new Set(fcounts.unchecked); }
+      if (s && s.key) { const p = Catalog.priceSort(cat, base, s.key, s.dir, quoteOf); order = p.order; counts = p; }
+      else { order = base; counts = null; }
+      if (fcounts && fcounts.unchecked.length) order = order.concat(fcounts.unchecked);
+      // The oldest price the sort or the filters used, so the lines can say when it is no longer current.
+      oldestUsed = NaN;
+      if (priceWork()) { let o = Infinity; for (const i of matches) { const c = cache.get(cat.ids[i]); if (c && c.q && c.at < o) o = c.at; } oldestUsed = o; }
     }
     const visibleIds = () => order.slice(0, st.shown).map((i) => cat.ids[i]);
 
-    /** Prices and icons for what is shown, and for a price sort every match up to SORT_CAP. `force` asks again for the shown prices even when they are current (Refresh). */
+    /**
+     * Prices and icons for what is shown, and for a price sort or price filter every match up to SORT_CAP. `force`
+     * asks again for the shown prices even when they are current (Refresh).
+     */
     function fetchNeeded(restart, force) {
       if (!cat) return;
       if (restart && viewCtl) viewCtl.abort();
       if (restart || !viewCtl || viewCtl.signal.aborted) viewCtl = new AbortController();
-      const ids = visibleIds();
-      // Under a price sort, newly loaded prices join the ranking at once, so the order shown is always the
-      // ranking of every loaded price, as the scope line says.
-      loadPrices(ids, viewCtl.signal, undefined, force).then(() => { const s = sortDef(); if (s && s.key) resort(); draw(); });
-      loadItems(ids, viewCtl.signal);
-      const s = sortDef();
       if (restart && sortCtl) { sortCtl.abort(); sortCtl = null; }
-      if (s && s.key && matches.length <= SORT_CAP) {
+      const ids = visibleIds(), t = now();
+      // Newly loaded prices join the ranking and the filters at once, so what is shown is always what the lines say.
+      const redo = () => { if (priceWork()) resort(); draw(); };
+      // A price sort or a price filter uses every match's price. With at most SORT_CAP matches they are all asked for
+      // in ONE call, so at most 5 requests of 200 for a search, the shown rows and the ones a Refresh forces among
+      // them. A price that is no longer current is asked for again too: nothing is ranked or filtered on a stale
+      // price that could have been refreshed. Over SORT_CAP nothing beyond the shown rows is asked for: never a scan
+      // of the market the reader did not start.
+      if (priceWork() && matches.length <= SORT_CAP) {
         const all = matches.map((i) => cat.ids[i]);
-        if (all.some((id) => !cache.has(id) && !failed.has(id))) {
+        if (force || all.some((id) => { const c = cache.get(id); return (!c || t - c.at >= CURRENT_MS) && !failed.has(id); })) {
           if (!sortCtl) sortCtl = new AbortController();
           const sig = sortCtl.signal;
-          loadPrices(all, sig).then(() => { if (sig.aborted) return; resort(); draw(); loadItems(visibleIds(), viewCtl.signal); });
+          loadPrices(all, sig, undefined, force ? new Set(ids) : false).then(() => { if (sig.aborted) return; redo(); loadItems(visibleIds(), viewCtl.signal); });
         }
       }
+      loadPrices(ids, viewCtl.signal, undefined, force).then(redo);
+      loadItems(ids, viewCtl.signal);
       if (searchStatus === 'idle') loadWatch(force);
     }
 
@@ -315,7 +484,7 @@
       if (!cat || searchStatus !== 'idle' || view.hidden) return;
       const ids = homeIds();
       if (!watchCtl || watchCtl.signal.aborted) watchCtl = new AbortController();
-      loadPrices(ids, watchCtl.signal, undefined, force).then((r) => { if (!r) return; const s = sortDef(); if (s && s.key) resort(); draw(); });
+      loadPrices(ids, watchCtl.signal, undefined, force).then((r) => { if (!r) return; if (priceWork()) resort(); draw(); });
       loadItems(ids, watchCtl.signal);
       loadGems(false);
     }
@@ -335,11 +504,13 @@
       draw();
     }
 
-    // A price keeps the time it was fetched until a new one replaces it: a forced refresh never touches it, so the
-    // page can always say how old what it shows is.
+    // A price keeps the time this page received it until a new one replaces it: a forced refresh never touches it, so
+    // the page can always say how long ago it received what it shows.
     async function loadPrices(ids, signal, onBatch, force) {
       const t = now();
-      const need = ids.filter((id) => { const c = cache.get(id); return (force || !c || t - c.at >= CURRENT_MS) && !live(pending, id); });
+      // force: true for every id, or a Set of the ids to ask for again even when their price is current.
+      const again = (id) => force === true || Boolean(force && force.has && force.has(id));
+      const need = ids.filter((id) => { const c = cache.get(id); return (again(id) || !c || t - c.at >= CURRENT_MS) && !live(pending, id); });
       if (!need.length) return null;
       const own = hold(pending, need, signal);
       drawSoon();
@@ -403,20 +574,26 @@
       const c = cache.get(id), why = failed.get(id);
       if (c && c.q) {
         const f = freshness(c.at, t), again = why ? ` A newer price could not be loaded: ${API_SAYS[why] || API_SAYS.network}.` : '';
-        return { age: f, text: f === 'current' ? (why ? again.trim() : '') : `${f === 'stale' ? 'Stale' : 'Old'} price, fetched ${ago(t - c.at)}.${again}` };
+        return { age: f, text: f === 'current' ? (why ? again.trim() : '') : `${f === 'stale' ? 'Stale' : 'Old'} price, received ${ago(t - c.at)}.${again}` };
       }
       if (c && c.none) return { age: '', text: '' };
       if (pending.has(id)) return { age: '', text: client.paused() ? "Waiting: ArenaNet's API asked for fewer requests (HTTP 429)." : '' };
       if (why) return { age: '', text: `No price: ${API_SAYS[why] || API_SAYS.network}.` };
       return { age: '', text: '' };
     }
+    /** A result row's note: its price note, and first of all that the price filters could not check it, with why its price is not here. */
+    function resultNote(i, id, t) {
+      const note = rowNote(id, t);
+      if (uncheckedSet.has(i)) note.text = `Not checked against the price filters: ${pending.has(id) ? 'its price is on its way' : failed.has(id) ? 'its price could not be loaded' : 'its price is not loaded'}.${note.text ? ` ${note.text}` : ''}`;
+      return note;
+    }
     const rowClass = (rar, age, base) => `${base || 'tp-row'} rarity-${rar.toLowerCase()}${age === 'stale' ? ' is-stale' : age === 'old' ? ' is-old' : ''}`;
 
     function row(i) {
       const id = cat.ids[i], name = cat.names[i], rar = cat.rarities[cat.rarity[i]], it = items.get(id);
       const on = favs.includes(id), lv = cat.level[i];
-      const note = rowNote(id, now());
-      return h('li', { class: rowClass(rar, note.age), 'data-id': id },
+      const note = resultNote(i, id, now()), unchecked = uncheckedSet.has(i);
+      return h('li', { class: rowClass(rar, note.age) + (unchecked ? ' is-unchecked' : ''), 'data-id': id, 'data-pf': pf.set > 0 ? (unchecked ? 'unchecked' : 'pass') : null },
         h('span', { class: 'tp-icon', 'aria-hidden': 'true' }, iconOf(it, 32)),
         h('span', { class: 'tp-item' },
           h('a', { class: 'tp-name', href: `#market/item/${id}`, 'aria-haspopup': 'dialog', 'data-tpkey': `name:${id}`, text: name }),
@@ -460,11 +637,12 @@
       const home = searchStatus === 'idle';
       $('tp-home').hidden = !home;
       $('tp-crumbs').hidden = home;
-      if (!home) $('tp-crumb').textContent = crumbText(st, cat);
+      if (!home) $('tp-crumb').textContent = crumbText(Object.assign({ pfCount: pf.set }, st), cat);
       else { drawWatch(t); drawFavHome(t); drawGems(t); }
       const empty = $('tp-empty');
-      empty.hidden = home || (searchStatus === 'ok' && matches.length > 0);
-      empty.textContent = searchStatus === 'short' ? 'Type at least 2 letters, or choose a type, a rarity or Favorites.'
+      empty.hidden = home || (searchStatus === 'ok' && order.length > 0);
+      empty.textContent = searchStatus === 'ok' && matches.length > 0 ? `No item passes the price filters: ${plural(matches.length, 'match was', 'matches were')} checked, and none passes. Nothing is hidden for want of a price.`
+        : searchStatus === 'short' ? 'Type at least 2 letters, or choose a type, a rarity or Favorites.'
           : st.favOnly && !favs.length ? 'No favorites yet. Use the star (☆) by an item to add it.'
             : 'No item in the list matches. The list holds only items with a Trading Post price when it was made.';
       $('tp-head').hidden = !list.length;
@@ -474,12 +652,15 @@
       drawCount();
       // The sort's coverage, right under the sort.
       const s = sortDef();
+      const sorting = Boolean(s && s.key);
       $('tp-scope').textContent = searchStatus !== 'ok' || !matches.length ? '' : scopeText({
-        sort: st.sort, matches: matches.length, ranked: counts ? counts.ranked : 0, noSide: counts ? counts.noSide : 0, unpriced: counts ? counts.unpriced : 0,
+        sort: st.sort, matches: fcounts ? fcounts.passed : matches.length, ranked: counts ? counts.ranked : 0, noSide: counts ? counts.noSide : 0, unpriced: counts ? counts.unpriced : 0,
+        pf: fcounts ? { unchecked: fcounts.uncheckedCount } : null,
         loading: s && s.key ? matches.some((i) => pending.has(cat.ids[i])) : false,
         failed: s && s.key ? matches.some((i) => failed.has(cat.ids[i])) : false,
         wholeAll: whole.all, listCount: cat.count, filtered: Boolean(st.query.trim()) || filtered(),
-      });
+      }) + (sorting && !fcounts ? ageNote(oldestUsed, t) : '');
+      drawFilters(t);
       drawPrices(list, t);
       drawWhole();
       $('tp-favs').textContent = `Favorites (${favs.length})`;
@@ -546,7 +727,7 @@
       }
       if (ats.length) {
         const oldest = Math.min(...ats), f = freshness(oldest, t), when = time.format(oldest), again = loading ? '' : ' Refresh for current rates.';
-        parts.push(f === 'current' ? `Rates from ${when}, current.` : `Rates from ${when}, ${ago(t - oldest)}: ${f}.${again}`);
+        parts.push(f === 'current' ? `Rates received ${when}, current.` : `Rates received ${when}, ${ago(t - oldest)}: ${f}.${again}`);
         $('tp-gem-prices').setAttribute('data-fresh', f);
       } else $('tp-gem-prices').removeAttribute('data-fresh');
       const text = parts.join(' ');
@@ -580,8 +761,8 @@
         const when = time.format(oldest) === time.format(newest) ? time.format(oldest) : `${time.format(oldest)} to ${time.format(newest)}`;
         // "Refresh" only when the Refresh button is there: not while a refresh is already on its way.
         const again = loading ? '' : ' Refresh for current prices.';
-        parts.push(f === 'current' ? `Prices from ${when}, current.` : f === 'stale' ? `Prices from ${when}, ${ago(t - oldest)}: stale.${again}`
-          : `Prices from ${when}, ${ago(t - oldest)}: old, shown faded.${again}`);
+        parts.push(f === 'current' ? `Prices received ${when}, current.` : f === 'stale' ? `Prices received ${when}, ${ago(t - oldest)}: stale.${again}`
+          : `Prices received ${when}, ${ago(t - oldest)}: old, shown faded.${again}`);
         $(el.line).setAttribute('data-fresh', f);
       } else $(el.line).removeAttribute('data-fresh');
       const text = parts.join(' ');
@@ -673,13 +854,12 @@
       const i = cat.byId.get(id), it = items.get(id), c = cache.get(id), q = c && c.q, t = now();
       const name = cat.names[i], rar = cat.rarities[cat.rarity[i]], lv = cat.level[i];
       const fact = (k, ...v) => [h('dt', { text: k }), h('dd', {}, ...v)];
-      const none = (text) => h('span', { class: 'tp-none', text });
       const on = favs.includes(id);
       const icon = iconOf(it, 48, 'tp-big-icon');
       const sub = it && it.details && typeof it.details.type === 'string' ? ` (${it.details.type.replace(/([a-z])([A-Z])/g, '$1 $2')})` : '';
       const prices = [];
-      // The three figures a trader looks for first, large, with when they were fetched; the arithmetic and the
-      // caveats follow in the list below them, smaller.
+      // The three figures a trader looks for first, large, with when this page received them; the arithmetic and
+      // the caveats follow in the list below them, smaller.
       let stats = null;
       if (q) {
         const f = freshness(c.at, t), why = failed.get(id);
@@ -690,7 +870,7 @@
             stat('tp-stat-sell', 'Lowest sell listing', q.sell === null ? [none('No sell listings.')] : [coins(q.sell)], q.sell === null ? '' : `${Money.count(q.sellQty)} units listed in all`),
             stat('tp-stat-margin', 'Potential margin', q.margin === null ? [none('None: one side has no orders.')] : [coins(q.margin)], q.margin === null ? '' : `${Money.percent(q.marginPct)} of the highest buy order, after fees`),
             stat('tp-stat-even', 'Break-even listing price', q.breakEven === null ? [none('None: no buy orders to cost it.')] : [coins(q.breakEven)], q.breakEven === null ? '' : 'the lowest that gives back the buy price after fees')),
-          h('p', { class: `tp-stat-when${f === 'current' ? '' : ' is-' + f}`, text: `Prices fetched ${time.format(c.at)}, ${ago(t - c.at)} (${f}). ArenaNet's API may itself be up to 2 minutes behind.${why ? ` A newer price could not be loaded: ${API_SAYS[why] || API_SAYS.network}.` : ''}` }));
+          h('p', { class: `tp-stat-when${f === 'current' ? '' : ' is-' + f}`, text: `${receivedText('prices', time.format(c.at), t - c.at, f)}${why ? ` A newer price could not be loaded: ${API_SAYS[why] || API_SAYS.network}.` : ''}` }));
         prices.push(...fact('Spread', ...(q.spread === null ? [none('None: one side has no orders.')] : [coins(q.spread), ' (lowest sell listing minus highest buy order)'])));
         // At a price of a few copper the two fees (at least 1 copper each) take all of it: said in words, not left
         // as "about 0c" or "about -1c".
@@ -724,46 +904,252 @@
         h('div', { class: 'actions ed-actions' },
           h('button', { type: 'button', class: 'btn small ed-star' + (on ? ' on' : ''), 'data-tp-fav': id, 'data-tpkey': 'dlg:fav', 'aria-pressed': String(on), 'aria-label': `Favorite: ${name}` }, h('span', { 'aria-hidden': 'true', text: on ? '★' : '☆' }), ' Favorite'),
           h('button', { type: 'button', class: 'btn small', 'data-tp-refresh-one': id, 'data-tpkey': 'dlg:refresh', text: 'Refresh price' }),
-          chat ? h('button', { type: 'button', class: 'btn small', 'data-tp-copy': chat, 'data-tpkey': 'dlg:chat', 'aria-label': `Copy the chat code for ${name}: ${chat}`, text: 'Copy chat code' }) : null,
-          h('button', { type: 'button', class: 'btn small', 'data-tp-link': id, 'data-tpkey': 'dlg:link', 'aria-label': `Copy a link to ${name}`, text: 'Copy link' }),
+          chat ? h('button', { type: 'button', class: 'btn small', 'data-tp-copy': chat, 'data-tpkey': 'dlg:chat', 'aria-label': `Copy chat code for ${name}: ${chat}`, text: 'Copy chat code' }) : null,
+          h('button', { type: 'button', class: 'btn small', 'data-tp-link': id, 'data-tpkey': 'dlg:link', 'aria-label': `Copy link to ${name}`, text: 'Copy link' }),
           h('a', { class: 'btn small', href: `https://wiki.guildwars2.com/wiki/Special:Search/${encodeURIComponent(name)}`, target: '_blank', rel: 'noopener noreferrer', 'aria-label': `${name} on the Guild Wars 2 Wiki (opens a new tab)`, text: 'Wiki' })),
         h('dl', { class: 'ed-facts tp-facts' }, ...prices, ...(vendor ? fact('Merchant', ...[].concat(vendor)) : []), ...fact('Item id', String(id)), ...(chat ? fact('Chat code', chat) : [])),
-        drawBook(id),
-        h('p', { class: 'tp-fee-note', text: `Estimates for one unit. Fees as ArenaNet documents them: a ${Money.LISTING_PCT}% listing fee and a ${Money.EXCHANGE_PCT}% exchange fee, each at least 1 copper; how a fraction of a copper is rounded is not published, so this page rounds to the nearest copper.` }),
       ].filter(Boolean);
     }
+    // ---- The order book and the quantity calculator ----
+    //
+    // One request, only when the reader asks for it (the button), and one more for each Refresh: choosing an amount or
+    // a way to trade works on the book already here and asks ArenaNet for nothing. Everything is worked out by
+    // js/money.js plan() from the order book alone, never mixed with the prices above (the two are separate answers
+    // of the API and can disagree). What is at once (buying from sell listings, selling to buy orders) is told apart
+    // from what only might happen (a buy order filling, a listing selling), and nothing is promised: the book has
+    // its own time, and it may have changed since.
+
+    const FEE_NOTE = `Estimates. The figures above the order book are for one unit; the calculator's are for the amount chosen. Fees as ArenaNet documents them: a ${Money.LISTING_PCT}% listing fee and a ${Money.EXCHANGE_PCT}% exchange fee, each at least 1 copper; how a fraction of a copper is rounded is not published, so this page rounds to the nearest copper. Whether the fees of a sale that crosses several prices are worked out on the whole sale or on each price is not published either, so the calculator shows both when they differ.`;
+    const AMOUNT_SAYS = {
+      'not-whole': `That is not a whole number. Type 1 to ${Money.MAX_UNITS}, in digits only.`,
+      range: `Type a whole number from 1 to ${Money.MAX_UNITS}: one Trading Post transaction holds at most ${Money.MAX_UNITS} units.`,
+    };
+    const units = (n) => `${Money.count(n)} ${n === 1 ? 'unit' : 'units'}`;
+    const none = (text) => h('span', { class: 'tp-none', text });
+    /** An estimate after fees: one figure, or both when the two ways of working out the fees differ. */
+    const about = (lo, hi) => (lo === hi ? ['about ', coins(lo)] : ['about ', coins(hi), ' or ', coins(lo)]);
+
+    function calcNodes(id) {
+      const radio = (name, value, textId) => h('label', { class: 'rm-option tp-calc-opt' }, h('input', { type: 'radio', name, value, checked: calc[name === 'tp-calc-get' ? 'get' : 'give'] === value }), ' ', h('span', { id: textId }));
+      return [
+        h('h3', { id: 'tp-calc-title', tabindex: '-1', text: 'Order book and quantity calculator' }),
+        h('p', { class: 'tp-book-when', id: 'tp-book-when' }),
+        h('p', { class: 'tp-book-actions' }, h('button', { type: 'button', class: 'btn small', id: 'tp-book-refresh', 'data-tp-book': id, text: 'Refresh the order book' })),
+        h('div', { class: 'tp-book-warn', id: 'tp-book-warn', hidden: true }),
+        h('div', { class: 'tp-calc-units', role: 'group', 'aria-labelledby': 'tp-calc-units-k' },
+          h('span', { class: 'tp-calc-k', id: 'tp-calc-units-k', text: 'Units' }),
+          ...CALC_CHIPS.map((v) => h('button', { type: 'button', class: 'btn small tp-calc-chip', 'data-tp-calc-n': v, 'aria-pressed': 'false', text: String(v) })),
+          h('label', { class: 'tp-calc-custom' }, 'Other amount ', h('input', { type: 'text', id: 'tp-calc-n', inputmode: 'numeric', autocomplete: 'off', spellcheck: 'false', maxlength: '9', size: '5', value: calc.text, 'aria-describedby': 'tp-calc-hint tp-calc-err' }))),
+        h('p', { class: 'hint tp-calc-hint', id: 'tp-calc-hint', text: `1 to ${Money.MAX_UNITS}: one Trading Post transaction holds at most ${Money.MAX_UNITS} units. Changing the amount asks ArenaNet for nothing.` }),
+        h('p', { class: 'tp-calc-err', id: 'tp-calc-err', role: 'alert', hidden: true }),
+        h('fieldset', { class: 'tp-calc-way' }, h('legend', { text: 'Getting the units' }), radio('tp-calc-get', 'now', 'tp-calc-get-now'), radio('tp-calc-get', 'order', 'tp-calc-get-order')),
+        h('fieldset', { class: 'tp-calc-way' }, h('legend', { text: 'Then' }), radio('tp-calc-give', 'now', 'tp-calc-give-now'), radio('tp-calc-give', 'list', 'tp-calc-give-list')),
+        h('div', { class: 'tp-calc-out', id: 'tp-calc-out' }),
+        h('p', { class: 'sr-only', id: 'tp-calc-said', role: 'status' }),
+      ];
+    }
+
+    /** What is wrong or unsure about the order book that is here, each in a sentence; nothing is left unsaid. */
+    function bookWarnings(id) {
+      const out = [], pq = quoteOf(id);
+      const top = (s) => (s.levels.length ? s.levels[0].price : null), bid = top(book.buys), ask = top(book.sells);
+      // A side one answer has and the other lacks is a difference too.
+      if (pq && (pq.buy !== bid || pq.sell !== ask)) {
+        out.push(h('p', { 'data-tp-warn': 'differs' }, 'The order book and the prices above are separate answers from ArenaNet, and here they differ: the book has ',
+          ...(bid === null ? ['no buy orders'] : ['buy orders from ', coins(bid)]), ' and ', ...(ask === null ? ['no sell listings'] : ['sell listings from ', coins(ask)]),
+          '. Neither says which is newer. The calculator uses the order book only.'));
+      }
+      for (const s of [book.buys, book.sells]) {
+        const what = s.side === 'buys' ? 'buy orders' : 'sell listings';
+        if (s.repeats) out.push(h('p', { 'data-tp-warn': 'repeats', text: `ArenaNet's answer repeated ${plural(s.repeats, 'price', 'prices')} among the ${what}. Each price is counted once here, and where the answer repeats one, another may be missing: past the best ${plural(s.sure, 'price', 'prices')} the ${what} are uncertain, and so is their total.` }));
+        if (s.unsorted) out.push(h('p', { 'data-tp-warn': 'unsorted', text: `The ${what} did not arrive in price order. They are sorted here, and figures from them are marked uncertain.` }));
+        if (s.dropped) out.push(h('p', { 'data-tp-warn': 'dropped', text: `${plural(s.dropped, 'row', 'rows')} of the ${what} could not be read and ${s.dropped === 1 ? 'is' : 'are'} left out, so figures from them are marked uncertain.` }));
+      }
+      return out;
+    }
+
+    /** One side's table: its best prices, as many as the amount reaches (up to BOOK_MOST), with what the amount takes of each. */
+    function bookTable(side, w, cap, unitWord, n) {
+      const used = w ? w.fills.length : 0, shown = Math.min(side.levels.length, Math.max(BOOK_ROWS, Math.min(BOOK_MOST, used)));
+      const rows = side.levels.slice(0, shown).map((l, i) => h('tr', { class: i < used ? 'is-taken' : null },
+        h('td', {}, coins(l.price)), h('td', { text: Money.count(l.quantity) }), h('td', { text: l.orders === null ? '' : Money.count(l.orders) }), h('td', { text: i < used ? Money.count(w.fills[i].take) : '' })));
+      if (used > shown) rows.push(h('tr', { class: 'is-taken' }, h('td', { colspan: 4 }, `and ${plural(used - shown, 'more price', 'more prices')} reached, the last at `, coins(w.worst), ' each')));
+      if (!side.levels.length) rows.push(h('tr', {}, h('td', { colspan: 4, text: 'None.' })));
+      return h('table', { class: 'tp-book-table' },
+        h('caption', { text: `${cap}: ${units(side.depth)} at ${plural(side.levels.length, 'price', 'prices')} in all${side.repeats || side.dropped ? ' (uncertain)' : ''}` }),
+        h('thead', {}, h('tr', {}, h('th', { scope: 'col', text: 'Price each' }), h('th', { scope: 'col', text: unitWord }), h('th', { scope: 'col', text: 'Orders' }), h('th', { scope: 'col', text: n ? `Taken for ${Money.count(n)}` : 'Taken' }))),
+        h('tbody', {}, ...rows));
+    }
+
+    /**
+     * Depth near the best price (v0.5.0 Phase 3): for each side, the units the order book showed queued within
+     * NEAR_PCT% of its own best price (js/money.js near()), with the prices that is and the range, beside the side's
+     * whole depth. Observed book depth, said so, never offered as what can be traded: the book is a snapshot, and its
+     * repeated, unreadable or disordered rows mark the figure uncertain as they mark the walk. It depends on the book
+     * alone, not on the amount or the ways chosen.
+     */
+    function nearBlock() {
+      const fact = (k, key, ...v) => [h('dt', { text: k }), h('dd', { 'data-tp-near': key }, ...v)];
+      const unsure = ' Uncertain: it reaches prices where the order book is not sure (see above).';
+      const facts = [];
+      for (const s of [book.buys, book.sells]) {
+        const buys = s.side === 'buys', d = Money.near(s), what = buys ? 'buy orders' : 'sell listings';
+        const k = `${buys ? 'Buy orders' : 'Sell listings'} within ${Money.NEAR_PCT}%`;
+        if (!d) { facts.push(...fact(k, s.side, none(`None: the order book has no ${what}.`))); continue; }
+        // The range is the best price and the limit, not the last level in it: a level need not stand at the limit.
+        facts.push(...fact(k, s.side, `${units(d.units)} ${buys ? 'wanted' : 'listed'} at `,
+          ...(d.limit === d.best ? [coins(d.best)] : [`${plural(d.prices, 'price', 'prices')} between `, coins(d.best), ' and ', coins(d.limit)]),
+          `, of ${Money.count(s.depth)} in the whole order book.`,
+          d.limit === d.best ? ` At this price ${Money.NEAR_PCT}% is less than 1 copper, so only this price counts.` : '',
+          d.uncertain ? unsure : ''));
+      }
+      return h('div', { class: 'tp-near', id: 'tp-book-near' },
+        h('h4', { text: 'Observed book depth near the best price' }),
+        h('dl', { class: 'ed-facts tp-facts tp-near-facts' }, ...facts),
+        h('p', { class: 'hint tp-near-note', text: `What this order book showed queued at prices within ${Money.NEAR_PCT}% of its own best price, both ends included. Not a guarantee that this many can be bought or sold: orders come and go, others trade first, and the book may have changed since this page received it.` }));
+    }
+
+    /** The calculator's figures for a plan (js/money.js plan()), as a list of facts; every number says what it is. */
+    function calcFacts(p, f, t) {
+      const fact = (k, key, ...v) => [h('dt', { text: k }), h('dd', { 'data-tp-fig': key }, ...v)];
+      const out = [], N = units(p.n), b = p.buyNow, s = p.sellNow;
+      const each = (avg) => (avg.exact ? [coins(avg.value), ' each'] : ['about ', coins(avg.value), ' each']);
+      const unsure = ' Uncertain: it reaches prices where the order book is not sure (see above).';
+      if (p.get === 'now') {
+        out.push(...fact(`Buy ${N} now`, 'buy-now', ...(!b.filled ? [none('No sell listings in the order book.')]
+          : b.short ? [`Only ${Money.count(b.filled)} of ${Money.count(p.n)} are listed in the whole order book. Those ${Money.count(b.filled)} would cost `, coins(b.total), `; nothing is worked out for the other ${Money.count(b.short)}.${b.uncertain ? unsure : ''}`]
+            : [coins(b.total), ' in all, ', ...each(b.avg), b.fills.length > 1 ? [`, across ${b.fills.length} prices, up to `, coins(b.worst), ' each'] : ', all at one price', `. No fee to buy.${b.uncertain ? unsure : ''}`].flat())));
+      } else {
+        out.push(...fact(`Buy order for ${N}`, 'buy-order', ...(p.order ? [`At the highest buy order in the book, `, coins(p.order.price), ' each: ', coins(p.order.total), ', paid when the order is placed, no fee. Not something the order book fills now: it fills only if sellers come to it, and it may never fill.'] : [none('No buy orders in the order book to match.')])));
+      }
+      if (p.give === 'now') {
+        const fe = s.fees;
+        out.push(...fact(`Sell ${N} now`, 'sell-now', ...(!s.filled ? [none('No buy orders in the order book.')]
+          : s.short ? [`Only ${Money.count(s.filled)} of ${Money.count(p.n)} are wanted in the whole order book. Those ${Money.count(s.filled)} would sell for `, coins(s.total), ` before fees; nothing is worked out for the other ${Money.count(s.short)}.${s.uncertain ? unsure : ''}`]
+            : [coins(s.total), ' before fees, ', ...each(s.avg), s.fills.length > 1 ? [`, across ${s.fills.length} prices, down to `, coins(s.worst), ' each'] : ', all at one price', '. ',
+              ...(fe.differ ? ['After fees, two estimates: about ', coins(fe.whole.net), ' if both fees are worked out on the whole sale (', coins(fe.whole.listing), ' and ', coins(fe.whole.exchange), '), or about ', coins(fe.byLevel.net), ' if on each price (', coins(fe.byLevel.listing), ' and ', coins(fe.byLevel.exchange), '). ArenaNet does not publish which applies, and neither is a limit.']
+                : ['After the listing fee of ', coins(fe.whole.listing), ' and the exchange fee of ', coins(fe.whole.exchange), ': about ', coins(fe.whole.net), '.']),
+              fe.high <= 0 ? ' At this price the fees, at least 1 copper each, take all of it.' : '', s.uncertain ? unsure : ''].flat())));
+      } else {
+        out.push(...fact(`List ${N}`, 'list', ...(p.list ? ['At the lowest sell listing in the book, ', coins(p.list.price), ' each: about ', coins(p.list.net), ' after the listing fee of ', coins(p.list.listing), ' (paid when listing, not returned) and the exchange fee of ', coins(p.list.exchange),
+          `. Not something the order book fills now: only if it sells. Someone may list lower, and it may not sell.${p.list.net <= 0 ? ' At this price the fees, at least 1 copper each, take all of it.' : ''}`] : [none('No sell listings in the order book to match.')])));
+      }
+      const WHY = {
+        'no-sells': 'None: the order book has no sell listings.', 'no-buys': 'None: the order book has no buy orders.',
+        'short-sells': `None: the order book lists only ${Money.count(b.filled)} of the ${Money.count(p.n)} to buy.`, 'short-buys': `None: the order book wants only ${Money.count(s.filled)} of the ${Money.count(p.n)}.`,
+      };
+      if (!p.gain) { out.push(...fact('Profit or loss', 'gain', none(WHY[p.why] || 'None.'))); return out; }
+      const two = p.gain.low !== p.gain.high;
+      const hopes = [p.get === 'order' ? 'the buy order fills' : '', p.give === 'list' ? 'the listing sells' : ''].filter(Boolean);
+      const cond = p.executable ? ` if the order book is still as ${f === 'current' ? 'ArenaNet reported it' : `it was in the answer received ${ago(t - book.at)}`}. An estimate, never a promise: the book may have changed.`
+        : ` only if ${hopes.join(' and ')}: ${hopes.length > 1 ? 'neither is' : 'that is not'} certain, and prices move.`;
+      // A figure worked out from a walk that reaches what the book is not sure of says so, as the walk's own line does.
+      const from = ' Uncertain: worked out from prices where the order book is not sure (see above).';
+      out.push(...fact('Profit or loss', 'gain', ...about(p.gain.low, p.gain.high), two ? ' (the two fee estimates)' : '', ': ', ...about(p.back.low, p.back.high), ' after fees, less the cost of ', coins(p.cost), ',', cond, p.uncertain ? from : ''));
+      // Return on cost (v0.5.0 Phase 3): the profit or loss above as a share of the cost, for the amount and the two
+      // ways chosen, with the two numbers it is made of and the same conditions; both fee estimates when they differ.
+      const pc = Money.percent, rTwo = two && pc(p.roi.low) !== pc(p.roi.high);
+      const how = `${N} ${p.get === 'now' ? 'bought now' : 'bought by a buy order'} and ${p.give === 'now' ? 'sold now' : 'listed'}`;
+      out.push(...fact('Return on cost', 'roi', `about ${pc(p.roi.high)}${rTwo ? ` or ${pc(p.roi.low)} (the two fee estimates)` : ''}: the profit or loss (`, ...about(p.gain.low, p.gain.high), ') divided by the cost (', coins(p.cost), `), for ${how},`, cond, p.uncertain ? from : ''));
+      const e = p.breakEven;
+      if (e && e.kind === 'list') out.push(...fact('Break-even', 'even', `Listing the ${N} at `, coins(e.price), ' each or more would give back the cost after both fees; any lower would lose.',
+        p.ask === null ? '' : p.ask >= e.price ? ' The lowest sell listing in the book is at or above it.' : ' The lowest sell listing in the book is below it: listing there would lose.', p.get === 'now' && p.buyNow.uncertain ? from : ''));
+      else if (e) out.push(...fact('Break-even', 'even', 'Selling now gives back ', ...about(e.low, e.high), ' each after fees: having paid more than that for each, selling now would lose.', p.sellNow.uncertain ? from : ''));
+      return out;
+    }
+
+    function updateCalc(id) {
+      const el = detailEls.book, q = (sel) => el.querySelector(sel), t = now(), f = freshness(book.at, t);
+      const when = q('#tp-book-when');
+      const whenText = receivedText('book', time.format(book.at), t - book.at, f)
+        + (book.refreshing ? ' Asking again...' : book.error ? ` A newer order book could not be loaded: ${API_SAYS[book.error] || API_SAYS.network}. This one stays, with its time.` : '')
+        + (f === 'current' ? '' : ' Refresh it before relying on these figures.');
+      if (when.textContent !== whenText) when.textContent = whenText;
+      const whenClass = `tp-book-when${f === 'current' ? '' : ' is-' + f}`;
+      if (when.className !== whenClass) when.className = whenClass;
+      const amt = readAmount(calc.text, calc.chip, Money.MAX_UNITS);
+      const pq = quoteOf(id);
+      // Redrawn only when something it shows has changed: not on every tick, so nothing is read out or reflowed for nothing.
+      const sig = JSON.stringify([book.at, amt, calc.get, calc.give, pq ? [pq.buy, pq.sell] : null, f]);
+      if (detailEls.sig === sig) return;
+      detailEls.sig = sig;
+      const p = amt.error ? null : Money.plan(book, amt.n, calc);
+      for (const b of el.querySelectorAll('[data-tp-calc-n]')) b.setAttribute('aria-pressed', String(!calc.text.trim() && Number(b.getAttribute('data-tp-calc-n')) === calc.chip));
+      const err = q('#tp-calc-err'), errText = amt.error ? AMOUNT_SAYS[amt.error] : '';
+      if (err.textContent !== errText) err.textContent = errText;
+      err.hidden = !errText;
+      if (errText) q('#tp-calc-n').setAttribute('aria-invalid', 'true'); else q('#tp-calc-n').removeAttribute('aria-invalid');
+      const warns = bookWarnings(id);
+      q('#tp-book-warn').replaceChildren(...warns);
+      q('#tp-book-warn').hidden = !warns.length;
+      // The four ways, each with its own figure, so every one can be compared before it is chosen.
+      const b = p && p.buyNow, s = p && p.sellNow;
+      q('#tp-calc-get-now').replaceChildren('Buy now from the sell listings', ...(!p ? [] : !b.filled ? [': none are listed'] : b.short ? [`: only ${Money.count(b.filled)} of ${Money.count(p.n)} are listed`] : [': ', coins(b.total)]));
+      q('#tp-calc-get-order').replaceChildren('Place a buy order', ...(!p ? [] : !p.order ? [': there is no buy order to match'] : [' at the highest, ', coins(p.order.price), ' each: ', coins(p.order.total), ', only if it fills']));
+      q('#tp-calc-give-now').replaceChildren('Sell now to the buy orders', ...(!p ? [] : !s.filled ? [': none are wanted'] : s.short ? [`: only ${Money.count(s.filled)} of ${Money.count(p.n)} are wanted`] : [': ', ...about(s.fees.low, s.fees.high), ' after fees']));
+      q('#tp-calc-give-list').replaceChildren('List them', ...(!p ? [] : !p.list ? [': there is no sell listing to match'] : [' at the lowest, ', coins(p.list.price), ' each: about ', coins(p.list.net), ' after fees, only if it sells']));
+      const stale = f === 'current' ? null : h('p', { class: 'tp-calc-stale', text: `This order book was received ${ago(t - book.at)}: ${f}. The figures below are what it showed then, not what can be traded now. Refresh it first.` });
+      q('#tp-calc-out').replaceChildren(...[
+        stale,
+        p ? h('dl', { class: 'ed-facts tp-facts tp-calc-facts' }, ...calcFacts(p, f, t)) : h('p', { class: 'tp-none', text: 'No figures: the amount is not one this page can work with.' }),
+        nearBlock(),
+        h('div', { class: 'tp-book-sides' }, bookTable(book.buys, p && p.give === 'now' ? s : null, 'Buy orders, highest first', 'Units wanted', p && p.give === 'now' ? p.n : 0), bookTable(book.sells, p && p.get === 'now' ? b : null, 'Sell listings, lowest first', 'Units listed', p && p.get === 'now' ? p.n : 0)),
+      ].filter(Boolean));
+      const said = !p ? '' : `${units(p.n)}: ${p.gain ? `profit or loss ${Money.coins(p.gain.high).spoken}${p.gain.low !== p.gain.high ? ` or ${Money.coins(p.gain.low).spoken}` : ''}, an estimate` : 'no result, the order book cannot fill it'}.`;
+      if (q('#tp-calc-said').textContent !== said) q('#tp-calc-said').textContent = said;
+    }
+
     function drawBook(id) {
-      const wrap = h('div', { class: 'tp-book' });
-      if (!book || book.id !== id) { wrap.append(h('button', { type: 'button', class: 'btn small', 'data-tp-book': id, 'data-tpkey': 'dlg:book', text: 'Show the order book' })); return wrap; }
-      if (book.state === 'loading') { wrap.append(h('p', { class: 'tp-none', text: 'Loading the order book...' })); return wrap; }
-      if (book.state === 'failed') { wrap.append(h('p', { text: `${API_SAYS[book.error] || API_SAYS.network}. The order book is not shown.` }), h('button', { type: 'button', class: 'btn small', 'data-tp-book': id, 'data-tpkey': 'dlg:book', text: 'Try again' })); return wrap; }
-      if (book.state === 'none') { wrap.append(h('p', { text: 'The API has no order book for this item now.' })); return wrap; }
-      const table = (rows, cap, unitWord) => h('table', { class: 'tp-book-table' }, h('caption', { text: cap }),
-        h('thead', {}, h('tr', {}, h('th', { scope: 'col', text: 'Price each' }), h('th', { scope: 'col', text: unitWord }), h('th', { scope: 'col', text: 'Orders' }))),
-        h('tbody', {}, ...(rows.length ? rows.slice(0, 5).map((r) => h('tr', {}, h('td', {}, coins(r.unit_price)), h('td', { text: Money.count(r.quantity) }), h('td', { text: Money.count(r.listings) }))) : [h('tr', {}, h('td', { colspan: 3, text: 'None.' }))])));
-      wrap.append(h('h3', { text: 'Order book (best 5 prices each side)' }),
-        h('div', { class: 'tp-book-sides' }, table(book.buys, 'Buy orders, highest first', 'Units wanted'), table(book.sells, 'Sell listings, lowest first', 'Units listed')),
-        h('p', { class: 'tp-none', text: `Fetched ${time.format(book.at)}. ArenaNet's API keeps the order book for up to 20 minutes, so it can be older than the prices above.` }));
-      return wrap;
+      const el = detailEls.book;
+      const state = !book || book.id !== id ? 'closed' : book.state;
+      const key = `${id}:${state}:${state === 'failed' ? book.error : ''}`;
+      if (detailEls.key !== key) {
+        const had = el.contains(document.activeElement);
+        detailEls.key = key;
+        detailEls.sig = '';
+        const btn = (text) => h('button', { type: 'button', class: 'btn small', 'data-tp-book': id, text });
+        if (state === 'closed') el.replaceChildren(btn('Show the order book and quantity calculator'));
+        else if (state === 'loading') el.replaceChildren(h('p', { class: 'tp-none', id: 'tp-book-loading', tabindex: '-1', text: 'Loading the order book...' }));
+        else if (state === 'failed') el.replaceChildren(h('p', { text: `${API_SAYS[book.error] || API_SAYS.network}. The order book is not shown, and nothing is worked out without it.` }), btn('Try again'));
+        else if (state === 'none') el.replaceChildren(h('p', { id: 'tp-book-none', tabindex: '-1', text: 'The API has no order book for this item now.' }));
+        else el.replaceChildren(...calcNodes(id));
+        // Focus was on what has just gone (the button, or the loading line): it goes to what took its place.
+        if (had) { const to = el.querySelector('#tp-calc-title, #tp-book-loading, #tp-book-none, button'); if (to) to.focus(); }
+      }
+      if (state === 'ok') updateCalc(id);
     }
     async function loadBook(id) {
-      if (detailCtl) detailCtl.abort();
-      detailCtl = new AbortController();
-      book = { id, state: 'loading' };
+      if (bookCtl) bookCtl.abort();
+      bookCtl = new AbortController();
+      // Asked for again: the book that is here stays, with its time, until a newer one replaces it.
+      const prev = book && book.id === id && book.state === 'ok' ? book : null;
+      book = prev ? Object.assign({}, prev, { refreshing: true, error: null }) : { id, state: 'loading' };
+      detailEls.sig = '';
       drawDetail();
-      const r = await client.listings(id, { signal: detailCtl.signal });
+      const r = await client.listings(id, { signal: bookCtl.signal });
       if (!book || book.id !== id) return;
-      if (!r.ok) { if (r.error === 'aborted') return; book = { id, state: 'failed', error: r.error }; }
+      if (!r.ok) { if (r.error === 'aborted') return; book = prev ? Object.assign({}, prev, { refreshing: false, error: r.error }) : { id, state: 'failed', error: r.error }; }
       else if (r.notFound) book = { id, state: 'none' };
-      else book = { id, state: 'ok', buys: r.book.buys, sells: r.book.sells, at: r.book.at };
+      else {
+        const lost = r.book.dropped || {};
+        book = { id, state: 'ok', at: r.book.at, buys: Money.cleanSide(r.book.buys, 'buys', lost.buys), sells: Money.cleanSide(r.book.sells, 'sells', lost.sells) };
+      }
+      if (detailEls) detailEls.sig = '';
       drawDetail();
     }
     function drawDetail() {
       if (detailId === null) return;
-      const focusKey = dialog.contains(document.activeElement) && document.activeElement.getAttribute('data-tpkey');
+      const body = $('tp-item-body');
+      if (!detailEls || detailEls.id !== detailId || detailEls.main.parentNode !== body) {
+        detailEls = { id: detailId, main: h('div', { class: 'tp-detail-main' }), book: h('div', { class: 'tp-book' }), key: null, sig: '' };
+        body.replaceChildren(detailEls.main, detailEls.book, h('p', { class: 'tp-fee-note', text: FEE_NOTE }));
+      }
+      const main = detailEls.main;
+      const focusKey = main.contains(document.activeElement) && document.activeElement.getAttribute('data-tpkey');
       $('tp-item-title').textContent = cat.names[cat.byId.get(detailId)];
-      $('tp-item-body').replaceChildren(...detailBody(detailId));
-      if (focusKey) { const el = dialog.querySelector(`[data-tpkey="${CSS.escape(focusKey)}"]`); if (el) el.focus(); }
+      main.replaceChildren(...detailBody(detailId));
+      if (focusKey) { const el = main.querySelector(`[data-tpkey="${CSS.escape(focusKey)}"]`); if (el) el.focus(); }
+      drawBook(detailId);
     }
     function openItem(id) {
       if (!dialog.open) {
@@ -771,7 +1157,7 @@
         opener = { el, key: el && el.getAttribute ? el.getAttribute('data-tpkey') : null };
       }
       detailId = id;
-      if (!book || book.id !== id) book = null;
+      if (!book || book.id !== id) { book = null; if (bookCtl) { bookCtl.abort(); bookCtl = null; } }
       $('tp-item-status').textContent = '';
       if (detailCtl) detailCtl.abort();
       detailCtl = new AbortController();
@@ -785,8 +1171,9 @@
     dialog.addEventListener('close', () => {
       if (dialog.open) { closingByHash = false; return; }
       const id = detailId;
-      detailId = null; book = null;
+      detailId = null; book = null; detailEls = null;
       if (detailCtl) { detailCtl.abort(); detailCtl = null; }
+      if (bookCtl) { bookCtl.abort(); bookCtl = null; }
       if (!closingByHash && /^#market\/item\//.test(location.hash)) {
         if (history.state && history.state.gw2Item === id) history.back();
         else { try { history.replaceState(null, '', location.pathname + location.search + '#market'); } catch (e) { /* the address keeps it */ } }
@@ -795,6 +1182,18 @@
       const o = opener; opener = null;
       const back = o && (shownEl(o.el) || (o.key && shownEl(view.querySelector(`[data-tpkey="${CSS.escape(o.key)}"]`))) || shownEl(view.querySelector(`[data-tpkey="name:${id}"]`)) || $('market-title'));
       if (back && o && o.el !== document.body) back.focus();
+    });
+
+    // The calculator's own controls: typing an amount, and choosing how the units are got and given. Nothing here
+    // asks ArenaNet for anything.
+    dialog.addEventListener('input', (ev) => { if (ev.target && ev.target.id === 'tp-calc-n' && detailId !== null) { calc.text = ev.target.value; drawBook(detailId); } });
+    dialog.addEventListener('change', (ev) => {
+      const el = ev.target;
+      if (!el || el.type !== 'radio' || detailId === null) return;
+      if (el.name === 'tp-calc-get') calc.get = el.value === 'order' ? 'order' : 'now';
+      else if (el.name === 'tp-calc-give') calc.give = el.value === 'list' ? 'list' : 'now';
+      else return;
+      drawBook(detailId);
     });
 
     /** What "#market..." asks for: the list, or one item's details. Called by app.js on every change of the address. */
@@ -820,6 +1219,7 @@
       $('tp-type').value = String(st.type);
       $('tp-rarity').value = String(st.rarity);
       $('tp-sort').value = st.sort;
+      for (const fd of PF_FIELDS) { const el = $(`tp-pf-${fd.key}`); if (el && el.value !== (pfRaw[fd.key] || '')) el.value = pfRaw[fd.key] || ''; }
     }
     let typing = 0;
     $('tp-find').addEventListener('input', (ev) => {
@@ -852,10 +1252,44 @@
     function goHome() {
       clearTimeout(typing);
       Object.assign(st, { query: '', type: -1, rarity: -1, favOnly: false, sort: 'relevance', shown: PAGE });
+      clearFilters();
       syncControls();
       apply(true);
       $('market-title').focus();
     }
+    // The price filters: read as they are typed (after a pause), applied without cancelling anything on its way, and
+    // never saved. A field that cannot be read is said and not applied; the others still are.
+    let pfTyping = 0;
+    function clearFilters() { clearTimeout(pfTyping); for (const k of Object.keys(pfRaw)) delete pfRaw[k]; pf = readFilters(pfRaw, Money); }
+    function setFilters() { pf = readFilters(pfRaw, Money); st.shown = PAGE; apply(true, true); }
+    function drawFilters(t) {
+      const on = searchStatus === 'ok' && Boolean(fcounts) && matches.length > 0;
+      const text = !on ? '' : filterText({
+        matches: matches.length, passed: fcounts.passed, failed: fcounts.failed, unchecked: fcounts.uncheckedCount,
+        loading: fcounts.unchecked.some((i) => pending.has(cat.ids[i])), failedLoad: fcounts.unchecked.some((i) => failed.has(cat.ids[i])),
+        listCount: cat.count, filtered: Boolean(st.query.trim()) || filtered(), wholeAll: whole.all,
+      }) + ageNote(oldestUsed, t);
+      if ($('tp-fscope').textContent !== text) $('tp-fscope').textContent = text;
+      $('tp-fscope').hidden = !text;
+      const btn = $('tp-pf-toggle'), label = `Price filters${pf.set ? ` (${pf.set} set)` : ''}`;
+      if (btn.textContent !== label) btn.textContent = label;
+      const errs = pf.errors.map((e) => e.text).join(' ');
+      if ($('tp-pf-err').textContent !== errs) $('tp-pf-err').textContent = errs;
+      $('tp-pf-err').hidden = !errs;
+      if ($('tp-pf-said').textContent !== pf.said) $('tp-pf-said').textContent = pf.said;
+      const bad = new Set(pf.errors.flatMap((e) => [e.key, e.also]).filter(Boolean));
+      for (const fd of PF_FIELDS) { const el = $(`tp-pf-${fd.key}`); if (bad.has(fd.key)) el.setAttribute('aria-invalid', 'true'); else el.removeAttribute('aria-invalid'); }
+      $('tp-pf-clear').hidden = !Object.values(pfRaw).some((v) => String(v || '').trim());
+    }
+    $('tp-pf-panel').addEventListener('input', (ev) => {
+      const k = ev.target && ev.target.getAttribute && ev.target.getAttribute('data-tp-pf');
+      if (!k) return;
+      pfRaw[k] = ev.target.value;
+      clearTimeout(pfTyping);
+      pfTyping = setTimeout(setFilters, 300);
+    });
+    $('tp-pf-panel').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target && ev.target.getAttribute('data-tp-pf')) { clearTimeout(pfTyping); setFilters(); } });
+
     /** The notes' pills: one panel open at a time; a second press, or Escape inside them, closes it. */
     function pill(btn, open) {
       for (const b of view.querySelectorAll('[data-tp-pill]')) {
@@ -886,6 +1320,8 @@
       const a = (n) => t.getAttribute(n);
       if (a('data-tp-fav')) toggleFav(Number(a('data-tp-fav')));
       else if (t.id === 'tp-find-clear') { $('tp-find').value = ''; st.query = ''; st.shown = PAGE; syncControls(); apply(true); $('tp-find').focus(); }
+      else if (t.id === 'tp-pf-toggle') { const open = t.getAttribute('aria-expanded') !== 'true'; t.setAttribute('aria-expanded', String(open)); $('tp-pf-panel').hidden = !open; if (open) $('tp-pf-buyMin').focus(); }
+      else if (t.id === 'tp-pf-clear') { clearFilters(); syncControls(); st.shown = PAGE; apply(true, true); $('tp-pf-toggle').focus(); }
       else if (t.id === 'tp-favs') { st.favOnly = !st.favOnly; st.shown = PAGE; apply(true); }
       else if (t.id === 'tp-more') { st.shown += PAGE; draw(); fetchNeeded(false); }
       else if (t.id === 'tp-refresh') { for (const id of visibleIds()) failed.delete(id); lastError = null; fetchNeeded(true, true); }
@@ -901,6 +1337,7 @@
       else if (t.id === 'tp-favhome-all') pickFavorites();
       else if (a('data-tp-pill')) pill(t, a('aria-expanded') !== 'true');
       else if (t.id === 'tp-link-notice-dismiss') { say(''); try { history.replaceState(null, '', location.pathname + location.search + '#market'); } catch (e) { /* kept */ } }
+      else if (a('data-tp-calc-n')) { calc.chip = Number(a('data-tp-calc-n')); calc.text = ''; const f = $('tp-calc-n'); if (f) f.value = ''; drawBook(detailId); }
       else if (a('data-tp-book')) loadBook(Number(a('data-tp-book')));
       else if (a('data-tp-refresh-one')) { const id = Number(a('data-tp-refresh-one')); failed.delete(id); loadPrices([id], detailCtl ? detailCtl.signal : undefined, undefined, true).then(() => { draw(); drawDetail(); }); drawDetail(); }
       else if (a('data-tp-copy')) { const ok = await copyText(a('data-tp-copy')); $('tp-item-status').textContent = ok ? `Copied ${a('data-tp-copy')}. Paste it in game chat.` : `Copy did not work here. The code is ${a('data-tp-copy')}`; }
@@ -922,12 +1359,14 @@
     function tick() {
       const t = now();
       drawPrices(order.slice(0, st.shown), t);
+      if (fcounts) drawFilters(t);
       if (searchStatus === 'idle') { priceLine(watchIds(cat), t, WATCH_LINE); if (favHome(favs).length) priceLine(favHome(favs), t, FAVHOME_LINE); gemLine(t); }
       for (const li of [...$('tp-results').children, ...$('tp-watch-list').children, ...$('tp-favhome-list').children]) {
         const id = Number(li.getAttribute('data-id')), i = cat.byId.get(id);
         if (i === undefined) continue;
         const base = li.classList.contains('tp-watch-card') ? 'tp-watch-card' : 'tp-row';
-        const note = rowNote(id, t), cls = rowClass(cat.rarities[cat.rarity[i]], note.age, base), el = li.querySelector('.tp-note');
+        const result = base === 'tp-row';
+        const note = result ? resultNote(i, id, t) : rowNote(id, t), cls = rowClass(cat.rarities[cat.rarity[i]], note.age, base) + (result && uncheckedSet.has(i) ? ' is-unchecked' : ''), el = li.querySelector('.tp-note');
         if (li.className !== cls) li.className = cls;
         if (el && el.textContent !== note.text) { el.textContent = note.text; el.hidden = !note.text; }
       }
@@ -939,11 +1378,11 @@
     return {
       route, shown,
       /** For the browser checks: what this tab holds, never the reader's data beyond favorites. */
-      debug: () => ({ listState, home: searchStatus === 'idle', query: st.query, type: st.type, rarity: st.rarity, sort: st.sort, favOnly: st.favOnly, shown: st.shown, matches: matches.length, cached: cache.size, whole: Object.assign({}, whole), stats: client.stats() }),
+      debug: () => ({ listState, home: searchStatus === 'idle', query: st.query, type: st.type, rarity: st.rarity, sort: st.sort, favOnly: st.favOnly, shown: st.shown, matches: matches.length, pf: Object.assign({}, pf.filters), pfSet: pf.set, pfCounts: fcounts ? { passed: fcounts.passed, failed: fcounts.failed, unchecked: fcounts.uncheckedCount } : null, cached: cache.size, whole: Object.assign({}, whole), stats: client.stats() }),
     };
   }
 
-  const Market = { LIST_URL, PAGE, SORT_CAP, CURRENT_MS, OLD_MS, FAV_KEY, FAV_MAX, SORTS, TYPE_LABEL, TYPE_ICON, WATCH, FAV_HOME, GEM_GOLD, GEM_GEMS, typeLabel, watchIds, favHome, lostFavorites, typeTiles, crumbText, sanitizeFavorites, freshness, scopeText, listFailure, mount };
+  const Market = { LIST_URL, PAGE, SORT_CAP, CURRENT_MS, OLD_MS, REUSE_MIN, receivedText, CALC_CHIPS, BOOK_ROWS, BOOK_MOST, readAmount, PF_FIELDS, readFilters, filterText, ageNote, FAV_KEY, FAV_MAX, SORTS, TYPE_LABEL, TYPE_ICON, WATCH, FAV_HOME, GEM_GOLD, GEM_GEMS, typeLabel, watchIds, favHome, lostFavorites, typeTiles, crumbText, sanitizeFavorites, freshness, scopeText, listFailure, mount };
   if (typeof module === 'object' && module.exports) module.exports = Market;
   else root.GW2Market = Market;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

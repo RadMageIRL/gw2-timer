@@ -125,8 +125,8 @@
       h('div', { class: 'adj-controls' },
         h('label', { class: 'field' }, 'I saw it start at ', h('input', { type: 'time', class: 'adj-time', 'data-adj-input': e.id, 'data-fkey': `adj:${e.id}:input` })),
         h('button', { type: 'button', class: 'btn small', 'data-adj-set': e.id, 'data-fkey': `adj:${e.id}:set`, text: 'Set' }),
-        h('button', { type: 'button', class: 'btn small', 'data-adj-nudge': `${e.id}:-5`, 'data-fkey': `adj:${e.id}:minus`, 'aria-label': 'Five minutes earlier', text: '-5 min' }),
-        h('button', { type: 'button', class: 'btn small', 'data-adj-nudge': `${e.id}:5`, 'data-fkey': `adj:${e.id}:plus`, 'aria-label': 'Five minutes later', text: '+5 min' }),
+        h('button', { type: 'button', class: 'btn small', 'data-adj-nudge': `${e.id}:-5`, 'data-fkey': `adj:${e.id}:minus`, 'aria-label': '5 min earlier', text: '-5 min' }),
+        h('button', { type: 'button', class: 'btn small', 'data-adj-nudge': `${e.id}:5`, 'data-fkey': `adj:${e.id}:plus`, 'aria-label': '5 min later', text: '+5 min' }),
         o ? h('button', { type: 'button', class: 'btn small', 'data-adj-reset': e.id, 'data-fkey': `adj:${e.id}:reset`, text: 'Reset to default' }) : null),
       h('p', { class: 'adj-help', text: 'The cycle length stays the same; every later start follows the time you set. Saved in this browser only.' }));
   }
@@ -477,7 +477,7 @@
           h('span', { 'aria-hidden': 'true', text: on ? '★' : '☆' }), ' Star'),
         h('button', { type: 'button', class: 'btn small copy', 'data-copy': e.id, 'data-fkey': 'dlg:copy', 'aria-label': `Copy waypoint for ${e.name}: ${e.waypoint.chat}`, title: `${e.waypoint.name} ${e.waypoint.chat}`, text: 'Copy waypoint' }),
         h('a', { class: 'btn small', href: wikiUrl(e), target: '_blank', rel: 'noopener noreferrer', 'aria-label': `${e.name} on the Guild Wars 2 Wiki (opens a new tab)`, text: 'Wiki' }),
-        h('button', { type: 'button', class: 'btn small', 'data-copy-link': e.id, 'data-fkey': 'dlg:link', 'aria-label': `Copy a link to ${e.name}`, text: 'Copy link' }),
+        h('button', { type: 'button', class: 'btn small', 'data-copy-link': e.id, 'data-fkey': 'dlg:link', 'aria-label': `Copy link to ${e.name}`, text: 'Copy link' }),
         h('button', { type: 'button', class: 'btn small', 'data-calendar': e.id, 'data-fkey': 'dlg:calendar', 'aria-haspopup': 'dialog', 'aria-label': `Add to calendar: ${e.name}`, text: 'Add to calendar' }));
   }
 

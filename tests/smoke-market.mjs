@@ -45,11 +45,14 @@ export function marketChecks(h) {
   /**
    * The API as this page sees it. opts.answer(n, url) can return 'ok', 'offline', 'hold', 'no-cors-429', or an
    * HTTP status, for the n-th request (from 1); opts.delay holds each answer that many ms (opts.delayFor(url), one answer its own time). opts.prices (id -> row)
-   * replaces an item's prices; opts.mangle(rows) may spoil the rows of a prices answer.
+   * replaces an item's prices; opts.mangle(rows) may spoil the rows of a prices answer. opts.books (id -> order book) and
+   * opts.bookFor(id) (a book, or nothing) replace an item's order book.
    */
   function api(opts = {}) {
     return async (page, p) => {
       const url = new URL(p.request.url), n = page.apiRequests.length;
+      // What each request carried (v0.5.0 Phase 3): its method and headers, so a check can show none asks past the browser's cache.
+      (page.apiSent = page.apiSent || []).push({ url: p.request.url, method: p.request.method, headers: p.request.headers || {} });
       page.apiLive = (page.apiLive || 0) + 1;
       page.apiMaxLive = Math.max(page.apiMaxLive || 0, page.apiLive);
       try {
@@ -73,7 +76,8 @@ export function marketChecks(h) {
           const rows = ids.filter((id) => CAT.byId.has(id)).map((id) => ITEM.get(id) || { id, name: CAT.names[CAT.byId.get(id)], description: '', type: CAT.types[CAT.type[CAT.byId.get(id)]], rarity: CAT.rarities[CAT.rarity[CAT.byId.get(id)]], level: 0, vendor_value: 10, flags: [], chat_link: '[&AgEAAAAA]', icon: `https://render.guildwars2.com/file/0000/${id}.png` });
           await send(rows.length < ids.length ? 206 : 200, rows);
         } else if (url.pathname === '/v2/commerce/listings') {
-          const b = BOOK.get(Number(url.searchParams.get('id')));
+          const bid = Number(url.searchParams.get('id'));
+          const b = (opts.bookFor && opts.bookFor(bid)) || (opts.books && opts.books.get(bid)) || BOOK.get(bid);
           if (b) await send(200, b); else await send(404, { text: 'no such id' });
         } else if (url.pathname === '/v2/commerce/exchange/coins') {
           await send(200, { coins_per_gem: 4444, quantity: Math.floor(Number(url.searchParams.get('quantity')) / 4444) });
@@ -214,7 +218,7 @@ export function marketChecks(h) {
         const q = quoteOf(c.id);
         assert.deepEqual([c.name, c.href, c.buy, c.sell, c.icon, c.note], [CAT.names[CAT.byId.get(c.id)], `#market/item/${c.id}`, Money.coins(q.buy).spoken, Money.coins(q.sell).spoken, true, true], String(c.id));
       }
-      assert.equal(await text(page, '#tp-watch-text'), 'Prices from 7:00 AM, current.');
+      assert.equal(await text(page, '#tp-watch-text'), 'Prices received 7:00 AM, current.');
       // Four requests: the eight's prices and their item records (the icons), and the gem exchange's two quotes.
       assert.deepEqual(asked(page), HOME_ASKED);
       // Each icon from the render host, loaded (the browser may serve one from its cache, so requests are not counted).
@@ -240,7 +244,7 @@ export function marketChecks(h) {
       assert.equal(page.apiRequests.length, 4, 'still current: nothing more');
       await later(page, 6 * 60000);
       await click(page, '[data-mode="timers"]'); await click(page, '[data-mode="market"]');
-      await page.waitFor("document.getElementById('tp-watch-text').textContent === 'Prices from 7:06 AM, current.' && document.getElementById('tp-gem-text').textContent === 'Rates from 7:06 AM, current.'", 10000);
+      await page.waitFor("document.getElementById('tp-watch-text').textContent === 'Prices received 7:06 AM, current.' && document.getElementById('tp-gem-text').textContent === 'Rates received 7:06 AM, current.'", 10000);
       assert.deepEqual(page.apiRequests.slice(4).map((u) => `${new URL(u).pathname} ${new URL(u).searchParams.get('ids') || new URL(u).searchParams.get('quantity')}`).sort(),
         ['/v2/commerce/exchange/coins 1000000', '/v2/commerce/exchange/gems 400', `/v2/commerce/prices ${WATCH_Q}`], 'the prices and rates again; the item records are kept');
       assert.deepEqual(unexpected(page), []);
@@ -259,7 +263,7 @@ export function marketChecks(h) {
         [true, false, 'Weapon', 'tp-crumb', String(W), '', '#market'], 'results, named, focus on the name; no history entry');
       await page.waitFor("document.getElementById('tp-count').textContent === '11,780 items with these filters.'", 3000);
       assert.equal(page.apiRequests.filter((u) => /commerce\/prices/.test(u) && !isWatch(u)).length, 1, 'one request for the 50 shown');
-      await page.waitFor("/^Prices from 7:00 AM, current\\.$/.test(document.getElementById('tp-prices-text').textContent)", 10000);
+      await page.waitFor("/^Prices received 7:00 AM, current\\.$/.test(document.getElementById('tp-prices-text').textContent)", 10000);
       // A switch of mode keeps them.
       await click(page, '[data-mode="timers"]'); await click(page, '[data-mode="market"]'); await settle();
       assert.deepEqual(await shownIds(page), want);
@@ -315,7 +319,7 @@ export function marketChecks(h) {
         assert.deepEqual(await lowContrast(page, '#tp-watch-list .tp-note, #tp-watch-list .tp-none, #tp-watch-text'), [], 'the reasons are readable');
         fail = false;
         await click(page, '#tp-watch-refresh');
-        await page.waitFor("document.getElementById('tp-watch-text').textContent === 'Prices from 7:00 AM, current.'", 10000);
+        await page.waitFor("document.getElementById('tp-watch-text').textContent === 'Prices received 7:00 AM, current.'", 10000);
         assert.equal(await page.eval("document.querySelectorAll('#tp-watch-list .tp-note:not([hidden])').length"), 0, 'the notes go with the failure');
         assert.match(await page.eval("document.querySelector('#tp-watch-list [data-id=\"19721\"] .tp-sell').textContent"), /19 silver 10 copper/);
         assert.equal(await text(page, '#tp-watch-refresh'), 'Refresh prices');
@@ -324,7 +328,7 @@ export function marketChecks(h) {
         await click(page, '#tp-watch-refresh');
         const count = () => page.apiRequests.filter((u) => /commerce\/prices/.test(u)).length;
         for (let i = 0; i < 50 && count() === asked; i++) await sleep(100);
-        await page.waitFor("document.getElementById('tp-watch-text').textContent === 'Prices from 7:00 AM, current.' && !document.getElementById('tp-watch-refresh').hidden", 10000);
+        await page.waitFor("document.getElementById('tp-watch-text').textContent === 'Prices received 7:00 AM, current.' && !document.getElementById('tp-watch-refresh').hidden", 10000);
         await sleep(300);
         assert.equal(count(), asked + 1, 'Refresh asks again, once');
         assert.deepEqual(unexpected(page, NET), []);
@@ -337,9 +341,9 @@ export function marketChecks(h) {
       hold = true;
       await later(page, 12 * 60000);
       await click(page, '[data-mode="timers"]'); await click(page, '[data-mode="market"]'); await sleep(400);
-      assert.equal(await text(page, '#tp-watch-text'), 'Loading prices for 8 items... Prices from 7:00 AM, 12 minutes ago: stale.', 'no "Refresh" while a refresh is on its way');
+      assert.equal(await text(page, '#tp-watch-text'), 'Loading prices for 8 items... Prices received 7:00 AM, 12 minutes ago: stale.', 'no "Refresh" while a refresh is on its way');
       assert.equal(await page.eval("document.getElementById('tp-watch-prices').dataset.fresh"), 'stale');
-      assert.deepEqual(await page.eval("[...new Set([...document.querySelectorAll('#tp-watch-list .tp-watch-card')].map((li) => li.classList.contains('is-stale') + ' ' + li.querySelector('.tp-note').textContent))]"), ['true Stale price, fetched 12 minutes ago.']);
+      assert.deepEqual(await page.eval("[...new Set([...document.querySelectorAll('#tp-watch-list .tp-watch-card')].map((li) => li.classList.contains('is-stale') + ' ' + li.querySelector('.tp-note').textContent))]"), ['true Stale price, received 12 minutes ago.']);
       assert.match(await page.eval("document.querySelector('#tp-watch-list [data-id=\"19721\"] .tp-sell').textContent"), /19 silver 10 copper/, 'the older price stays');
       assert.deepEqual(await lowContrast(page, '#tp-watch-text, #tp-watch-list .tp-note'), [], 'stale, readable');
       // An hour on: the 30-second tick marks every card old, in place.
@@ -347,8 +351,8 @@ export function marketChecks(h) {
       await later(page, 60 * 60000);
       await page.waitFor("document.querySelectorAll('#tp-watch-list .tp-watch-card.is-old').length === 8", 35000);
       assert.equal(await page.eval("document.querySelector('#tp-watch-list .tp-watch-card').dataset.mark"), 'kept', 'updated in place, not redrawn');
-      assert.equal(await text(page, '#tp-watch-text'), 'Loading prices for 8 items... Prices from 7:00 AM, 72 minutes ago: old, shown faded.');
-      assert.equal(await text(page, '#tp-watch-list .tp-note'), 'Old price, fetched 72 minutes ago.');
+      assert.equal(await text(page, '#tp-watch-text'), 'Loading prices for 8 items... Prices received 7:00 AM, 72 minutes ago: old, shown faded.');
+      assert.equal(await text(page, '#tp-watch-list .tp-note'), 'Old price, received 72 minutes ago.');
       assert.deepEqual(await lowContrast(page, '#tp-watch-list .tp-watch-card.is-old .coin, #tp-watch-list .tp-note'), [], 'faded, still readable');
       assert.deepEqual(unexpected(page, NET), []);
     } finally { await page.close(); }
@@ -391,9 +395,9 @@ export function marketChecks(h) {
       await market(page); await watchReady(page);
       await page.eval("document.getElementById('tp-find').focus()");
       const seen = [];
-      for (let i = 0; i < 42; i++) { await key(page, 'Tab', 'Tab', 9); seen.push(await page.eval("(() => { const a = document.activeElement; return a.id || a.dataset.tpkey || a.className; })()")); }
+      for (let i = 0; i < 43; i++) { await key(page, 'Tab', 'Tab', 9); seen.push(await page.eval("(() => { const a = document.activeElement; return a.id || a.dataset.tpkey || a.className; })()")); }
       const tiles = Market.typeTiles(CAT);
-      const order = ['tp-type', 'tp-rarity', 'tp-sort', 'tp-favs', 'tp-whole-btn', 'tp-watch-refresh', ...WATCH.map((id) => `watch:${id}`), 'tp-gem-refresh', ...tiles.map((t) => `cat:${t.index}`), 'tp-pill-list', 'tp-pill-fees', 'tp-pill-saved'];
+      const order = ['tp-type', 'tp-rarity', 'tp-sort', 'tp-favs', 'tp-pf-toggle', 'tp-whole-btn', 'tp-watch-refresh', ...WATCH.map((id) => `watch:${id}`), 'tp-gem-refresh', ...tiles.map((t) => `cat:${t.index}`), 'tp-pill-list', 'tp-pill-fees', 'tp-pill-saved'];
       assert.deepEqual(seen.slice(0, order.length), order, 'every one, in this order');
       const a11y = await page.eval(`({ tile: document.querySelector('.tp-cat').textContent, svg: [...document.querySelectorAll('.tp-cat svg')].every((s) => s.getAttribute('aria-hidden') === 'true' && s.getAttribute('focusable') === 'false'),
         list: document.getElementById('tp-watch-list').getAttribute('aria-label'), status: document.getElementById('tp-watch-text').getAttribute('role'), buy: document.querySelector('#tp-watch-list .tp-buy > .sr-only').textContent,
@@ -460,10 +464,10 @@ export function marketChecks(h) {
       assert.deepEqual(stats, [['Highest buy order', Money.coins(q.buy).spoken, '391,900 units wanted in all buy orders'], ['Lowest sell listing', Money.coins(q.sell).spoken, '2,219,204 units listed in all'],
         ['Potential margin', Money.coins(q.margin).spoken, `${Money.percent(q.marginPct)} of the highest buy order, after fees`], ['Break-even listing price', '20 silver 12 copper', 'the lowest that gives back the buy price after fees']]);
       assert.equal(q.breakEven, 2012, 'by hand: 2012 - 101 - 201 = 1710, the 17s 10c buy order; 2011 gives 1709');
-      const look = await page.eval("({ big: parseFloat(getComputedStyle(document.querySelector('#tp-item-body .tp-stat-v')).fontSize), small: parseFloat(getComputedStyle(document.querySelector('#tp-item-body .tp-facts dd')).fontSize), first: [...document.getElementById('tp-item-body').children].slice(0, 2).map((c) => c.className), loss: document.querySelector('.tp-stat-margin .coins').classList.contains('neg') })");
+      const look = await page.eval("({ big: parseFloat(getComputedStyle(document.querySelector('#tp-item-body .tp-stat-v')).fontSize), small: parseFloat(getComputedStyle(document.querySelector('#tp-item-body .tp-facts dd')).fontSize), first: [...document.querySelector('#tp-item-body .tp-detail-main').children].slice(0, 2).map((c) => c.className), loss: document.querySelector('.tp-stat-margin .coins').classList.contains('neg') })");
       assert.ok(look.big >= look.small + 4, JSON.stringify(look));
       assert.deepEqual([look.first, look.loss], [['tp-detail-head', 'tp-stats-wrap'], true]);
-      assert.equal(await text(page, '#tp-item-body .tp-stat-when'), "Prices fetched 7:00 AM, just now (current). ArenaNet's API may itself be up to 2 minutes behind.");
+      assert.equal(await text(page, '#tp-item-body .tp-stat-when'), 'Prices received at 7:00 AM, just now (current). That is when this page got them; when ArenaNet last updated them is not known: the answer carries no time, and ArenaNet lets an answer be reused for up to 2 minutes, so they may date from before 7:00 AM.');
       const facts = await page.eval("[...document.querySelectorAll('#tp-item-body .tp-facts dt')].map((d) => d.textContent)");
       assert.deepEqual(facts, ['Spread', 'Sell one now', 'List one', 'Potential margin', 'Break-even', 'Merchant', 'Item id', 'Chat code']);
       assert.match((await text(page, '#tp-item-body .tp-facts')).replace(/\s+/g, ' '), /Break-even\s*Listing one unit at 20s 12c\s*20 silver 12 copper or more would give back at least the highest buy order, 17s 10c\s*17 silver 10 copper, after both fees; any lower would lose\. A gain of 1 copper or more starts at 20s 13c\s*20 silver 13 copper\. The lowest sell listing, 19s 10c\s*19 silver 10 copper, is below it: listing there now would lose\. An estimate: the fees' rounding is assumed, and an order fills only if someone takes it\./);
@@ -536,7 +540,7 @@ export function marketChecks(h) {
       const homeQ = [...new Set([...WATCH, ...shown])].sort((a, b) => a - b).join(',');
       assert.deepEqual(asked(page).filter((x) => !/exchange/.test(x)), [`/v2/commerce/prices ${homeQ}`, `/v2/items ${homeQ}`]);
       assert.equal(await text(page, '#tp-favhome-hint'), 'saved in this browser, newest first; 1 saved favorite is no longer in the item list, so not shown');
-      assert.equal(await text(page, '#tp-favhome-text'), 'Prices from 7:00 AM, current.');
+      assert.equal(await text(page, '#tp-favhome-text'), 'Prices received 7:00 AM, current.');
       assert.deepEqual(await page.eval("[document.getElementById('tp-favhome-empty').hidden, document.getElementById('tp-favhome-all').hidden, document.getElementById('tp-favhome-all').textContent, document.getElementById('tp-favhome-list').getAttribute('aria-label')]"),
         [true, false, 'Show all 10 favorites', 'Your favorite items']);
       // A name opens the item's details over the home; Back closes them and focus returns to the name.
@@ -609,14 +613,14 @@ export function marketChecks(h) {
       await market(page); await watchReady(page);
       assert.deepEqual(await gemLines(page), ['Gold to gems 100 gold buys 225 gems (about 44s 44c a gem)', 'Gems to gold 400 gems sell for 119g 72s 00c (about 29s 93c a gem)']);
       assert.deepEqual(await page.eval("[...document.querySelectorAll('.tp-gem .coins .sr-only')].map((s) => s.textContent)"), ['44 silver 44 copper', '119 gold 72 silver', '29 silver 93 copper'], 'read out in words');
-      assert.equal(await text(page, '#tp-gem-text'), 'Rates from 7:00 AM, current.');
+      assert.equal(await text(page, '#tp-gem-text'), 'Rates received 7:00 AM, current.');
       assert.equal(await text(page, '.tp-gem-note'), 'The rate changes with the amount, and buying gems and selling them are different prices: neither line is the other one reversed.');
       assert.deepEqual(asked(page).filter((x) => /exchange/.test(x)), ['/v2/commerce/exchange/coins quantity=1000000', '/v2/commerce/exchange/gems quantity=400']);
       // 12 minutes on, the API holding: the rates stay, said stale, no Refresh while one is on its way.
       how = 'hold';
       await later(page, 12 * 60000);
       await click(page, '[data-mode="timers"]'); await click(page, '[data-mode="market"]'); await sleep(400);
-      assert.equal(await text(page, '#tp-gem-text'), 'Loading the rates... Rates from 7:00 AM, 12 minutes ago: stale.');
+      assert.equal(await text(page, '#tp-gem-text'), 'Loading the rates... Rates received 7:00 AM, 12 minutes ago: stale.');
       assert.deepEqual([await page.eval("document.getElementById('tp-gem-prices').dataset.fresh"), await page.eval("document.getElementById('tp-gem-refresh').hidden")], ['stale', true]);
       assert.match((await gemLines(page))[0], /100 gold buys 225 gems/, 'the older rate stays, with its age');
       assert.deepEqual(await lowContrast(page, '#tp-gem-text, .tp-gem *'), [], 'readable');
@@ -634,7 +638,7 @@ export function marketChecks(h) {
       assert.equal(await text(page, '#tp-gem-refresh'), 'Try again');
       how = 'ok';
       await click(page, '#tp-gem-refresh');
-      await page.waitFor("document.getElementById('tp-gem-text').textContent === 'Rates from 7:00 AM, current.'", 10000);
+      await page.waitFor("document.getElementById('tp-gem-text').textContent === 'Rates received 7:00 AM, current.'", 10000);
       assert.match((await gemLines(page))[1], /400 gems sell for 119g 72s 00c/);
       assert.equal(await text(page, '#tp-gem-refresh'), 'Refresh rates');
       assert.deepEqual(unexpected(page, NET), []);
@@ -743,7 +747,7 @@ export function marketChecks(h) {
       const first = await page.eval("document.querySelector('#tp-results .tp-row .tp-sell').textContent");
       assert.ok(first.includes(Money.coins(q.sell).spoken) && first.includes(`${Money.count(q.sellQty)} listed`), first);
       await page.waitFor("document.querySelectorAll('#tp-results .tp-icon img').length > 0");
-      assert.match(await text(page, '#tp-prices-text'), /^Prices from 7:00 AM, current\.$/);
+      assert.match(await text(page, '#tp-prices-text'), /^Prices received 7:00 AM, current\.$/);
       assert.deepEqual(unexpected(page), []);
     } finally { await page.close(); }
     // An item the API no longer prices (left out of a 206, or a 404 for all): said so, not "loading" or a price.
@@ -904,26 +908,26 @@ export function marketChecks(h) {
     try {
       await market(page);
       await typeTp(page, 'glob'); await idle(page);
-      assert.match(await text(page, '#tp-prices-text'), /^Prices from 7:00 AM, current\.$/);
+      assert.match(await text(page, '#tp-prices-text'), /^Prices received 7:00 AM, current\.$/);
       hold = true;
       const later = (ms) => page.eval(`(() => { const prev = Date.now; Date.now = () => prev() + ${ms}; })()`);
       await later(12 * 60000);
       await click(page, '[data-mode="timers"]'); await click(page, '[data-mode="market"]'); await sleep(400);
       const stale = await text(page, '#tp-prices-text');
-      assert.equal(stale, 'Loading prices for 2 items... Prices from 7:00 AM, 12 minutes ago: stale.', 'no "Refresh" while a refresh is on its way');
+      assert.equal(stale, 'Loading prices for 2 items... Prices received 7:00 AM, 12 minutes ago: stale.', 'no "Refresh" while a refresh is on its way');
       assert.equal(await page.eval("document.getElementById('tp-prices').dataset.fresh"), 'stale');
-      assert.deepEqual(await page.eval("[...document.querySelectorAll('#tp-results .tp-row')].map((r) => [r.classList.contains('is-stale'), r.querySelector('.tp-note').textContent])"), [[true, 'Stale price, fetched 12 minutes ago.'], [true, 'Stale price, fetched 12 minutes ago.']]);
+      assert.deepEqual(await page.eval("[...document.querySelectorAll('#tp-results .tp-row')].map((r) => [r.classList.contains('is-stale'), r.querySelector('.tp-note').textContent])"), [[true, 'Stale price, received 12 minutes ago.'], [true, 'Stale price, received 12 minutes ago.']]);
       assert.deepEqual(await lowContrast(page, '#tp-results .tp-note'), [], 'the note is readable (dark)');
       assert.match(await page.eval("document.querySelector('#tp-results .tp-sell').textContent"), /silver|gold|copper/, 'the older price stays');
       await later(60 * 60000);
       await page.eval("document.getElementById('tp-favs').click()"); await page.eval("document.getElementById('tp-favs').click()"); await sleep(300);
-      assert.equal(await text(page, '#tp-prices-text'), 'Loading prices for 2 items... Prices from 7:00 AM, 72 minutes ago: old, shown faded.');
+      assert.equal(await text(page, '#tp-prices-text'), 'Loading prices for 2 items... Prices received 7:00 AM, 72 minutes ago: old, shown faded.');
       // The refresh gives up (the API holds): the older prices stay, said with their age, and Refresh is offered.
       await page.waitFor("/could not/.test(document.getElementById('tp-prices-text').textContent)", 70000);
-      assert.match(await text(page, '#tp-prices-text'), /^ArenaNet's API did not answer in time, so some prices could not be refreshed\. Nothing is estimated in its place\. Prices from 7:00 AM, 7\d minutes ago: old, shown faded\. Refresh for current prices\.$/);
+      assert.match(await text(page, '#tp-prices-text'), /^ArenaNet's API did not answer in time, so some prices could not be refreshed\. Nothing is estimated in its place\. Prices received 7:00 AM, 7\d minutes ago: old, shown faded\. Refresh for current prices\.$/);
       assert.equal(await page.eval("document.getElementById('tp-refresh').hidden"), false);
       assert.equal(await page.eval("document.querySelectorAll('#tp-results .tp-row.is-old').length"), 2, 'faded');
-      assert.match(await text(page, '#tp-results .tp-note'), /^Old price, fetched 7\d minutes ago\. A newer price could not be loaded: ArenaNet's API did not answer in time\.$/);
+      assert.match(await text(page, '#tp-results .tp-note'), /^Old price, received 7\d minutes ago\. A newer price could not be loaded: ArenaNet's API did not answer in time\.$/);
       assert.deepEqual(await lowContrast(page, '#tp-results .tp-row.is-old .coin, #tp-results .tp-row.is-old .tp-q'), [], 'faded, still readable');
       assert.deepEqual(unexpected(page, NET), []);
     } finally { await page.close(); }
@@ -936,15 +940,15 @@ export function marketChecks(h) {
       await typeTp(page, 'glob of ecto'); await idle(page);
       await page.eval('(() => { const prev = Date.now; Date.now = () => prev() + 3 * 60000; })()');
       await typeTp(page, 'glob'); await idle(page);
-      assert.equal(await text(page, '#tp-prices-text'), 'Prices from 7:00 AM to 7:03 AM, current.', 'Glob of Ectoplasm kept from 7:00, the other fetched at 7:03');
+      assert.equal(await text(page, '#tp-prices-text'), 'Prices received 7:00 AM to 7:03 AM, current.', 'Glob of Ectoplasm kept from 7:00, the other fetched at 7:03');
       await page.eval('(() => { const prev = Date.now; Date.now = () => prev() + 3 * 60000; })()');
       await page.eval("document.getElementById('tp-favs').click()"); await page.eval("document.getElementById('tp-favs').click()"); await idle(page);
-      assert.equal(await text(page, '#tp-prices-text'), 'Prices from 7:03 AM to 7:06 AM, current.', 'past 5 minutes the 7:00 price was asked again');
+      assert.equal(await text(page, '#tp-prices-text'), 'Prices received 7:03 AM to 7:06 AM, current.', 'past 5 minutes the 7:00 price was asked again');
       // Refresh asks again even for current prices: one request for both rows, then one time.
       const before = page.apiRequests.filter((u) => /commerce\/prices/.test(u)).length;
       await click(page, '#tp-refresh'); await idle(page);
       assert.equal(page.apiRequests.filter((u) => /commerce\/prices/.test(u)).length, before + 1);
-      assert.equal(await text(page, '#tp-prices-text'), 'Prices from 7:06 AM, current.');
+      assert.equal(await text(page, '#tp-prices-text'), 'Prices received 7:06 AM, current.');
       assert.deepEqual(unexpected(page), []);
     } finally { await page.close(); }
   });
@@ -977,9 +981,9 @@ export function marketChecks(h) {
       await page.eval("(() => { const prev = Date.now; Date.now = () => prev() + 6 * 60000; })()");
       await page.waitFor("document.querySelector('#tp-results [data-id=\"19721\"]').classList.contains('is-stale')", 35000);
       assert.equal(await page.eval("document.querySelector('#tp-results [data-id=\"19721\"]').dataset.mark"), 'kept', 'updated in place, not redrawn');
-      assert.equal(await noteOf(19721), 'Stale price, fetched 6 minutes ago.');
+      assert.equal(await noteOf(19721), 'Stale price, received 6 minutes ago.');
       assert.equal(await noteOf(DRAGON), null);
-      assert.equal(await text(page, '#tp-prices-text'), 'Prices from 7:00 AM, 6 minutes ago: stale. Refresh for current prices.');
+      assert.equal(await text(page, '#tp-prices-text'), 'Prices received 7:00 AM, 6 minutes ago: stale. Refresh for current prices.');
       assert.deepEqual(await lowContrast(page, '#tp-results .tp-note, #tp-results .tp-none'), [], 'readable (light)');
       assert.deepEqual(unexpected(page, NET), []);
     } finally { await page.close(); }
@@ -1044,6 +1048,397 @@ export function marketChecks(h) {
     } finally { await page.close(); }
   });
 
+  // ---- The price filters (v0.5.0 Phase 2) ----
+  // What should pass is worked out here from the raw price rows, by plain comparisons, not by the page's own code.
+
+  const pfNet = (p) => p - Math.max(1, Math.floor((p * 5 + 50) / 100)) - Math.max(1, Math.floor((p * 10 + 50) / 100));
+  const pfOracle = (row, f) => {
+    const b = row.buys.quantity > 0 ? row.buys.unit_price : null, s = row.sells.quantity > 0 ? row.sells.unit_price : null, m = b !== null && s !== null ? pfNet(s) - b : null;
+    const has = (k) => f[k] !== undefined;
+    return !(has('buyMin') && !(b !== null && b >= f.buyMin)) && !(has('buyMax') && !(b !== null && b <= f.buyMax)) && !(has('sellMin') && !(s !== null && s >= f.sellMin)) && !(has('sellMax') && !(s !== null && s <= f.sellMax))
+      && !(has('marginMin') && !(m !== null && m >= f.marginMin)) && !(has('pctMin') && !(m !== null && m * 1000 >= f.pctMin * b)) && !(has('wantedMin') && !(row.buys.quantity >= f.wantedMin)) && !(has('listedMin') && !(row.sells.quantity >= f.listedMin));
+  };
+  const IRON = Catalog.search(CAT, { query: 'iron sw' }).indexes.map((i) => CAT.ids[i]);
+  const pfWant = (ids, f, rowOf = priceOf) => ids.filter((id) => pfOracle(rowOf(id), f));
+  const openPf = async (page) => { if (await page.eval("document.getElementById('tp-pf-toggle').getAttribute('aria-expanded')") !== 'true') await click(page, '#tp-pf-toggle'); };
+  // Typed as a reader types; the page reads it 300 ms after the last key.
+  const setPf = async (page, key, t, wait = 500) => {
+    await page.eval(`(() => { const i = document.getElementById('tp-pf-${key}'); i.focus(); i.select(); })()`);
+    if (t === '') await page.eval(`(() => { const i = document.getElementById('tp-pf-${key}'); i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    else await page.send('Input.insertText', { text: t });
+    if (wait) await sleep(wait);
+  };
+  const pfIdle = (page) => page.waitFor("!document.querySelector('#tp-results[aria-busy=\"true\"]') && !/Loading/.test(document.getElementById('tp-scope').textContent + document.getElementById('tp-fscope').textContent)", 20000);
+  const pfLook = (page) => page.eval("({ fscope: document.getElementById('tp-fscope').hidden ? '' : document.getElementById('tp-fscope').textContent, toggle: document.getElementById('tp-pf-toggle').textContent, said: document.getElementById('tp-pf-said').textContent, err: document.getElementById('tp-pf-err').hidden ? '' : document.getElementById('tp-pf-err').textContent, crumb: document.getElementById('tp-crumbs').hidden ? '' : document.getElementById('tp-crumb').textContent, scope: document.getElementById('tp-scope').textContent, empty: document.getElementById('tp-empty').hidden ? '' : document.getElementById('tp-empty').textContent })");
+  const pfRows = (page) => page.eval("[...document.querySelectorAll('#tp-results .tp-row')].map((r) => [Number(r.dataset.id), r.dataset.pf || '', (r.querySelector('.tp-note') || {}).hidden ? '' : r.querySelector('.tp-note').textContent])");
+  const priceReqs = (page, from = 0) => page.apiRequests.slice(from).filter((u) => /commerce\/prices\?/.test(u)).map((u) => new URL(u).searchParams.get('ids').split(',').map(Number));
+  const ft = (o) => Market.filterText(Object.assign({ loading: false, failedLoad: false, listCount: CAT.count, filtered: true, wholeAll: false }, o));
+
+  check('Trading Post price filters: each of the eight narrows the results to the items whose loaded price passes, both ends of a range included; together every one must hold; the line under the sort gives the three counts; every match is priced in at most 5 requests, and a new threshold asks for nothing', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
+    try {
+      await market(page);
+      await typeTp(page, 'iron sw'); await idle(page);
+      const M = IRON.length;
+      assert.ok(M > 300 && M <= 1000, String(M));
+      assert.deepEqual([(await pfLook(page)).fscope, await text(page, '#tp-pf-toggle'), await page.eval("document.getElementById('tp-pf-panel').hidden")], ['', 'Price filters', true], 'closed and silent until asked for');
+      const n0 = page.apiRequests.length;
+      await click(page, '#tp-pf-toggle');
+      assert.deepEqual(await page.eval("[document.getElementById('tp-pf-panel').hidden, document.getElementById('tp-pf-toggle').getAttribute('aria-expanded'), document.activeElement.id]"), [false, 'true', 'tp-pf-buyMin']);
+      // One filter: sell listing at least 15g. Every match's price is asked for (the 50 shown were there already).
+      const shows = async (f, why) => {
+        const want = pfWant(IRON, f), l = await pfLook(page), rows = await pfRows(page);
+        assert.deepEqual(rows.map((r) => r[0]), want.slice(0, 50), `${why}: the rows are the ones that pass, in the search's order`);
+        assert.ok(rows.every((r) => r[1] === 'pass'), `${why}: every row marked as passing`);
+        assert.equal(l.fscope, ft({ matches: M, passed: want.length, failed: M - want.length, unchecked: 0 }), why);
+        return want;
+      };
+      await setPf(page, 'sellMin', '15g'); await pfIdle(page);
+      const reqs = priceReqs(page, n0);
+      assert.ok(reqs.length >= 1 && reqs.length <= 5, `${reqs.length} price requests for the filter`);
+      assert.deepEqual(reqs.flat().sort((a, b) => a - b), IRON.filter((id) => !IRON.slice(0, 50).includes(id)).sort((a, b) => a - b), 'exactly the matches not priced yet, each once');
+      const w1 = await shows({ sellMin: 150000 }, 'sell from 15g');
+      assert.ok(w1.length > 20 && w1.length < M - 20, `a real cut: ${w1.length} of ${M}`);
+      let l = await pfLook(page);
+      assert.deepEqual([l.toggle, l.said, l.err, l.crumb], ['Price filters (1 set)', 'Applied: lowest sell listing from 15g 00s 00c.', '', '“iron sw” · 1 price filter']);
+      assert.equal(await page.eval("document.getElementById('tp-pf-clear').getClientRects().length > 0"), true, 'Clear price filters is offered while one is typed');
+      assert.equal(await text(page, '#tp-count'), `${M} items match “iron sw”.`, 'the count of matches is the search\'s, as before');
+      const n1 = page.apiRequests.length;
+      // Both ends of a range are included: an item sitting exactly on a bound passes, one copper further it does not.
+      const edge = priceOf(w1[0]).sells.unit_price;
+      await setPf(page, 'sellMin', Money.coins(edge).text); await setPf(page, 'sellMax', Money.coins(edge).text);
+      const on = await shows({ sellMin: edge, sellMax: edge }, 'from and to on one price');
+      assert.ok(on.includes(w1[0]));
+      await setPf(page, 'sellMin', Money.coins(edge + 1).text); await setPf(page, 'sellMax', '');
+      assert.ok(!(await shows({ sellMin: edge + 1 }, 'one copper above')).includes(w1[0]));
+      await setPf(page, 'sellMin', ''); await setPf(page, 'sellMax', Money.coins(edge - 1).text);
+      assert.ok(!(await shows({ sellMax: edge - 1 }, 'one copper below')).includes(w1[0]));
+      await setPf(page, 'sellMax', '');
+      assert.deepEqual([(await pfLook(page)).fscope, (await pfRows(page)).length, (await pfRows(page))[0][1]], ['', 50, ''], 'no filter set: every match again, no line, no marks');
+      // Each of the others alone, then all together.
+      const each = { buyMin: ['20s', 2000], buyMax: ['5g', 50000], sellMin: ['50s', 5000], sellMax: ['30g', 300000], marginMin: ['1s', 100], pctMin: ['5', 50], wantedMin: ['3,000', 3000], listedMin: ['2000', 2000] };
+      for (const [key, [typed, value]] of Object.entries(each)) {
+        await setPf(page, key, typed);
+        const w = await shows({ [key]: value }, key);
+        assert.ok(w.length > 0 && w.length < M, `${key}: ${w.length}`);
+        await setPf(page, key, '');
+      }
+      const all = {};
+      for (const [key, [typed, value]] of Object.entries(each)) { await setPf(page, key, typed, 0); all[key] = value; }
+      await sleep(600);
+      const wAll = await shows(all, 'all eight');
+      l = await pfLook(page);
+      assert.equal(l.toggle, 'Price filters (8 set)');
+      assert.equal(l.said, 'Applied: highest buy order from 20s 00c; highest buy order to 5g 00s 00c; lowest sell listing from 50s 00c; lowest sell listing to 30g 00s 00c; potential margin at least 1s 00c; potential margin % at least 5.0%; total queued units wanted, in all buy orders, at least 3,000; total queued units listed, in all sell listings, at least 2,000.');
+      // A price sort ranks the ones that pass, and says so.
+      await select(page, 'tp-sort', 'margin-desc'); await pfIdle(page);
+      const ranked = wAll.slice().sort((a, b) => quoteOf(b).margin - quoteOf(a).margin || CAT.pos[CAT.byId.get(a)] - CAT.pos[CAT.byId.get(b)]);
+      assert.deepEqual((await pfRows(page)).map((r) => r[0]), ranked.slice(0, 50));
+      assert.equal((await pfLook(page)).scope, `Ranked by potential margin after fees, largest first, among the ${wAll.length} items that pass the price filters. Not a ranking of the whole market.`);
+      await select(page, 'tp-sort', 'relevance'); await pfIdle(page);
+      // Nothing passes: said, with the count checked, and that nothing was left out for want of a price.
+      await click(page, '#tp-pf-clear'); await sleep(200);
+      await setPf(page, 'buyMin', '9,000g');
+      l = await pfLook(page);
+      assert.deepEqual([(await pfRows(page)).length, l.empty, l.fscope], [0, `No item passes the price filters: ${M} matches were checked, and none passes. Nothing is hidden for want of a price.`, ft({ matches: M, passed: 0, failed: M, unchecked: 0 })]);
+      // All of that, after the first filter, asked ArenaNet for no price: every one was current.
+      assert.deepEqual(priceReqs(page, n1), [], 'no price request for any change of threshold or sort');
+      // Clear: every match again.
+      await click(page, '#tp-pf-clear'); await sleep(200);
+      assert.deepEqual([(await pfLook(page)).fscope, (await pfLook(page)).toggle, (await pfRows(page)).length, await page.eval("[...document.querySelectorAll('#tp-pf-panel input')].map((i) => i.value).join('')"), await page.eval('document.activeElement.id')], ['', 'Price filters', 50, '', 'tp-pf-toggle']);
+      assert.equal(await page.eval("document.getElementById('tp-pf-clear').getClientRects().length"), 0, 'and not when none is: it is not on screen');
+      assert.equal(await page.eval('location.hash'), '#market', 'nothing of the filters is in the address');
+      assert.deepEqual(await page.eval("Object.entries(localStorage).concat(Object.entries(sessionStorage)).filter(([k, v]) => /pf|filter|15g|9,000g|150000/i.test(k + ' ' + v)).map(([k]) => k)"), [], 'and nothing of them is saved');
+      if (SHOTS) { await setPf(page, 'sellMin', '1g'); await setPf(page, 'wantedMin', '2,000'); await page.screenshot(join(SHOTS, 'filters-1280.png'), true); }
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post price filters: a field that cannot be read is said and not applied, the others still are; a range upside down is refused, never swapped', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
+    try {
+      await market(page);
+      await typeTp(page, 'iron sw'); await idle(page);
+      await openPf(page);
+      await setPf(page, 'buyMin', '2.5g'); await pfIdle(page);
+      let l = await pfLook(page);
+      assert.deepEqual([l.err, l.fscope, l.toggle, (await pfRows(page)).length], ['Highest buy order from: “2.5g” is not a coin amount. Type one like 2g 50s 10c, 75s or 40c. It is not applied.', '', 'Price filters', 50], 'not applied: every match still shown');
+      assert.deepEqual(await page.eval("[document.getElementById('tp-pf-buyMin').getAttribute('aria-invalid'), document.getElementById('tp-pf-err').getAttribute('role'), document.getElementById('tp-pf-buyMin').getAttribute('aria-describedby')]"), ['true', 'alert', 'tp-pf-how tp-pf-err']);
+      // A good field beside it is applied while the bad one stays refused.
+      await setPf(page, 'sellMax', '30s'); await pfIdle(page);
+      l = await pfLook(page);
+      const want = pfWant(IRON, { sellMax: 3000 });
+      assert.deepEqual([l.toggle, l.said, l.err !== '', (await pfRows(page)).map((r) => r[0])], ['Price filters (1 set)', 'Applied: lowest sell listing to 30s 00c.', true, want.slice(0, 50)]);
+      await setPf(page, 'buyMin', '');
+      assert.deepEqual([(await pfLook(page)).err, await page.eval("document.getElementById('tp-pf-buyMin').getAttribute('aria-invalid')")], ['', null]);
+      // From above to: neither end applied, both fields marked, in words.
+      await setPf(page, 'sellMin', '2g'); await pfIdle(page);
+      l = await pfLook(page);
+      assert.deepEqual([l.err, l.toggle, l.fscope, (await pfRows(page)).length], ['Lowest sell listing: from 2g 00s 00c is above to 30s 00c, so nothing could pass. Neither is applied.', 'Price filters', '', 50]);
+      assert.deepEqual(await page.eval("['sellMin', 'sellMax'].map((k) => document.getElementById('tp-pf-' + k).getAttribute('aria-invalid'))"), ['true', 'true']);
+      // A percentage and a count that are not ones.
+      await setPf(page, 'sellMin', ''); await setPf(page, 'sellMax', ''); await setPf(page, 'pctMin', '10.25'); await setPf(page, 'wantedMin', '12k');
+      assert.equal((await pfLook(page)).err, 'Potential margin % at least: “10.25” is not a percentage. Type a number like 10 or 12.5. It is not applied. Total queued units wanted, in all buy orders, at least: “12k” is not a whole number of units. It is not applied.');
+      assert.deepEqual(await lowContrast(page, '#tp-pf-panel *'), [], 'readable');
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post price filters: an item whose price could not be loaded is not checked: listed after the ones that pass and marked, never dropped, never counted as passing or as 0; an item the API has no price for fails; Try again checks them', async () => {
+    // The home's price request and the search's (the 50 shown) are answered; while `down`, every later one is refused (HTTP 400, no retry).
+    let down = true, seen = 0;
+    const gone = IRON[3]; // the API has no price for this one
+    const page = await open({ at: AT, api: api({ missing: new Set([gone]), answer: (k, u) => (u.pathname === '/v2/commerce/prices' && ++seen > 2 && down ? 400 : 'ok') }), url: BASE + '#market', wait: false });
+    try {
+      await market(page);
+      await typeTp(page, 'iron sw'); await idle(page);
+      assert.equal(seen, 2, 'the home and the search have each asked once, nothing else yet');
+      await openPf(page);
+      const f = { sellMin: 10000 };
+      await setPf(page, 'sellMin', '1g');
+      await page.waitFor("/could not be loaded\\.$/.test(document.getElementById('tp-fscope').textContent)", 20000);
+      const first = IRON.slice(0, 50), rest = IRON.slice(50);
+      const pass = pfWant(first.filter((id) => id !== gone), f);
+      const l = await pfLook(page);
+      assert.equal(l.fscope, ft({ matches: IRON.length, passed: pass.length, failed: 50 - pass.length, unchecked: rest.length, failedLoad: true }));
+      assert.match(l.fscope, /^Price filters: \d+ pass(es)? and \d+ (do|does) not, among only the 50 of 358 matching items whose prices are loaded\. The other 308 are not checked: listed after the ones that pass, and not known to pass or to fail\. Their prices could not be loaded\.$/);
+      const rows = await pfRows(page);
+      assert.deepEqual(rows.map((r) => r[0]), pass.concat(rest).slice(0, 50), 'the ones that pass, then the ones not checked');
+      assert.deepEqual(rows.map((r) => r[1]), pass.map(() => 'pass').concat(rest.map(() => 'unchecked')).slice(0, 50));
+      assert.ok(!rows.some((r) => r[0] === gone), 'the item the API has no price for fails: not listed');
+      const un = rows.filter((r) => r[1] === 'unchecked');
+      assert.ok(un.length > 0 && un.every((r) => r[2] === "Not checked against the price filters: its price could not be loaded. No price: ArenaNet's API refused the request."), JSON.stringify(un[0]));
+      assert.equal(await page.eval("document.querySelector('#tp-results .tp-row.is-unchecked .tp-buy').textContent.replace(/\\s+/g, ' ').trim()"), 'Highest buy order: Buynot loaded', 'no price shown for it, and no 0');
+      assert.match(await text(page, '#tp-prices-text'), /^ArenaNet's API refused the request, so \d+ items? (has|have) no price here\. Nothing is estimated in its place\./);
+      assert.equal(await text(page, '#tp-refresh'), 'Try again');
+      assert.deepEqual(await lowContrast(page, '#tp-fscope, #tp-results .tp-row.is-unchecked .tp-note'), [], 'readable');
+      // Under a price sort too: the unchecked come after every ranked one, and the line says "so far".
+      await select(page, 'tp-sort', 'sell-asc');
+      await page.waitFor("/so far/.test(document.getElementById('tp-scope').textContent)", 20000);
+      const sorted = await pfRows(page), lastPass = sorted.map((r) => r[1]).lastIndexOf('pass'), firstUn = sorted.map((r) => r[1]).indexOf('unchecked');
+      assert.ok(firstUn === -1 || lastPass < firstUn, 'no unchecked row among the ranked ones');
+      assert.equal((await pfLook(page)).scope, `Ranked by lowest sell listing, low to high, among the ${pass.length} items that pass the price filters so far. Not a ranking of the whole market.`);
+      await select(page, 'tp-sort', 'relevance'); await sleep(300);
+      // The API answers again: Try again loads them, and then every match was checked.
+      down = false;
+      await click(page, '#tp-refresh');
+      await page.waitFor("/Every match was checked/.test(document.getElementById('tp-fscope').textContent)", 20000);
+      const want = pfWant(IRON.filter((id) => id !== gone), f);
+      assert.equal((await pfLook(page)).fscope, ft({ matches: IRON.length, passed: want.length, failed: IRON.length - want.length, unchecked: 0 }));
+      assert.deepEqual((await pfRows(page)).map((r) => [r[0], r[1]]), want.slice(0, 50).map((id) => [id, 'pass']));
+      assert.deepEqual(unexpected(page, NET), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post price filters over more than 1,000 matches or the whole list: only the shown rows are priced, the rest are said to be unchecked, and nothing scans the market until the reader confirms a whole-market load', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
+    try {
+      await market(page); await watchReady(page);
+      const n0 = page.apiRequests.length;
+      await openPf(page);
+      // Nothing typed and no other filter: the filter leaves the home and covers the whole list, of which 8 prices are loaded.
+      await setPf(page, 'sellMin', '1s'); await pfIdle(page);
+      assert.equal(await page.eval("document.getElementById('tp-home').hidden"), true);
+      let l = await pfLook(page);
+      assert.equal(l.crumb, 'Every item · 1 price filter');
+      let reqs = priceReqs(page, n0);
+      assert.equal(reqs.length, 1, 'one request: the rows shown');
+      assert.ok(reqs[0].length <= 50);
+      const loaded = new Set([...WATCH, ...reqs[0]]);
+      const passed = pfWant([...loaded], { sellMin: 100 }).length;
+      assert.equal(l.fscope, ft({ matches: CAT.count, passed, failed: loaded.size - passed, unchecked: CAT.count - loaded.size, filtered: false }));
+      assert.match(l.fscope, new RegExp(`among only the ${loaded.size} of ${esc(COUNT)} matching items whose prices are loaded\\. The other [\\d,]+ are not checked: .* To check every match, narrow the search to 1,000 items or fewer, or load the whole market\\.$`));
+      const rows = await pfRows(page);
+      assert.ok(rows.some((r) => r[1] === 'unchecked' && r[2] === 'Not checked against the price filters: its price is not loaded.'), 'the rows after the passing ones say they are not checked');
+      // A type with thousands of items: the same, and still one request for what is shown.
+      const n1 = page.apiRequests.length;
+      await select(page, 'tp-type', String(CAT.types.indexOf('Weapon'))); await pfIdle(page);
+      assert.equal(priceReqs(page, n1).length, 1);
+      assert.match((await pfLook(page)).fscope, /To check every match, narrow the search to 1,000 items or fewer, or load the whole market\.$/);
+      // Show more prices the rows now shown (the next 50, and any row above them that moved up unchecked), in one
+      // request, by the reader's own press, and no more.
+      const n2 = page.apiRequests.length;
+      await click(page, '#tp-more'); await pfIdle(page);
+      reqs = priceReqs(page, n2);
+      assert.ok(reqs.length === 1 && reqs[0].length <= 100, JSON.stringify(reqs.map((r) => r.length)));
+      await sleep(1500);
+      assert.equal(priceReqs(page, n2).length, 1, 'nothing follows on its own');
+      assert.equal(await page.eval("document.getElementById('tp-whole-progress').hidden && document.getElementById('tp-whole-confirm').hidden"), true, 'no whole-market load was started');
+      // Trading Post home clears the price filters with everything else.
+      await click(page, '#tp-home-btn'); await sleep(300);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-home').hidden, document.getElementById('tp-pf-sellMin').value, document.getElementById('tp-pf-toggle').textContent, document.getElementById('tp-fscope').hidden]"), [false, '', 'Price filters', true]);
+      // With the whole market loaded, by the reader's confirmation, the filter covers every item and says so.
+      await click(page, '#tp-whole-btn'); await click(page, '#tp-whole-start');
+      await page.waitFor("/^Whole market loaded/.test(document.getElementById('tp-whole-status').textContent)", 90000);
+      await setPf(page, 'pctMin', '25'); await setPf(page, 'listedMin', '5,000'); await pfIdle(page);
+      const want = pfWant(CAT.ids, { pctMin: 250, listedMin: 5000 });
+      l = await pfLook(page);
+      assert.equal(l.fscope, ft({ matches: CAT.count, passed: want.length, failed: CAT.count - want.length, unchecked: 0, filtered: false, wholeAll: true }));
+      assert.match(l.fscope, new RegExp(`^Price filters: [\\d,]+ of all ${esc(COUNT)} items in the item list pass, from the whole-market load; [\\d,]+ do not\\.$`));
+      assert.ok(want.length > 10 && want.length < CAT.count / 2, String(want.length));
+      assert.deepEqual((await pfRows(page)).map((r) => r[0]), [...want].sort((a, b) => CAT.pos[CAT.byId.get(a)] - CAT.pos[CAT.byId.get(b)]).slice(0, 50), 'by name, across the whole list');
+      // With a type chosen, every one of its items is checked too, but that is no longer the whole market, and the line does not say so.
+      await select(page, 'tp-type', String(CAT.types.indexOf('Weapon'))); await pfIdle(page);
+      const weapons = CAT.ids.filter((id, i) => CAT.types[CAT.type[i]] === 'Weapon'), wantW = pfWant(weapons, { pctMin: 250, listedMin: 5000 });
+      assert.equal((await pfLook(page)).fscope, ft({ matches: weapons.length, passed: wantW.length, failed: weapons.length - wantW.length, unchecked: 0, filtered: true, wholeAll: true }));
+      assert.match((await pfLook(page)).fscope, /Every match was checked\. Not a filter of the whole market\.$/);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post: prices that are no longer current are asked for again before a sort or a price filter uses them, in at most 5 requests; where they cannot be (over 1,000 matches), the line says how old the oldest is', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
+    try {
+      await market(page);
+      await typeTp(page, 'iron sw'); await idle(page);
+      await select(page, 'tp-sort', 'sell-desc'); await idle(page);
+      const all = [...IRON].sort((a, b) => a - b);
+      // Six minutes on (5 min 33 s, so the ages round the same way every run), every price here is stale.
+      await later(page, 333000);
+      // A new sort: every match's price is asked for again, not only the missing ones.
+      let n = page.apiRequests.length;
+      await select(page, 'tp-sort', 'margin-desc'); await idle(page);
+      let reqs = priceReqs(page, n);
+      assert.ok(reqs.length >= 1 && reqs.length <= 5, `${reqs.length} requests`);
+      assert.deepEqual(reqs.flat().sort((a, b) => a - b), all, 'every match, each once');
+      assert.ok(!/oldest price/.test(await text(page, '#tp-scope')), 'ranked on current prices: no age to report');
+      assert.match(await text(page, '#tp-prices-text'), /current\.$/);
+      // Stale again, then a price filter: the same.
+      await later(page, 333000);
+      n = page.apiRequests.length;
+      await select(page, 'tp-sort', 'relevance'); await sleep(300);
+      const n2 = page.apiRequests.length;
+      await openPf(page);
+      await setPf(page, 'sellMin', '1g'); await pfIdle(page);
+      reqs = priceReqs(page, n2);
+      assert.ok(reqs.length >= 1 && reqs.length <= 5, `${reqs.length} requests`);
+      assert.deepEqual([...new Set(priceReqs(page, n).flat())].sort((a, b) => a - b), all, 'every match asked for again before it is filtered');
+      assert.equal(reqs.flat().length, new Set(reqs.flat()).size, 'no price asked for twice');
+      const want = pfWant(IRON, { sellMin: 10000 });
+      assert.equal((await pfLook(page)).fscope, ft({ matches: IRON.length, passed: want.length, failed: IRON.length - want.length, unchecked: 0 }), 'all current: no age in the line');
+      // Over 1,000 matches the prices cannot all be refreshed without a scan: the line says how old the oldest used is.
+      await later(page, 333000);
+      await typeTp(page, ''); await pfIdle(page);
+      assert.match((await pfLook(page)).fscope, / The oldest price used was received \d+ minutes ago: stale, and may have changed\.$/);
+      await click(page, '#tp-pf-clear'); await sleep(200);
+      await select(page, 'tp-sort', 'buy-desc'); await idle(page);
+      assert.match(await text(page, '#tp-scope'), /^Ranked by highest buy order, high to low, among only the [\d,]+ of [\d,]+ matching items whose prices are loaded\..* The oldest price used was received \d+ minutes ago: stale, and may have changed\.$/);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post: a price sort or a price filter over 874 matches prices every one of them in 5 requests, never 6: the rows shown are asked for with the rest, each price once', async () => {
+    const CLERIC = Catalog.search(CAT, { query: 'cleric' }).indexes.map((i) => CAT.ids[i]);
+    assert.ok(CLERIC.length > 800 && CLERIC.length <= 1000, String(CLERIC.length));
+    for (const how of ['sort', 'filter']) {
+      const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false });
+      try {
+        await market(page); await watchReady(page);
+        // The sort or the filter is chosen first, over the whole list (only its shown rows are priced); then the search.
+        if (how === 'sort') await select(page, 'tp-sort', 'sell-desc'); else { await openPf(page); await setPf(page, 'sellMin', '1s'); }
+        await pfIdle(page);
+        const had = new Set(priceReqs(page).flat());
+        const n = page.apiRequests.length;
+        await typeTp(page, 'cleric'); await pfIdle(page);
+        const reqs = priceReqs(page, n), need = CLERIC.filter((id) => !had.has(id)).sort((a, b) => a - b);
+        assert.ok(need.length > 800, String(need.length));
+        assert.equal(reqs.length, 5, `${how}: ${reqs.map((r) => r.length).join(' + ')} prices`);
+        assert.deepEqual(reqs.flat().sort((a, b) => a - b), need, `${how}: every match not priced yet, each once`);
+        assert.ok(reqs.every((r) => r.length <= 200));
+        assert.ok(!(await rowsText(page)).some((t) => /not requested yet|not loaded|loading/.test(t)), `${how}: every shown row has its price`);
+        assert.deepEqual(unexpected(page), []);
+      } finally { await page.close(); }
+    }
+  });
+
+  check('Trading Post price filters on a slow API: typing a search key by key and then editing a filter cancels only what a new search replaces, asks for no price twice, leaves no row unpriced or unchecked, and stays within 5 requests for the search that stands', async () => {
+    const page = await open({ at: AT, api: api({ delay: 1200 }), url: BASE + '#market', wait: false });
+    try {
+      await market(page);
+      await openPf(page);
+      await setPf(page, 'sellMin', '1g', 350);
+      // Typed one key at a time, each key a new search that replaces the one before it.
+      await page.eval("document.getElementById('tp-find').focus()");
+      let beforeLast = 0;
+      for (const ch of 'iron sw') { if (ch === 'w') beforeLast = page.apiRequests.length; await page.send('Input.insertText', { text: ch }); await sleep(150); }
+      // While the last search's prices are still on their way (1.2 s each), the filter is edited twice. An edit
+      // cancels nothing: were a request cancelled, its prices would have to be asked for a second time.
+      await sleep(100);
+      await setPf(page, 'sellMin', '2g', 150); await setPf(page, 'wantedMin', '100', 0);
+      await pfIdle(page); await sleep(600); await pfIdle(page);
+      const f = { sellMin: 20000, wantedMin: 100 }, want = pfWant(IRON, f);
+      const rows = await pfRows(page);
+      assert.deepEqual(rows.map((r) => [r[0], r[1]]), want.slice(0, 50).map((id) => [id, 'pass']));
+      assert.equal((await pfLook(page)).fscope, ft({ matches: IRON.length, passed: want.length, failed: IRON.length - want.length, unchecked: 0 }), 'every match checked');
+      assert.ok(!(await rowsText(page)).some((t) => /not requested yet|not loaded|loading/.test(t)), 'no row left without its price');
+      // The search that stands ("iron sw", 358 matches) took at most 5 price requests, counting from its last key.
+      const last = priceReqs(page, beforeLast);
+      assert.ok(last.length >= 1 && last.length <= 5, `${last.length} price requests from the last key on`);
+      assert.equal(last.flat().length, new Set(last.flat()).size, 'no price asked for twice: no edit cancelled a request');
+      assert.ok(IRON.every((id) => priceReqs(page).flat().includes(id)), 'every match was asked for');
+      // Now that everything is current, editing thresholds asks for nothing.
+      const n = page.apiRequests.length;
+      await setPf(page, 'sellMin', '3g'); await setPf(page, 'pctMin', '2'); await setPf(page, 'pctMin', '');
+      assert.deepEqual(priceReqs(page, n), [], 'no price is asked for (rows that come into view may still ask for their icons)');
+      assert.deepEqual(unexpected(page, NET), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post price filters keep to memory: an item\'s details, Back, a switch to the timer and back, and a link to an item all leave them as set; the address never carries them; on a 360 px phone the panel fits and every field is 36 px and named', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false, width: 360, height: 740, mobile: true });
+    try {
+      await market(page);
+      await typeTp(page, 'iron sw'); await idle(page);
+      await openPf(page);
+      await setPf(page, 'sellMin', '1g'); await setPf(page, 'wantedMin', '500'); await pfIdle(page);
+      const f = { sellMin: 10000, wantedMin: 500 }, want = pfWant(IRON, f);
+      const same = async (why) => {
+        assert.deepEqual([(await pfRows(page)).map((r) => r[0]), (await pfLook(page)).toggle, await page.eval("[document.getElementById('tp-pf-sellMin').value, document.getElementById('tp-pf-wantedMin').value]")], [want.slice(0, 50), 'Price filters (2 set)', ['1g', '500']], why);
+      };
+      await same('set');
+      // Layout and names on the phone.
+      const m = await page.eval(`(() => {
+        const p = document.getElementById('tp-pf-panel');
+        const lab = (i) => [i.closest('fieldset').querySelector('legend').textContent, i.closest('label').textContent.replace(/\\s+/g, ' ').trim()];
+        return { side: document.documentElement.scrollWidth <= 360, out: [...p.querySelectorAll('*')].filter((e) => e.getClientRects().length && (e.getBoundingClientRect().right > 360.5 || e.getBoundingClientRect().left < -0.5)).map((e) => e.id || e.className || e.tagName),
+          heights: [...p.querySelectorAll('input, button'), document.getElementById('tp-pf-toggle')].filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().height)),
+          names: [...p.querySelectorAll('input')].map(lab), status: [document.getElementById('tp-fscope').getAttribute('role'), document.getElementById('tp-pf-said').getAttribute('role'), document.getElementById('tp-pf-toggle').getAttribute('aria-controls')] };
+      })()`);
+      assert.deepEqual([m.side, m.out], [true, []], 'no sideways scroll, nothing sticking out');
+      assert.ok(m.heights.length >= 10 && m.heights.every((x) => x >= 36), JSON.stringify(m.heights));
+      assert.deepEqual(m.names, [['Highest buy order', 'from'], ['Highest buy order', 'to'], ['Lowest sell listing', 'from'], ['Lowest sell listing', 'to'], ['Potential margin after fees', 'at least'], ['Potential margin after fees', 'at least, % of buy'],
+        ['Total queued units', 'wanted in all buy orders, at least'], ['Total queued units', 'listed in all sell listings, at least']]);
+      assert.deepEqual(m.status, ['status', 'status', 'tp-pf-panel']);
+      assert.match(await text(page, '#tp-pf-total'), /^These are the totals ArenaNet reports for every buy order and every sell listing together, at any price\. They are not what can be bought or sold near the best price/);
+      assert.deepEqual(await lowContrast(page, '#tp-pf-panel *, #tp-fscope'), [], 'readable');
+      if (SHOTS) await page.screenshot(join(SHOTS, 'filters-360.png'), true);
+      // An item's details and Back.
+      await page.eval("document.querySelector('#tp-results a.tp-name').click()");
+      await page.waitFor("document.getElementById('tp-item-dialog').open");
+      assert.equal(await page.eval('location.hash'), `#market/item/${want[0]}`, 'the address names the item and nothing else');
+      await page.eval('history.back()'); await sleep(400);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-item-dialog').open, location.hash]"), [false, '#market']);
+      await same('after an item\'s details and Back');
+      // To the timer and back: kept, as the search is.
+      await click(page, 'button[data-mode="timers"]'); await sleep(300);
+      await click(page, 'button[data-mode="market"]'); await sleep(400);
+      await same('after a switch to Event Timers and back');
+      assert.equal(await page.eval("document.getElementById('tp-find').value"), 'iron sw');
+      // Forward to the item again, then Back: still there.
+      await page.eval('history.go(-1)'); await sleep(300); await page.eval('history.go(1)'); await sleep(400);
+      await same('after Back and Forward across the modes');
+      assert.ok(!/1g|500|pf|filter/i.test(await page.eval('location.href')), 'nothing of the filters in the address');
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+    // A link straight to an item opens its details as before; the filters start empty.
+    const linked = await open({ at: AT, api: api(), url: BASE + '#market/item/19721', wait: false });
+    try {
+      await linked.waitFor("document.getElementById('tp-item-dialog').open && /current/.test(document.getElementById('tp-item-body').textContent)", 15000);
+      assert.deepEqual(await linked.eval("[document.getElementById('tp-pf-toggle').textContent, document.getElementById('tp-fscope').hidden, document.getElementById('tp-home').hidden]"), ['Price filters', true, false]);
+      assert.deepEqual(unexpected(linked), []);
+    } finally { await linked.close(); }
+  });
+
   // ---- One item ----
 
   check('Trading Post: an item\'s details give both prices, proceeds after fees, the margin, the order book, the chat code and a link; Escape and Back close them and focus returns', async () => {
@@ -1073,6 +1468,11 @@ export function marketChecks(h) {
       assert.equal(await page.eval('navigator.clipboard.readText()'), '[&AgEJTQAA]');
       await click(page, '[data-tp-link]'); await settle();
       assert.equal(await page.eval('navigator.clipboard.readText()'), 'https://radmagelabs.com/gw2-timer/#market/item/19721');
+      // v0.5.0 release candidate (found by axe-core): each named button's name holds its visible words, so speech input
+      // can say what it sees (WCAG 2.5.3); before, "Copy chat code" and "Copy link" were "Copy the chat code" and "Copy a link".
+      assert.deepEqual(await page.eval("[...document.querySelectorAll('#tp-item-body [data-tp-copy], #tp-item-body [data-tp-link]')].map((b) => [b.textContent, b.getAttribute('aria-label')])"),
+        [['Copy chat code', 'Copy chat code for Glob of Ectoplasm: [&AgEJTQAA]'], ['Copy link', 'Copy link to Glob of Ectoplasm']]);
+      assert.deepEqual(await page.eval("(() => { const f = (s) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\\s+/g, ' ').trim(); return [...document.querySelectorAll('#tp-item-dialog [aria-label]')].filter((b) => f(b.textContent) && !f(b.getAttribute('aria-label')).includes(f(b.textContent))).map((b) => b.getAttribute('aria-label')); })()"), []);
       await key(page, 'Escape', 'Escape', 27); await sleep(400);
       assert.deepEqual(await page.eval("[document.getElementById('tp-item-dialog').open, location.hash, document.activeElement.getAttribute('href')]"), [false, '#market', '#market/item/19721'], 'Escape closes, the address goes back, focus returns to the name');
       // Escape went back in history, it did not rewrite the address: the details' entry is still ahead, so Forward
@@ -1094,6 +1494,673 @@ export function marketChecks(h) {
       assert.deepEqual(await page.eval("[document.getElementById('tp-item-dialog').open, document.getElementById('timers-view').hidden]"), [false, false]);
       assert.deepEqual(unexpected(page), []);
     } finally { await page.close(); }
+  });
+
+  // ---- The quantity calculator (v0.5.0 Phase 1) ----
+  // Its items are outside Market Watch where a check gives them its own order book, so nothing the home loaded stands in.
+
+  const lvl = (unit_price, quantity, listings = 1) => ({ listings, unit_price, quantity });
+  const calcFigs = (page) => page.eval("(() => { const o = {}; for (const d of document.querySelectorAll('#tp-calc-out [data-tp-fig]')) { const c = d.cloneNode(true); for (const s of c.querySelectorAll('.sr-only')) s.remove(); o[d.getAttribute('data-tp-fig')] = c.textContent.replace(/\\s+/g, ' ').trim(); } return o; })()");
+  const calcOpts = (page) => page.eval("(() => { const o = {}; for (const id of ['get-now', 'get-order', 'give-now', 'give-list']) { const c = document.getElementById('tp-calc-' + id).cloneNode(true); for (const s of c.querySelectorAll('.sr-only')) s.remove(); o[id] = c.textContent.replace(/\\s+/g, ' ').trim(); } return o; })()");
+  const showBook = async (page) => { await click(page, '#tp-item-body [data-tp-book]'); await page.waitFor("document.getElementById('tp-calc-title') && document.querySelector('#tp-calc-out [data-tp-fig]')"); };
+  // Typed as a reader types: the field focused, what is there selected, the keys sent to the browser.
+  const typeAmount = async (page, t) => {
+    await page.eval("(() => { const i = document.getElementById('tp-calc-n'); i.focus(); i.select(); })()");
+    if (t === '') await page.eval("(() => { const i = document.getElementById('tp-calc-n'); i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
+    else await page.send('Input.insertText', { text: t });
+    await settle();
+  };
+  const chip = async (page, n) => { await click(page, `#tp-item-body [data-tp-calc-n="${n}"]`); await settle(); };
+  const way = async (page, name, value) => { await click(page, `#tp-item-body input[name="tp-calc-${name}"][value="${value}"]`); await settle(); };
+  const listingsAsked = (page) => page.apiRequests.filter((u) => /commerce\/listings\?/.test(u)).length;
+  const openItem = async (page, id) => { await page.waitFor(`document.getElementById('tp-item-dialog').open && /current/.test(document.getElementById('tp-item-body').textContent)`, 15000); assert.equal(await page.eval('location.hash'), `#market/item/${id}`); };
+  const ctext = (n) => Money.coins(n).text;
+  const bookOf = (id) => { const b = BOOK.get(id); return { buys: Money.cleanSide(b.buys, 'buys'), sells: Money.cleanSide(b.sells, 'sells') }; };
+  // Items the home never loads, each with an order book a check makes for it.
+  const OWN = Catalog.search(CAT, { query: 'iron sw' }).indexes.map((i) => CAT.ids[i]).filter((id) => !WATCH.includes(id) && !BOOK.has(id) && id % 23 && id % 97);
+
+  check('Trading Post calculator: an amount walks the order book it already has, level by level; the four ways to trade each show their own figure; changing the amount or the way asks ArenaNet for nothing', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market/item/19721', wait: false });
+    try {
+      await openItem(page, 19721);
+      assert.equal(listingsAsked(page), 0, 'the order book is not asked for until its button is pressed');
+      assert.equal(await text(page, '#tp-item-body [data-tp-book]'), 'Show the order book and quantity calculator');
+      await page.eval("document.querySelector('#tp-item-body [data-tp-book]').focus()");
+      await showBook(page);
+      assert.equal(listingsAsked(page), 1);
+      assert.equal(await page.eval('document.activeElement.id'), 'tp-calc-title', 'focus moves to the calculator, not into the void');
+      const before = page.apiRequests.length;
+      // One unit, both at once: the book's own best prices (17s 06c and 18s 95c), not the prices above (17s 10c, 19s 10c).
+      const B1 = bookOf(19721);
+      let f = await calcFigs(page);
+      assert.equal(f['buy-now'], '18s 95c in all, 18s 95c each, all at one price. No fee to buy.');
+      assert.equal(f['sell-now'], '17s 06c before fees, 17s 06c each, all at one price. After the listing fee of 85c and the exchange fee of 1s 71c: about 14s 50c.', '1706 - 85 (85.3) - 171 (170.6) = 1450');
+      assert.match(f.gain, /^about −4s 45c: about 14s 50c after fees, less the cost of 18s 95c, if the order book is still as ArenaNet reported it\. An estimate, never a promise: the book may have changed\.$/);
+      assert.equal(f.roi, `about ${Money.percent(-445 / 1895)}: the profit or loss (about −4s 45c) divided by the cost (18s 95c), for 1 unit bought now and sold now, if the order book is still as ArenaNet reported it. An estimate, never a promise: the book may have changed.`);
+      assert.equal(f.even, 'Selling now gives back about 14s 50c each after fees: having paid more than that for each, selling now would lose.');
+      assert.equal(await page.eval("document.querySelector('#tp-book-warn [data-tp-warn=\"differs\"]').textContent.replace(/\\s+/g, ' ').includes('The calculator uses the order book only.')"), true, 'the book and the prices differ here, and it is said');
+      assert.deepEqual(await page.eval("[...document.querySelectorAll('#tp-item-body [data-tp-calc-n]')].map((b) => [b.textContent, b.getAttribute('aria-pressed')])"), [['1', 'true'], ['5', 'false'], ['10', 'false'], ['50', 'false'], ['100', 'false']]);
+      assert.equal(await page.eval("document.querySelectorAll('#tp-item-body .tp-book-table tbody tr').length"), 10, 'five prices a side for a small amount');
+      // Every ready amount, against the module's plan for the same book, and by hand for 250.
+      for (const n of [5, 10, 50, 100]) {
+        await chip(page, n);
+        const p = Money.plan(B1, n, { get: 'now', give: 'now' });
+        f = await calcFigs(page);
+        assert.ok(f['buy-now'].startsWith(`${ctext(p.cost)} in all`), `${n}: ${f['buy-now']}`);
+        assert.ok(f['sell-now'].includes(`about ${ctext(p.back.low)}.`), `${n}: ${f['sell-now']}`);
+        assert.ok(f.gain.startsWith(`about ${ctext(p.gain.low)}: `), `${n}: ${f.gain}`);
+        assert.equal(await page.eval("document.querySelector('#tp-item-body [data-tp-calc-n][aria-pressed=\"true\"]').textContent"), String(n));
+      }
+      await typeAmount(page, '250');
+      f = await calcFigs(page);
+      assert.equal(f['buy-now'], '47g 37s 69c in all, about 18s 96c each, across 2 prices, up to 18s 96c each. No fee to buy.', '231 x 1895 + 19 x 1896 = 473,769; 1895.076 each, rounded up');
+      assert.equal(f['sell-now'], '42g 62s 66c before fees, about 17s 05c each, across 2 prices, down to 17s 04c each. After the listing fee of 2g 13s 13c and the exchange fee of 4g 26s 27c: about 36g 23s 26c.', '133 x 1706 + 117 x 1704 = 426,266');
+      assert.ok(f.gain.startsWith('about −11g 14s 43c: about 36g 23s 26c after fees, less the cost of 47g 37s 69c, if the order book is still'), f.gain);
+      assert.equal(await page.eval("document.querySelectorAll('#tp-item-body [data-tp-calc-n][aria-pressed=\"true\"]').length"), 0, 'a typed amount is no ready amount');
+      // The tables show what the amount takes of each price.
+      const tables = await page.eval("[...document.querySelectorAll('#tp-item-body .tp-book-table')].map((t) => ({ cap: t.querySelector('caption').textContent, head: [...t.querySelectorAll('th')].map((x) => x.textContent), taken: [...t.querySelectorAll('tbody tr')].map((r) => r.lastElementChild.textContent) }))");
+      assert.deepEqual(tables.map((t) => [t.cap, t.head[3], t.taken]), [['Buy orders, highest first: 6,785 units at 8 prices in all', 'Taken for 250', ['133', '117', '', '', '']], ['Sell listings, lowest first: 1,464 units at 8 prices in all', 'Taken for 250', ['231', '19', '', '', '']]]);
+      // The four ways, each with its figure beside it before it is chosen.
+      const o = await calcOpts(page), p250 = Money.plan(B1, 250, { get: 'order', give: 'list' });
+      assert.deepEqual(o, { 'get-now': 'Buy now from the sell listings: 47g 37s 69c', 'get-order': `Place a buy order at the highest, 17s 06c each: ${ctext(p250.order.total)}, only if it fills`,
+        'give-now': 'Sell now to the buy orders: about 36g 23s 26c after fees', 'give-list': `List them at the lowest, 18s 95c each: about ${ctext(p250.list.net)} after fees, only if it sells` });
+      assert.equal(p250.order.total, 426500, '250 x 1706');
+      assert.equal(p250.list.net, 402687, '473,750 - 23,688 (23,687.5 up) - 47,375');
+      // A buy order and a listing: both only hoped for, said as such, and no longer called executable.
+      await way(page, 'get', 'order'); await way(page, 'give', 'list');
+      f = await calcFigs(page);
+      assert.deepEqual(Object.keys(f), ['buy-order', 'list', 'gain', 'roi', 'even']);
+      assert.ok(f['buy-order'].includes('42g 65s 00c, paid when the order is placed, no fee. Not something the order book fills now: it fills only if sellers come to it, and it may never fill.'), f['buy-order']);
+      assert.ok(f.list.includes('about 40g 26s 87c after the listing fee of 2g 36s 88c (paid when listing, not returned) and the exchange fee of 4g 73s 75c. Not something the order book fills now: only if it sells.'), f.list);
+      assert.equal(f.gain, 'about −2g 38s 13c: about 40g 26s 87c after fees, less the cost of 42g 65s 00c, only if the buy order fills and the listing sells: neither is certain, and prices move.');
+      assert.ok(!/still as ArenaNet reported/.test(f.gain), 'not presented as something that can be done now');
+      assert.equal(f.even, `Listing the 250 units at ${ctext(p250.breakEven.price)} each or more would give back the cost after both fees; any lower would lose. The lowest sell listing in the book is below it: listing there would lose.`);
+      assert.equal(await page.eval("[...document.querySelectorAll('#tp-item-body .tp-book-table tbody tr')].filter((r) => r.lastElementChild.textContent).length"), 0, 'an order and a listing take nothing from the book');
+      // Mixed: buy now, then list.
+      await way(page, 'get', 'now');
+      f = await calcFigs(page);
+      assert.ok(f.gain.startsWith(`about ${ctext(402687 - 473769)}: `) && f.gain.endsWith('only if the listing sells: that is not certain, and prices move.'), f.gain);
+      // The status line a screen reader hears: the amount and the result, as an estimate.
+      assert.equal(await text(page, '#tp-calc-said'), `250 units: profit or loss ${Money.coins(402687 - 473769).spoken}, an estimate.`);
+      // None of all that asked ArenaNet for anything.
+      assert.equal(page.apiRequests.length, before, 'no request for any amount or way');
+      assert.equal(listingsAsked(page), 1);
+      assert.deepEqual(await lowContrast(page, '#tp-item-body .tp-book *'), [], 'readable');
+      if (SHOTS) await page.screenshot(join(SHOTS, 'calculator-1280.png'), true);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post calculator: what is typed stays, with its caret and its focus, while a late price arrives and while the 30-second tick redraws the details', async () => {
+    // Prices come 2.5 s late, so they arrive while the amount is being typed.
+    const page = await open({ at: AT, api: api({ delayFor: (u) => (u.pathname === '/v2/commerce/prices' ? 2500 : 0) }), url: BASE + '#market/item/19721', wait: false });
+    try {
+      await page.waitFor("document.getElementById('tp-item-dialog').open && document.querySelector('#tp-item-body [data-tp-book]')", 15000);
+      assert.match(await text(page, '#tp-item-body .tp-facts'), /Loading\.\.\./, 'the price is still on its way');
+      await showBook(page);
+      await typeAmount(page, '13');
+      await page.eval("(() => { const i = document.getElementById('tp-calc-n'); i.setSelectionRange(1, 1); i.dataset.mark = 'kept'; document.querySelector('#tp-item-body input[name=\"tp-calc-give\"][value=\"list\"]').dataset.mark = 'kept'; })()");
+      const state = () => page.eval("(() => { const i = document.getElementById('tp-calc-n'); return { value: i.value, focus: document.activeElement === i, caret: [i.selectionStart, i.selectionEnd], mark: i.dataset.mark || '', radio: document.querySelector('#tp-item-body input[name=\"tp-calc-give\"][value=\"list\"]').dataset.mark || '' }; })()");
+      const KEPT = { value: '13', focus: true, caret: [1, 1], mark: 'kept', radio: 'kept' };
+      assert.deepEqual(await state(), KEPT);
+      // The late price arrives and the details above are redrawn around the field.
+      await page.waitFor("/current/.test((document.querySelector('#tp-item-body .tp-stat-when') || {}).textContent || '')", 15000);
+      assert.deepEqual(await state(), KEPT, 'after the price arrived');
+      assert.ok((await calcFigs(page))['buy-now'].startsWith(`${ctext(13 * 1895)} in all`), 'the figures are for the 13 typed');
+      // Six minutes on: the tick redraws the details and marks the book stale, in place.
+      await page.eval("document.querySelector('#tp-item-body .tp-detail-main').dataset.mark = 'old'"); // the jump below is 5 min 33 s: with the tick at most 30 s later, the age still rounds to 6 minutes
+      await later(page, 333000);
+      await page.waitFor("/6 minutes ago \\(stale\\)/.test(document.getElementById('tp-book-when').textContent)", 35000);
+      assert.deepEqual(await state(), KEPT, 'after the 30-second tick');
+      // Typing goes on where the caret was: a 7 between the 1 and the 3.
+      await page.send('Input.insertText', { text: '7' }); await settle();
+      assert.deepEqual(await page.eval("[document.getElementById('tp-calc-n').value, document.getElementById('tp-calc-n').selectionStart]"), ['173', 2]);
+      const p = Money.plan(bookOf(19721), 173, { get: 'now', give: 'now' });
+      assert.ok((await calcFigs(page))['buy-now'].startsWith(`${ctext(p.cost)} in all`));
+      // A second tick, with an amount that is not one: the error stays, the field too.
+      await typeAmount(page, '2.5');
+      await later(page, 60000);
+      await page.waitFor("/[78] minutes ago \\(stale\\)/.test(document.getElementById('tp-book-when').textContent)", 35000);
+      assert.deepEqual(await page.eval("[document.getElementById('tp-calc-n').value, document.activeElement.id, document.getElementById('tp-calc-err').hidden, document.getElementById('tp-calc-n').dataset.mark]"), ['2.5', 'tp-calc-n', false, 'kept']);
+      assert.equal(listingsAsked(page), 1, 'no tick asks for the order book again');
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post calculator: an amount is a whole number from 1 to 250; anything else is refused in words and nothing is worked out for it', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market/item/19721', wait: false });
+    try {
+      await openItem(page, 19721);
+      await showBook(page);
+      const look = () => page.eval("(() => { const i = document.getElementById('tp-calc-n'), e = document.getElementById('tp-calc-err'); return { err: e.hidden ? '' : e.textContent, role: e.getAttribute('role'), invalid: i.getAttribute('aria-invalid'), figs: document.querySelectorAll('#tp-calc-out [data-tp-fig]').length, none: (document.querySelector('#tp-calc-out > .tp-none') || {}).textContent || '', taken: [...document.querySelectorAll('#tp-item-body .tp-book-table tbody tr')].filter((r) => r.lastElementChild.textContent).length, pressed: document.querySelectorAll('#tp-item-body [data-tp-calc-n][aria-pressed=\"true\"]').length, said: document.getElementById('tp-calc-said').textContent }; })()");
+      const RANGE = 'Type a whole number from 1 to 250: one Trading Post transaction holds at most 250 units.', WHOLE = 'That is not a whole number. Type 1 to 250, in digits only.';
+      for (const [t, want] of [['0', RANGE], ['251', RANGE], ['1000', RANGE], ['2.5', WHOLE], ['-3', WHOLE], ['1e2', WHOLE], ['ten', WHOLE], ['1,000', WHOLE]]) {
+        await typeAmount(page, t);
+        assert.deepEqual(await look(), { err: want, role: 'alert', invalid: 'true', figs: 0, none: 'No figures: the amount is not one this page can work with.', taken: 0, pressed: 0, said: '' }, t);
+      }
+      // The two ends are amounts: 1 and 250.
+      for (const [t, cost] of [['1', 1895], ['250', 473769]]) {
+        await typeAmount(page, t);
+        const l = await look();
+        assert.deepEqual([l.err, l.invalid, l.none, l.figs > 0], ['', null, '', true], t);
+        assert.ok((await calcFigs(page))['buy-now'].startsWith(`${ctext(cost)} in all`), t);
+      }
+      // Emptied, the field gives way to the ready amount last chosen (1), which shows as chosen again.
+      await chip(page, 50); await typeAmount(page, '7'); await typeAmount(page, '');
+      assert.deepEqual([(await look()).pressed, await page.eval("document.querySelector('#tp-item-body [data-tp-calc-n][aria-pressed=\"true\"]').textContent")], [1, '50']);
+      // A ready amount clears what was typed.
+      await typeAmount(page, '999'); await chip(page, 5);
+      assert.deepEqual([await page.eval("document.getElementById('tp-calc-n').value"), (await look()).err], ['', '']);
+      assert.equal(listingsAsked(page), 1);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post calculator: when the order book holds fewer units than asked, it says how many it holds and works out no cost, proceeds, profit, return or break-even for the amount', async () => {
+    const [thin, noSells, noBuys] = OWN;
+    const books = new Map([[thin, { id: thin, buys: [lvl(50, 3)], sells: [lvl(100, 4), lvl(105, 5)] }], [noSells, { id: noSells, buys: [lvl(50, 3)], sells: [] }], [noBuys, { id: noBuys, buys: [], sells: [lvl(100, 4)] }]]);
+    let page = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${thin}`, wait: false });
+    try {
+      await openItem(page, thin);
+      await showBook(page);
+      await chip(page, 10);
+      let f = await calcFigs(page);
+      assert.deepEqual(f, { 'buy-now': 'Only 9 of 10 are listed in the whole order book. Those 9 would cost 9s 25c; nothing is worked out for the other 1.',
+        'sell-now': 'Only 3 of 10 are wanted in the whole order book. Those 3 would sell for 1s 50c before fees; nothing is worked out for the other 7.', gain: 'None: the order book lists only 9 of the 10 to buy.' }, 'no return and no break-even either');
+      assert.deepEqual(await calcOpts(page).then((o) => [o['get-now'], o['give-now']]), ['Buy now from the sell listings: only 9 of 10 are listed', 'Sell now to the buy orders: only 3 of 10 are wanted']);
+      assert.equal(await text(page, '#tp-calc-said'), '10 units: no result, the order book cannot fill it.');
+      assert.deepEqual(await page.eval("[...document.querySelectorAll('#tp-item-body .tp-book-table')].map((t) => [...t.querySelectorAll('tbody tr')].map((r) => r.lastElementChild.textContent))"), [['3'], ['4', '5']], 'what there is, is shown taken');
+      // 4 units: the sell listings hold them, the buy orders do not.
+      await typeAmount(page, '4');
+      f = await calcFigs(page);
+      assert.deepEqual([f['buy-now'], f.gain, 'roi' in f, 'even' in f], ['4s 00c in all, 1s 00c each, all at one price. No fee to buy.', 'None: the order book wants only 3 of the 4.', false, false]);
+      // Exactly what the book holds is not a shortfall: 3 to sell, 9 to buy.
+      await typeAmount(page, '3');
+      f = await calcFigs(page);
+      assert.ok(f.gain.startsWith('about −1s 73c: about 1s 27c after fees, less the cost of 3s 00c'), f.gain); // 150 - 8 (7.5 up) - 15 = 127
+      await typeAmount(page, '9'); await way(page, 'give', 'list');
+      f = await calcFigs(page);
+      assert.ok(f['buy-now'].startsWith('9s 25c in all, about 1s 03c each, across 2 prices, up to 1s 05c each.'), f['buy-now']); // 925 / 9 = 102.8
+      assert.ok(/^about −1s 60c: about 7s 65c after fees, less the cost of 9s 25c, only if the listing sells/.test(f.gain), f.gain); // 900 - 45 - 90
+      // A listing takes nothing from the book, so 10 by order and listing has a result, marked as hoped for.
+      await typeAmount(page, '10'); await way(page, 'get', 'order');
+      f = await calcFigs(page);
+      assert.ok(/^about 3s 50c: about 8s 50c after fees, less the cost of 5s 00c, only if the buy order fills and the listing sells/.test(f.gain), f.gain);
+      assert.equal(listingsAsked(page), 1);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+    // A side with nothing at all: said, and never a price of 0.
+    for (const [id, figs] of [[noSells, { 'buy-now': 'No sell listings in the order book.', gain: 'None: the order book has no sell listings.' }], [noBuys, { 'sell-now': 'No buy orders in the order book.', gain: 'None: the order book has no buy orders.' }]]) {
+      page = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${id}`, wait: false });
+      try {
+        await openItem(page, id);
+        await showBook(page);
+        const f = await calcFigs(page);
+        for (const [k, v] of Object.entries(figs)) assert.equal(f[k], v, `${id} ${k}`);
+        // The prices above have both sides; the book lacks one: said as a difference between the two answers.
+        assert.match((await text(page, '#tp-book-warn [data-tp-warn="differs"]')).replace(/\s+/g, ' '), id === noSells ? /the book has buy orders from 50c\s*50 copper and no sell listings\. Neither says which is newer\./ : /the book has no buy orders and sell listings from 1s 00c\s*1 silver\. Neither says which is newer\./);
+        assert.ok(!/\b0c\b/.test(Object.values(f).join(' ').replace(/\d0c/g, '')), JSON.stringify(f));
+        assert.equal(await page.eval("[...document.querySelectorAll('#tp-item-body .tp-book-table tbody')].some((b) => b.textContent === 'None.')"), true);
+        assert.deepEqual(unexpected(page), []);
+      } finally { await page.close(); }
+    }
+  });
+
+  check('Trading Post calculator: repeated, disordered and unreadable price levels are counted once or left out, said in words, and figures that reach them are marked uncertain', async () => {
+    const [rep, bad] = OWN.slice(3);
+    const REAL = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'tp-book-repeats.json'), 'utf8'));
+    const books = new Map([
+      // The second buy price comes twice, as the live API does it; a level may be missing after it.
+      [rep, { id: rep, buys: [lvl(90, 2), lvl(80, 3), lvl(80, 3), lvl(70, 50)], sells: [lvl(200, 400)] }],
+      // Sell listings out of order, with rows that are not price levels (no price, no units, a price that is text) and a side that is no list.
+      [bad, { id: bad, buys: 'none', sells: [lvl(300, 5), lvl(250, 5), { listings: 1, unit_price: 0, quantity: 9 }, { listings: 1, unit_price: 260, quantity: 0 }, { listings: 1, unit_price: 'x', quantity: 1 }] }],
+      [19721, Object.assign({}, REAL, { id: 19721 })],
+    ]);
+    let page = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${rep}`, wait: false });
+    try {
+      await openItem(page, rep);
+      await showBook(page);
+      const warns = () => page.eval("[...document.querySelectorAll('#tp-book-warn [data-tp-warn]')].map((p) => [p.getAttribute('data-tp-warn'), p.textContent.replace(/\\s+/g, ' ')])");
+      const w = (await warns()).filter(([k]) => k !== 'differs');
+      assert.deepEqual(w, [['repeats', "ArenaNet's answer repeated 1 price among the buy orders. Each price is counted once here, and where the answer repeats one, another may be missing: past the best 2 prices the buy orders are uncertain, and so is their total."]]);
+      assert.equal(await page.eval("document.querySelector('#tp-item-body .tp-book-table caption').textContent"), 'Buy orders, highest first: 55 units at 3 prices in all (uncertain)', '2 + 3 + 50: the repeated 3 is not added twice');
+      // 5 units stay within the two sure prices; 6 reach past the repeat.
+      await chip(page, 5);
+      let f = await calcFigs(page);
+      assert.ok(!/Uncertain/.test(f['sell-now']) && f['sell-now'].startsWith('4s 20c before fees'), f['sell-now']); // 2 x 90 + 3 x 80
+      await typeAmount(page, '6');
+      f = await calcFigs(page);
+      assert.ok(f['sell-now'].startsWith('4s 90c before fees') && f['sell-now'].endsWith('Uncertain: it reaches prices where the order book is not sure (see above).'), f['sell-now']);
+      assert.ok(!/Uncertain/.test(f['buy-now']), 'the sell listings are sure');
+      // More than the side holds, on a side with a repeat: short and uncertain.
+      await typeAmount(page, '60');
+      f = await calcFigs(page);
+      assert.ok(f['sell-now'].startsWith('Only 55 of 60 are wanted in the whole order book.') && f['sell-now'].endsWith('Uncertain: it reaches prices where the order book is not sure (see above).'), f['sell-now']);
+      assert.deepEqual(await lowContrast(page, '#tp-book-warn *'), [], 'the warnings are readable');
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+    page = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${bad}`, wait: false });
+    try {
+      await openItem(page, bad);
+      await showBook(page);
+      const w = await page.eval("[...document.querySelectorAll('#tp-book-warn [data-tp-warn]')].map((p) => [p.getAttribute('data-tp-warn'), p.textContent.replace(/\\s+/g, ' ')])");
+      assert.deepEqual(w.filter(([k]) => k !== 'differs'), [['dropped', '1 row of the buy orders could not be read and is left out, so figures from them are marked uncertain.'],
+        ['unsorted', 'The sell listings did not arrive in price order. They are sorted here, and figures from them are marked uncertain.'], ['dropped', '3 rows of the sell listings could not be read and are left out, so figures from them are marked uncertain.']]);
+      // Sorted: the lowest listing (2s 50c) is taken first, though it arrived second; no row with a price of 0 or no units is shown.
+      await chip(page, 5);
+      const f = await calcFigs(page);
+      assert.equal(f['buy-now'], '12s 50c in all, 2s 50c each, all at one price. No fee to buy. Uncertain: it reaches prices where the order book is not sure (see above).');
+      assert.equal(f['sell-now'], 'No buy orders in the order book.');
+      assert.deepEqual(await page.eval("[...document.querySelectorAll('#tp-item-body .tp-book-table')][1].querySelectorAll('tbody tr').length"), 2);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+    // A real answer with the API's repeats (near every 200th level): said, counted once, and a walk of 250 from the best prices is not marked uncertain.
+    page = await open({ at: AT, api: api({ books }), url: BASE + '#market/item/19721', wait: false });
+    try {
+      await openItem(page, 19721);
+      await showBook(page);
+      await typeAmount(page, '250');
+      const w = await page.eval("[...document.querySelectorAll('#tp-book-warn [data-tp-warn=\"repeats\"]')].map((p) => p.textContent.replace(/\\s+/g, ' '))");
+      assert.equal(w.length, 2);
+      assert.match(w[0], /^ArenaNet's answer repeated 6 prices among the buy orders\. .* past the best 195 prices the buy orders are uncertain/);
+      assert.match(w[1], /^ArenaNet's answer repeated 1 price among the sell listings\. .* past the best 200 prices/);
+      const real = { buys: Money.cleanSide(REAL.buys, 'buys'), sells: Money.cleanSide(REAL.sells, 'sells') }, p = Money.plan(real, 250, {});
+      const f = await calcFigs(page);
+      assert.ok(f['buy-now'].startsWith(`${ctext(p.cost)} in all`) && !/Uncertain/.test(f['buy-now'] + f['sell-now']), JSON.stringify(f));
+      assert.equal(await page.eval("document.querySelector('#tp-item-body .tp-book-table caption').textContent"), `Buy orders, highest first: ${real.buys.depth.toLocaleString('en-US')} units at 204 prices in all (uncertain)`);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post calculator: a stale order book is marked and its figures are not offered as tradable now; Refresh asks once, keeps the book it has until a newer one comes, and keeps what was typed', async () => {
+    // The second request for the order book is refused (HTTP 400); the third is answered with a book that has moved.
+    let n = 0, slow = false;
+    const moved = { id: 19721, buys: [lvl(1700, 500)], sells: [lvl(1900, 500)] };
+    const page = await open({ at: AT, api: api({ delayFor: (u) => (slow && u.pathname === '/v2/commerce/listings' ? 1500 : 0), answer: (k, u) => (u.pathname === '/v2/commerce/listings' && ++n === 2 ? 400 : 'ok'), bookFor: () => (n >= 3 ? moved : null) }), url: BASE + '#market/item/19721', wait: false });
+    try {
+      await openItem(page, 19721);
+      await showBook(page);
+      assert.equal(await text(page, '#tp-book-when'), 'Order book received at 7:00 AM, just now (current). That is when this page got it; when ArenaNet last updated it is not known: the answer carries no time, and ArenaNet lets an answer be reused for up to 20 minutes, so it may date from before 7:00 AM and be older than the prices above.');
+      assert.equal(await page.eval("document.querySelector('#tp-calc-out .tp-calc-stale')"), null);
+      await typeAmount(page, '20');
+      // Six minutes on, by the 30-second tick: stale, in the warning color, and the result says how old it is.
+      await later(page, 333000);
+      await page.waitFor("/6 minutes ago \\(stale\\)/.test(document.getElementById('tp-book-when').textContent)", 35000);
+      assert.ok((await text(page, '#tp-book-when')).endsWith(' Refresh it before relying on these figures.'));
+      assert.equal(await page.eval("document.getElementById('tp-book-when').classList.contains('is-stale')"), true);
+      assert.equal(await text(page, '#tp-calc-out .tp-calc-stale'), 'This order book was received 6 minutes ago: stale. The figures below are what it showed then, not what can be traded now. Refresh it first.');
+      assert.match((await calcFigs(page)).gain, /if the order book is still as it was in the answer received 6 minutes ago\. An estimate, never a promise: the book may have changed\.$/);
+      assert.deepEqual(await lowContrast(page, '#tp-book-when, #tp-calc-out .tp-calc-stale'), [], 'stale, readable');
+      // Refresh, refused: the book that is here stays, with its own time and the reason.
+      await page.eval("document.getElementById('tp-book-refresh').focus()");
+      await click(page, '#tp-book-refresh');
+      await page.waitFor("/could not be loaded/.test(document.getElementById('tp-book-when').textContent)", 15000);
+      assert.match(await text(page, '#tp-book-when'), /^Order book received at 7:00 AM, 6 minutes ago \(stale\)\..* A newer order book could not be loaded: ArenaNet's API refused the request\. This one stays, with its time\. Refresh it before relying on these figures\.$/);
+      assert.ok((await calcFigs(page))['buy-now'].startsWith(`${ctext(20 * 1895)} in all`), 'still the old book, nothing made up');
+      assert.deepEqual(await page.eval("[document.getElementById('tp-calc-n').value, document.activeElement.id]"), ['20', 'tp-book-refresh'], 'what was typed stays, and focus stays on Refresh');
+      assert.equal(listingsAsked(page), 2);
+      // Refresh again: the newer book replaces it, current, and the figures are the new book's.
+      await click(page, '#tp-book-refresh');
+      await page.waitFor("/just now \\(current\\)/.test(document.getElementById('tp-book-when').textContent)", 15000);
+      assert.equal(await page.eval("document.querySelector('#tp-calc-out .tp-calc-stale')"), null);
+      assert.deepEqual([await page.eval("document.getElementById('tp-calc-n').value"), (await calcFigs(page))['buy-now']], ['20', '3g 80s 00c in all, 19s 00c each, all at one price. No fee to buy.']);
+      assert.equal(listingsAsked(page), 3, 'one request for each press, none of its own');
+      // Pressed twice on a slow API: the first request is cancelled for the second, and a cancelled request is not a failure.
+      slow = true;
+      await click(page, '#tp-book-refresh'); await sleep(300); await click(page, '#tp-book-refresh'); await sleep(700);
+      assert.match(await text(page, '#tp-book-when'), / Asking again\.\.\.$/);
+      assert.ok(!/could not be loaded/.test(await text(page, '#tp-book-when')), 'the cancelled request is not reported as a failure');
+      await page.waitFor("!/Asking again/.test(document.getElementById('tp-book-when').textContent)", 15000);
+      assert.ok(!/could not be loaded/.test(await text(page, '#tp-book-when')));
+      slow = false;
+      assert.equal(listingsAsked(page), 5);
+      // An hour on: old.
+      await later(page, 3636000);
+      await page.waitFor("/\\(old\\)/.test(document.getElementById('tp-book-when').textContent)", 35000);
+      assert.match(await text(page, '#tp-calc-out .tp-calc-stale'), /^This order book was received 61 minutes ago: old\./);
+      assert.equal(listingsAsked(page), 5);
+      assert.deepEqual(unexpected(page, NET), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post calculator: when the fees on the whole sale and the fees on each price differ, both estimates are shown and neither is called a limit; a long walk shows the prices it reached; at a few copper the fees take it all', async () => {
+    const [two, ladder, copper] = OWN.slice(5);
+    const books = new Map([
+      [two, { id: two, buys: [lvl(9, 1), lvl(8, 1)], sells: [lvl(11, 5)] }],
+      // Fourteen sell prices of one unit each, 1s 01c to 1s 14c.
+      [ladder, { id: ladder, buys: [lvl(50, 500)], sells: Array.from({ length: 14 }, (x, i) => lvl(101 + i, 1)) }],
+      [copper, { id: copper, buys: [lvl(1, 500)], sells: [lvl(2, 500)] }],
+    ]);
+    let page = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${two}`, wait: false });
+    try {
+      await openItem(page, two);
+      await showBook(page);
+      await typeAmount(page, '2');
+      // 9c + 8c = 17c. Whole sale: 1c (0.85) and 2c (1.7): 14c. Each price: 1c and 1c of 9c, 1c and 1c of 8c: 13c.
+      const f = await calcFigs(page);
+      assert.equal(f['sell-now'], '17c before fees, about 8c each, across 2 prices, down to 8c each. After fees, two estimates: about 14c if both fees are worked out on the whole sale (1c and 2c), or about 13c if on each price (2c and 2c). ArenaNet does not publish which applies, and neither is a limit.');
+      assert.equal(f.gain, 'about −8c or −9c (the two fee estimates): about 14c or 13c after fees, less the cost of 22c, if the order book is still as ArenaNet reported it. An estimate, never a promise: the book may have changed.');
+      assert.equal(f.roi, `about ${Money.percent(-8 / 22)} or ${Money.percent(-9 / 22)} (the two fee estimates): the profit or loss (about −8c or −9c) divided by the cost (22c), for 2 units bought now and sold now, if the order book is still as ArenaNet reported it. An estimate, never a promise: the book may have changed.`);
+      assert.equal(f.even, 'Selling now gives back about 7c or 6c each after fees: having paid more than that for each, selling now would lose.');
+      assert.equal((await calcOpts(page))['give-now'], 'Sell now to the buy orders: about 14c or 13c after fees');
+      assert.equal(await text(page, '#tp-calc-said'), '2 units: profit or loss a loss of 8 copper or a loss of 9 copper, an estimate.');
+      assert.ok(!/between|at most|at least 1[34]c|no more than|no less than/.test(Object.values(f).join(' ')), 'never worded as limits');
+      // One unit crosses no price: one estimate, no "or".
+      await chip(page, 1);
+      assert.equal((await calcFigs(page))['sell-now'], '9c before fees, 9c each, all at one price. After the listing fee of 1c and the exchange fee of 1c: about 7c.');
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+    page = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${ladder}`, wait: false });
+    try {
+      await openItem(page, ladder);
+      await showBook(page);
+      const rows = () => page.eval("[...[...document.querySelectorAll('#tp-item-body .tp-book-table')][1].querySelectorAll('tbody tr')].map((r) => r.textContent.replace(/\\s+/g, ' ').trim())");
+      assert.equal((await rows()).length, 5, 'five prices for one unit');
+      await typeAmount(page, '8');
+      assert.equal((await rows()).length, 8, 'as many prices as the amount reaches');
+      await typeAmount(page, '14');
+      const r = await rows();
+      assert.equal(r.length, 13, 'twelve prices at most, then a line for the rest');
+      assert.match(r[12], /^and 2 more prices reached, the last at 1s 14c\s*1 silver 14 copper each$/);
+      assert.ok((await calcFigs(page))['buy-now'].startsWith(`${ctext(14 * 101 + 91)} in all, about 1s 08c each, across 14 prices, up to 1s 14c each.`)); // 1505 / 14 = 107.5
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+    page = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${copper}`, wait: false });
+    try {
+      await openItem(page, copper);
+      await showBook(page);
+      const f = await calcFigs(page);
+      assert.equal(f['sell-now'], '1c before fees, 1c each, all at one price. After the listing fee of 1c and the exchange fee of 1c: about −1c. At this price the fees, at least 1 copper each, take all of it.');
+      assert.ok(f.gain.startsWith('about −3c: about −1c after fees, less the cost of 2c'), f.gain);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post calculator on a 360 px phone and by keyboard: nothing scrolls sideways, every control is 36 px and named, and Tab reaches them in order', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market/item/19721', wait: false, width: 360, height: 740, mobile: true });
+    try {
+      await openItem(page, 19721);
+      await showBook(page);
+      await typeAmount(page, '250');
+      const m = await page.eval(`(() => {
+        const d = document.getElementById('tp-item-dialog'), box = document.querySelector('#tp-item-body .tp-book');
+        const ctl = [...box.querySelectorAll('button, input[type="text"]')].map((e) => [e.id || e.textContent, Math.round(e.getBoundingClientRect().height)]);
+        const opt = [...box.querySelectorAll('.tp-calc-opt')].map((e) => Math.round(e.getBoundingClientRect().height));
+        const wide = [...box.querySelectorAll('*')].filter((e) => e.getClientRects().length).filter((e) => e.getBoundingClientRect().right > d.getBoundingClientRect().right + 0.5 || e.getBoundingClientRect().left < d.getBoundingClientRect().left - 0.5).map((e) => e.className || e.tagName);
+        return { side: [document.documentElement.scrollWidth <= innerWidth, d.scrollWidth <= d.clientWidth], ctl, opt, wide };
+      })()`);
+      assert.deepEqual(m.side, [true, true], 'no sideways scroll');
+      assert.deepEqual(m.wide, [], 'nothing sticks out of the dialog');
+      assert.ok(m.ctl.every(([, hgt]) => hgt >= 36) && m.opt.every((hgt) => hgt >= 36), JSON.stringify(m));
+      // Names a screen reader has for each control.
+      const names = await page.eval(`(() => {
+        const box = document.querySelector('#tp-item-body .tp-book');
+        const lab = (e) => (e.closest('label') ? e.closest('label').textContent.replace(/\\s+/g, ' ').trim() : e.textContent.trim());
+        return { group: [box.querySelector('[role="group"]').getAttribute('aria-labelledby'), document.getElementById('tp-calc-units-k').textContent], input: [lab(document.getElementById('tp-calc-n')), document.getElementById('tp-calc-n').getAttribute('aria-describedby'), document.getElementById('tp-calc-n').getAttribute('inputmode')],
+          legends: [...box.querySelectorAll('legend')].map((l) => l.textContent), radios: [...box.querySelectorAll('input[type="radio"]')].map((r) => [r.name, r.value, r.checked, lab(r).length > 20]),
+          said: document.getElementById('tp-calc-said').getAttribute('role'), heads: [...box.querySelectorAll('th[scope="col"]')].length, caps: box.querySelectorAll('caption').length };
+      })()`);
+      assert.deepEqual(names, { group: ['tp-calc-units-k', 'Units'], input: ['Other amount', 'tp-calc-hint tp-calc-err', 'numeric'], legends: ['Getting the units', 'Then'],
+        radios: [['tp-calc-get', 'now', true, true], ['tp-calc-get', 'order', false, true], ['tp-calc-give', 'now', true, true], ['tp-calc-give', 'list', false, true]], said: 'status', heads: 8, caps: 2 });
+      // Tab from the calculator's heading: Refresh, the five amounts, the field, then the two choices.
+      await page.eval("document.getElementById('tp-calc-title').focus()");
+      const seen = [];
+      for (let i = 0; i < 9; i++) { await key(page, 'Tab', 'Tab', 9); seen.push(await page.eval("(() => { const e = document.activeElement; return e.id || e.getAttribute('data-tp-calc-n') || e.name; })()")); }
+      assert.deepEqual(seen, ['tp-book-refresh', '1', '5', '10', '50', '100', 'tp-calc-n', 'tp-calc-get', 'tp-calc-give']);
+      // A ready amount by keyboard, and a way by the arrow keys of its group.
+      await page.eval("document.querySelector('#tp-item-body [data-tp-calc-n=\"10\"]').focus()");
+      await key(page, 'Enter', 'Enter', 13); await settle();
+      assert.deepEqual(await page.eval("[document.activeElement.getAttribute('data-tp-calc-n'), document.activeElement.getAttribute('aria-pressed'), document.getElementById('tp-calc-n').value]"), ['10', 'true', ''], 'focus stays on the amount chosen');
+      assert.deepEqual(await lowContrast(page, '#tp-item-body .tp-book *'), [], 'readable');
+      if (SHOTS) await page.screenshot(join(SHOTS, 'calculator-360.png'), true);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  // ---- v0.5.0 Phase 3: observed book depth near the best price, the return on cost defined, one freshness vocabulary ----
+
+  const strip = "(e) => { if (!e) return null; const c = e.cloneNode(true); for (const s of c.querySelectorAll('.sr-only')) s.remove(); return c.textContent.replace(/\\s+/g, ' ').trim(); }";
+  const nearLook = (page) => page.eval(`(() => { const t = ${strip}, b = document.getElementById('tp-book-near'); if (!b) return null;
+    return { head: t(b.querySelector('h4')), keys: [...b.querySelectorAll('dt')].map(t), buys: t(b.querySelector('[data-tp-near="buys"]')), sells: t(b.querySelector('[data-tp-near="sells"]')), note: t(b.querySelector('.tp-near-note')) }; })()`);
+  const NEAR_NOTE = 'What this order book showed queued at prices within 5% of its own best price, both ends included. Not a guarantee that this many can be bought or sold: orders come and go, others trade first, and the book may have changed since this page received it.';
+  const NEAR_HEAD = { head: 'Observed book depth near the best price', keys: ['Buy orders within 5%', 'Sell listings within 5%'], note: NEAR_NOTE };
+  const UNSURE = ' Uncertain: it reaches prices where the order book is not sure (see above).', FROM = ' Uncertain: worked out from prices where the order book is not sure (see above).';
+
+  check('Trading Post order book depth: the units within 5% of the book\'s own best prices, both ends included, with the range and the side\'s whole depth; called observed book depth, never a guarantee; the same for every amount and way, and asks for nothing', async () => {
+    const [deep, cheap, noSells] = OWN.slice(8);
+    const books = new Map([
+      // Buy orders from 1g: 95s 00c is exactly 5% below and counts, 94s 99c does not. Sell listings from 1g 10s: 1g 15s 50c is exactly 5% above.
+      [deep, { id: deep, buys: [lvl(10000, 10, 2), lvl(9600, 20, 3), lvl(9500, 30), lvl(9499, 40), lvl(8000, 999, 9)], sells: [lvl(11000, 5), lvl(11550, 6), lvl(11551, 7), lvl(20000, 100)] }],
+      // Under 20 copper, 5% is less than a copper: only the best price counts.
+      [cheap, { id: cheap, buys: [lvl(9, 4), lvl(8, 100)], sells: [lvl(12, 3), lvl(13, 50)] }],
+      [noSells, { id: noSells, buys: [lvl(500, 7)], sells: [] }],
+    ]);
+    let page = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${deep}`, wait: false });
+    try {
+      await openItem(page, deep);
+      assert.equal(await page.eval("document.getElementById('tp-book-near')"), null, 'nothing before the order book is asked for');
+      await showBook(page);
+      const WANT = Object.assign({}, NEAR_HEAD, { buys: '60 units wanted at 3 prices between 1g 00s 00c and 95s 00c, of 1,099 in the whole order book.', sells: '11 units listed at 2 prices between 1g 10s 00c and 1g 15s 50c, of 118 in the whole order book.' });
+      assert.deepEqual(await nearLook(page), WANT, '10 + 20 + 30 of 1,099; 5 + 6 of 118');
+      // In the calculator's results, after its figures and before the book's tables, so the stale warning stands above it.
+      assert.deepEqual(await page.eval("(() => { const n = document.getElementById('tp-book-near'); return [n.parentNode.id, n.previousElementSibling.className, n.nextElementSibling.className, n.querySelectorAll('[data-tp-fig], button, input, th, caption').length]; })()"),
+        ['tp-calc-out', 'ed-facts tp-facts tp-calc-facts', 'tp-book-sides', 0]);
+      // Never worded as something that can be done.
+      assert.ok(!/can (be )?(buy|sell|bought|sold)|available|liquid|executable/i.test(WANT.buys + WANT.sells));
+      // Every amount and way, and an amount that is not one: the same depth, and nothing asked for.
+      const before = page.apiRequests.length;
+      for (const step of [() => chip(page, 100), () => typeAmount(page, '250'), () => way(page, 'get', 'order'), () => way(page, 'give', 'list'), () => typeAmount(page, '2.5')]) {
+        await step();
+        assert.deepEqual(await nearLook(page), WANT);
+      }
+      assert.equal(await page.eval("document.querySelectorAll('#tp-calc-out [data-tp-fig]').length"), 0, 'no calculator figure for 2.5, and the depth is none of them');
+      assert.deepEqual([page.apiRequests.length - before, listingsAsked(page)], [0, 1]);
+      // Stale (5 min 33 s on, then the 30-second tick): the warning above it, and the figures what the book showed.
+      await later(page, 333000);
+      await page.waitFor("/6 minutes ago \\(stale\\)/.test(document.getElementById('tp-book-when').textContent)", 35000);
+      assert.equal(await page.eval("(() => { const s = document.querySelector('#tp-calc-out .tp-calc-stale'); return Boolean(s) && Boolean(s.compareDocumentPosition(document.getElementById('tp-book-near')) & Node.DOCUMENT_POSITION_FOLLOWING); })()"), true, 'under the stale warning');
+      assert.deepEqual(await nearLook(page), WANT);
+      assert.deepEqual(await lowContrast(page, '#tp-book-near *'), [], 'readable');
+      if (SHOTS) await page.screenshot(join(SHOTS, 'depth-stale-1280.png'), true);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+    for (const [id, buys, sells] of [
+      [cheap, '4 units wanted at 9c, of 104 in the whole order book. At this price 5% is less than 1 copper, so only this price counts.', '3 units listed at 12c, of 53 in the whole order book. At this price 5% is less than 1 copper, so only this price counts.'],
+      [noSells, '7 units wanted at 1 price between 5s 00c and 4s 75c, of 7 in the whole order book.', 'None: the order book has no sell listings.'],
+    ]) {
+      page = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${id}`, wait: false });
+      try {
+        await openItem(page, id);
+        await showBook(page);
+        assert.deepEqual(await nearLook(page), Object.assign({}, NEAR_HEAD, { buys, sells }), String(id));
+        assert.deepEqual(unexpected(page), []);
+      } finally { await page.close(); }
+    }
+  });
+
+  check('Trading Post order book depth: a repeated price inside the range, or rows out of order or unreadable, mark it uncertain; a repeat at or past the range, as in a real answer, does not; a side with nothing says so', async () => {
+    const [inRange, atLimit, bad] = OWN.slice(11);
+    const REAL = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'tp-book-repeats.json'), 'utf8'));
+    const books = new Map([
+      // 1s 99c twice on buy orders from 2s 00c: a level missing after it could be inside the 5% (down to 1s 90c).
+      [inRange, { id: inRange, buys: [lvl(200, 4), lvl(199, 2), lvl(199, 2), lvl(150, 5)], sells: [lvl(300, 10)] }],
+      // 1s 90c twice, the limit itself: what could be missing after it lies past 5%.
+      [atLimit, { id: atLimit, buys: [lvl(200, 4), lvl(190, 2), lvl(190, 2), lvl(150, 5)], sells: [lvl(300, 10)] }],
+      // Sell listings out of order with rows that are not price levels; buy orders that are no list.
+      [bad, { id: bad, buys: 'none', sells: [lvl(300, 5), lvl(250, 5), { listings: 1, unit_price: 0, quantity: 9 }, { listings: 1, unit_price: 'x', quantity: 1 }] }],
+      [19721, Object.assign({}, REAL, { id: 19721 })],
+    ]);
+    const real = { buys: Money.cleanSide(REAL.buys, 'buys'), sells: Money.cleanSide(REAL.sells, 'sells') }, nb = Money.near(real.buys), ns = Money.near(real.sells);
+    const SELLS = '10 units listed at 1 price between 3s 00c and 3s 15c, of 10 in the whole order book.';
+    for (const [id, buys, sells] of [
+      [inRange, `6 units wanted at 2 prices between 2s 00c and 1s 90c, of 11 in the whole order book.${UNSURE}`, SELLS],
+      [atLimit, '6 units wanted at 2 prices between 2s 00c and 1s 90c, of 11 in the whole order book.', SELLS],
+      [bad, 'None: the order book has no buy orders.', `5 units listed at 1 price between 2s 50c and 2s 62c, of 10 in the whole order book.${UNSURE}`],
+      // The real answer repeats prices near its 200th, far past 5% of its best: the warnings say so, the depth near the price is sure.
+      [19721, `${Money.count(nb.units)} units wanted at ${nb.prices} prices between ${ctext(nb.best)} and ${ctext(nb.limit)}, of ${Money.count(real.buys.depth)} in the whole order book.`,
+        `${Money.count(ns.units)} units listed at ${ns.prices} prices between ${ctext(ns.best)} and ${ctext(ns.limit)}, of ${Money.count(real.sells.depth)} in the whole order book.`],
+    ]) {
+      const page = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${id}`, wait: false });
+      try {
+        await openItem(page, id);
+        await showBook(page);
+        assert.deepEqual(await nearLook(page), Object.assign({}, NEAR_HEAD, { buys, sells }), String(id));
+        if (id === 19721) {
+          assert.deepEqual([nb.uncertain, ns.uncertain, real.buys.repeats > 0, real.sells.repeats > 0], [false, false, true, true]);
+          assert.equal(await page.eval("document.querySelectorAll('#tp-book-warn [data-tp-warn=\"repeats\"]').length"), 2, 'the repeats are still said above');
+        }
+        assert.deepEqual(unexpected(page), []);
+      } finally { await page.close(); }
+    }
+  });
+
+  check('Trading Post calculator: the return on cost is the profit or loss divided by the cost, said with both, for the amount and the two ways chosen, in each of the four ways; an order or a listing only if it fills or sells; uncertain when worked out from what the book is not sure of', async () => {
+    const page = await open({ at: AT, api: api(), url: BASE + '#market/item/19721', wait: false });
+    try {
+      await openItem(page, 19721);
+      await showBook(page);
+      await chip(page, 10);
+      const NOW = ' if the order book is still as ArenaNet reported it. An estimate, never a promise: the book may have changed.';
+      // By hand on the sample book: 10 bought now at 18s 95c = 1g 89s 50c; a buy order at 17s 06c = 1g 70s 60c. Sold now: 1g 70s 60c less
+      // 8s 53c and 17s 06c = 1g 45s 01c. Listed at 18s 95c: 1g 89s 50c less 9s 48c (947.5 up) and 18s 95c (1,895.5 down) = 1g 61s 07c.
+      for (const [get, give, gain, roi] of [
+        ['now', 'now', 'about −44s 49c: about 1g 45s 01c after fees, less the cost of 1g 89s 50c,' + NOW,
+          `about −23.5%: the profit or loss (about −44s 49c) divided by the cost (1g 89s 50c), for 10 units bought now and sold now,${NOW}`],
+        ['now', 'list', 'about −28s 43c: about 1g 61s 07c after fees, less the cost of 1g 89s 50c, only if the listing sells: that is not certain, and prices move.',
+          'about −15.0%: the profit or loss (about −28s 43c) divided by the cost (1g 89s 50c), for 10 units bought now and listed, only if the listing sells: that is not certain, and prices move.'],
+        ['order', 'now', 'about −25s 59c: about 1g 45s 01c after fees, less the cost of 1g 70s 60c, only if the buy order fills: that is not certain, and prices move.',
+          'about −15.0%: the profit or loss (about −25s 59c) divided by the cost (1g 70s 60c), for 10 units bought by a buy order and sold now, only if the buy order fills: that is not certain, and prices move.'],
+        ['order', 'list', 'about −9s 53c: about 1g 61s 07c after fees, less the cost of 1g 70s 60c, only if the buy order fills and the listing sells: neither is certain, and prices move.',
+          'about −5.6%: the profit or loss (about −9s 53c) divided by the cost (1g 70s 60c), for 10 units bought by a buy order and listed, only if the buy order fills and the listing sells: neither is certain, and prices move.'],
+      ]) {
+        await way(page, 'get', get); await way(page, 'give', give);
+        const f = await calcFigs(page), p = Money.plan(bookOf(19721), 10, { get, give });
+        assert.deepEqual([f.gain, f.roi], [gain, roi], `${get} then ${give}`);
+        assert.deepEqual([Money.percent(p.roi.low), p.gain.low, p.cost], [roi.slice(6, roi.indexOf(':')), [-4449, -2843, -2559, -953][['now now', 'now list', 'order now', 'order list'].indexOf(`${get} ${give}`)], get === 'now' ? 18950 : 17060], 'the module, by hand');
+        // What only might happen is never offered as what the book does now.
+        if (get === 'order' || give === 'list') assert.ok(!/still as ArenaNet reported/.test(f.roi) && /only if/.test(f.roi), f.roi);
+      }
+      assert.equal(listingsAsked(page), 1);
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+    // Uncertain: a repeated buy price walked past (6 units), or a book out of order with unreadable rows; the figures worked out from them say so.
+    const [rep, bad] = OWN.slice(3);
+    const books = new Map([[rep, { id: rep, buys: [lvl(90, 2), lvl(80, 3), lvl(80, 3), lvl(70, 50)], sells: [lvl(200, 400)] }],
+      [bad, { id: bad, buys: [lvl(100, 50)], sells: [lvl(300, 5), lvl(250, 5), { listings: 1, unit_price: 0, quantity: 9 }] }]]);
+    let p2 = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${rep}`, wait: false });
+    try {
+      await openItem(p2, rep);
+      await showBook(p2);
+      await chip(p2, 5);
+      let f = await calcFigs(p2);
+      assert.ok(![f.gain, f.roi, f.even].some((x) => /Uncertain/.test(x)), 'within the sure prices: 5 units');
+      await typeAmount(p2, '6');
+      f = await calcFigs(p2);
+      assert.ok(f['sell-now'].endsWith(UNSURE) && f.gain.endsWith(FROM) && f.roi.endsWith(FROM) && f.even.endsWith(FROM), JSON.stringify(f));
+      const repBook = { buys: Money.cleanSide(books.get(rep).buys, 'buys'), sells: Money.cleanSide(books.get(rep).sells, 'sells') };
+      assert.ok(f.roi.startsWith(`about ${Money.percent(Money.plan(repBook, 6, {}).roi.high)}: the profit or loss (`), f.roi);
+      // Listed instead: the sell listings are sure, so nothing worked out from them is marked.
+      await way(p2, 'give', 'list');
+      f = await calcFigs(p2);
+      assert.ok(![f.gain, f.roi, f.even].some((x) => /Uncertain/.test(x)), JSON.stringify(f));
+      assert.deepEqual(unexpected(p2), []);
+    } finally { await p2.close(); }
+    p2 = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${bad}`, wait: false });
+    try {
+      await openItem(p2, bad);
+      await showBook(p2);
+      await chip(p2, 5); await way(p2, 'give', 'list');
+      // 5 bought now at 2s 50c (the lowest, though it arrived second), listed at 2s 50c: 12s 50c less 63c (62.5 up) and 1s 25c.
+      const f = await calcFigs(p2);
+      assert.equal(f.roi, `about −15.0%: the profit or loss (about −1s 88c) divided by the cost (12s 50c), for 5 units bought now and listed, only if the listing sells: that is not certain, and prices move.${FROM}`);
+      assert.ok(f.gain.endsWith(FROM) && f.even.endsWith(FROM), JSON.stringify(f));
+      // By a buy order instead (5 at 1s 00c): the cost no longer comes from the disordered sell listings, so nothing is marked.
+      await way(p2, 'get', 'order');
+      const g = await calcFigs(p2);
+      assert.equal(g.roi, 'about 112.4%: the profit or loss (about 5s 62c) divided by the cost (5s 00c), for 5 units bought by a buy order and listed, only if the buy order fills and the listing sells: neither is certain, and prices move.');
+      assert.ok(![g.gain, g.roi, g.even].some((x) => /Uncertain/.test(x)), JSON.stringify(g));
+      assert.deepEqual(unexpected(p2), []);
+    } finally { await p2.close(); }
+  });
+
+  check('Trading Post freshness: prices, the order book and the gem rates say when this page received them and that when ArenaNet last updated them is not known, in one vocabulary (received; current, stale, old); no line says "fetched" or "from" a time, and no request asks past the browser\'s cache', async () => {
+    // Each fetch the page makes, as the page made it: the Request's cache mode and the options given. Chrome adds the headers a
+    // cache mode sends (Pragma, Cache-Control) below the point where api() sees a request, so the mode is read here instead.
+    const SPY = "window.__fetches = []; (() => { const f = window.fetch; window.fetch = function (u, i) { try { const r = new Request(u, i); window.__fetches.push({ url: r.url, cache: r.cache, keys: Object.keys(i || {}).sort().join(',') }); } catch (e) { window.__fetches.push({ url: String(u), cache: 'unreadable', keys: '' }); } return f.apply(this, arguments); }; })();";
+    const page = await open({ at: AT, api: api(), url: BASE + '#market', wait: false, init: [SPY] });
+    // Everything the Trading Post and an item's details show, as a reader sees it.
+    const seen = () => page.eval("[document.getElementById('market-view').innerText, document.getElementById('tp-item-dialog').open ? document.getElementById('tp-item-dialog').innerText : ''].join(' ').replace(/\\s+/g, ' ')");
+    const BANNED = /\bfetched\b|\b(Prices|Rates) from \d|\basked for at\b|minutes behind|may itself be/i;
+    try {
+      await market(page); await watchReady(page);
+      assert.ok((await text(page, '.market-view .explain')).includes('with the time this page received them (when ArenaNet last updated them is not known: its answers carry no time)'));
+      assert.deepEqual([await text(page, '#tp-watch-text'), await text(page, '#tp-gem-text')], ['Prices received 7:00 AM, current.', 'Rates received 7:00 AM, current.']);
+      await typeTp(page, 'glob of ecto'); await idle(page);
+      assert.equal(await text(page, '#tp-prices-text'), 'Prices received 7:00 AM, current.');
+      await click(page, '#tp-results a.tp-name');
+      await openItem(page, 19721);
+      await showBook(page);
+      assert.equal(await text(page, '#tp-item-body .tp-stat-when'), 'Prices received at 7:00 AM, just now (current). That is when this page got them; when ArenaNet last updated them is not known: the answer carries no time, and ArenaNet lets an answer be reused for up to 2 minutes, so they may date from before 7:00 AM.');
+      assert.ok((await text(page, '#tp-book-when')).startsWith('Order book received at 7:00 AM, just now (current). That is when this page got it; when ArenaNet last updated it is not known: the answer carries no time, and ArenaNet lets an answer be reused for up to 20 minutes'));
+      let all = await seen();
+      assert.ok(!BANNED.test(all), all.match(BANNED) && all.slice(Math.max(0, all.search(BANNED) - 80), all.search(BANNED) + 80));
+      // Stale: 11 min 33 s on, then the tick (the age lands mid-rounding at 12 minutes); every line in the same words.
+      await later(page, 693000);
+      await page.waitFor("/12 minutes ago \\(stale\\)/.test(document.getElementById('tp-book-when').textContent) && /12 minutes ago \\(stale\\)/.test(document.querySelector('#tp-item-body .tp-stat-when').textContent)", 35000);
+      assert.match(await text(page, '#tp-item-body .tp-stat-when'), /^Prices received at 7:00 AM, 12 minutes ago \(stale\)\. That is when this page got them; when ArenaNet last updated them is not known/);
+      assert.match(await text(page, '#tp-calc-out .tp-calc-stale'), /^This order book was received 12 minutes ago: stale\./);
+      assert.match((await calcFigs(page)).gain, /if the order book is still as it was in the answer received 12 minutes ago\./);
+      assert.equal(await page.eval("document.querySelector('#tp-results .tp-note').textContent"), 'Stale price, received 12 minutes ago.');
+      assert.equal(await text(page, '#tp-prices-text'), 'Prices received 7:00 AM, 12 minutes ago: stale. Refresh for current prices.');
+      all = await seen();
+      assert.ok(!BANNED.test(all), all.slice(Math.max(0, all.search(BANNED) - 80), all.search(BANNED) + 80));
+      // Decision D5: every request is a plain GET through the browser's ordinary cache: no cache headers, no cache mode (read below from the page's side), no cache-busting parameter.
+      const sent = page.apiSent || [];
+      // The home's four (prices, item records, both gem quotes) and the order book: every kind of request the Trading Post makes.
+      assert.deepEqual([...new Set(sent.map((r) => new URL(r.url).pathname))].sort(), ['/v2/commerce/exchange/coins', '/v2/commerce/exchange/gems', '/v2/commerce/listings', '/v2/commerce/prices', '/v2/items']);
+      for (const r of sent) {
+        const u = new URL(r.url), heads = Object.keys(r.headers).map((k) => k.toLowerCase());
+        assert.equal(r.method, 'GET', r.url);
+        assert.ok(!heads.includes('cache-control') && !heads.includes('pragma'), `${r.url}: ${heads.join(', ')}`);
+        assert.ok([...u.searchParams.keys()].every((k) => ['ids', 'id', 'quantity', 'lang', 'v'].includes(k)), r.url);
+      }
+      // The same requests from the page's side: each in the browser's default cache mode, and no cache option given at all.
+      const made = (await page.eval('window.__fetches')).filter((r) => new URL(r.url).hostname === 'api.guildwars2.com');
+      assert.deepEqual([...new Set(made.map((r) => new URL(r.url).pathname))].sort(), [...new Set(sent.map((r) => new URL(r.url).pathname))].sort());
+      for (const r of made) assert.ok(r.cache === 'default' && !r.keys.split(',').includes('cache'), JSON.stringify(r));
+      assert.deepEqual(unexpected(page), []);
+    } finally { await page.close(); }
+  });
+
+  check('Trading Post depth and return on cost on 320 and 360 px phones in both themes, with four-figure gold prices: nothing scrolls sideways or sticks out, readable, in each of the four ways', async () => {
+    const big = OWN[14];
+    const books = new Map([[big, { id: big, buys: [lvl(40000000, 3), lvl(39000000, 2), lvl(38123456, 40), lvl(20000000, 9)], sells: [lvl(45000000, 1), lvl(45111111, 4), lvl(47250000, 2), lvl(47250001, 6), lvl(48000000, 9)] }]]);
+    for (const [width, height] of [[320, 568], [360, 740]]) {
+      for (const theme of ['dark', 'light']) {
+        const page = await open({ at: AT, api: api({ books }), url: BASE + `#market/item/${big}`, wait: false, width, height, mobile: true, seed: { [h.reminders.PREFS]: { theme } } });
+        try {
+          await openItem(page, big);
+          await showBook(page);
+          await typeAmount(page, '5');
+          for (const [get, give] of [['now', 'now'], ['now', 'list'], ['order', 'now'], ['order', 'list']]) {
+            await way(page, 'get', get); await way(page, 'give', give);
+            const m = await page.eval(`(() => {
+              const d = document.getElementById('tp-item-dialog'), box = d.getBoundingClientRect();
+              const out = [...document.querySelectorAll('#tp-item-body .tp-book *')].filter((e) => e.getClientRects().length).filter((e) => { const r = e.getBoundingClientRect(); return r.right > box.right + 0.5 || r.left < box.left - 0.5; }).map((e) => e.className || e.tagName);
+              // Against the fixed width, not innerWidth: a phone browser widens its viewport when a page overflows.
+              return { page: document.documentElement.scrollWidth <= ${width}, dialog: d.scrollWidth <= d.clientWidth && box.right <= ${width} + 0.5, out, near: Boolean(document.getElementById('tp-book-near')), roi: Boolean(document.querySelector('#tp-calc-out [data-tp-fig="roi"]')) };
+            })()`);
+            assert.deepEqual(m, { page: true, dialog: true, out: [], near: true, roi: true }, `${width} ${theme} ${get} ${give}`);
+          }
+          assert.deepEqual(await lowContrast(page, '#tp-book-near *, #tp-calc-out [data-tp-fig="roi"] *'), [], `${width} ${theme}`);
+          if (SHOTS && theme === 'dark') {
+            await page.eval("document.getElementById('tp-book-near').scrollIntoView({ block: 'center' })");
+            await page.screenshot(join(SHOTS, `depth-roi-${width}.png`));
+          }
+          assert.deepEqual(unexpected(page), []);
+        } finally { await page.close(); }
+      }
+    }
   });
 
   check('Trading Post: a link to an item opens its details on load; a link to an unknown or unreadable item says so and changes nothing', async () => {

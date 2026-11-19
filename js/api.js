@@ -155,14 +155,17 @@
       prices: (ids, opts) => many('/v2/commerce/prices', ids, {}, priceRow, opts),
       /** Item records (/v2/items, English): icon, description, vendor value, chat code, flags. */
       items: (ids, opts) => many('/v2/items', ids, { lang: 'en' }, itemRow, opts),
-      /** One item's order book (/v2/commerce/listings): { ok, book: { buys, sells, at } }, { ok, notFound } or { ok: false, error }. */
+      /** One item's order book (/v2/commerce/listings): { ok, book: { buys, sells, dropped, at } }, { ok, notFound } or { ok: false, error }. */
       async listings(id, opts) {
         if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, error: 'http' };
         const r = await get('/v2/commerce/listings', { id }, opts);
         if (!r.ok) return r;
         if (r.notFound || !r.data) return { ok: true, notFound: true };
         const list = (a) => (Array.isArray(a) ? a.filter(tier) : []);
-        return { ok: true, book: { buys: list(r.data.buys), sells: list(r.data.sells), at: now() } };
+        // dropped: the rows of each side that are not a price level and were left out (a side that is not a list
+        // at all counts as one), so whoever counts depth can say it is not the whole answer.
+        const lost = (a) => (Array.isArray(a) ? a.length - list(a).length : 1);
+        return { ok: true, book: { buys: list(r.data.buys), sells: list(r.data.sells), dropped: { buys: lost(r.data.buys), sells: lost(r.data.sells) }, at: now() } };
       },
       /**
        * A gem exchange quote (/v2/commerce/exchange/coins or /gems), for one direction and one amount, as ArenaNet's

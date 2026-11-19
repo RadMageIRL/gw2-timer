@@ -6,20 +6,20 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://render.guildwars2.com; connect-src 'self' https://www.guildwars2.com https://api.guildwars2.com; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="dark light">
-  <link rel="stylesheet" href="style.css?v=0.4.1">
+  <link rel="stylesheet" href="style.css?v=0.5.0">
   <!-- The scripts download together and run in order once the page is parsed. app.js holds the
        first paint until it has filled the page in, so the page does not jump as it loads. -->
   <script defer src="events-data.js?r=1"></script>
-  <script defer src="js/schedule.js?v=0.4.1"></script>
-  <script defer src="js/store.js?v=0.4.1"></script>
-  <script defer src="js/news.js?v=0.4.1"></script>
-  <script defer src="js/clock.js?v=0.4.1"></script>
-  <script defer src="js/search.js?v=0.4.1"></script>
-  <script defer src="js/link.js?v=0.4.1"></script>
-  <script defer src="js/reminders.js?v=0.4.1"></script>
-  <script defer src="js/ics.js?v=0.4.1"></script>
-  <script defer blocking="render" src="js/app.js?v=0.4.1"></script>
-  <script src="js/theme-boot.js?v=0.4.1"></script>
+  <script defer src="js/schedule.js?v=0.5.0"></script>
+  <script defer src="js/store.js?v=0.5.0"></script>
+  <script defer src="js/news.js?v=0.5.0"></script>
+  <script defer src="js/clock.js?v=0.5.0"></script>
+  <script defer src="js/search.js?v=0.5.0"></script>
+  <script defer src="js/link.js?v=0.5.0"></script>
+  <script defer src="js/reminders.js?v=0.5.0"></script>
+  <script defer src="js/ics.js?v=0.5.0"></script>
+  <script defer blocking="render" src="js/app.js?v=0.5.0"></script>
+  <script src="js/theme-boot.js?v=0.5.0"></script>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23101114'/%3E%3Ccircle cx='32' cy='34' r='19' fill='none' stroke='%23d9a441' stroke-width='5'/%3E%3Cpath d='M32 34V22M32 34l9 6' stroke='%23e9e4da' stroke-width='5' stroke-linecap='round'/%3E%3Crect x='26' y='6' width='12' height='7' rx='2' fill='%23d9a441'/%3E%3C/svg%3E">
   <title>GW2 Timer | Unofficial Guild Wars 2 Fansite</title>
   <meta name="description" content="Guild Wars 2 world boss and meta-event timer: what is scheduled now and next in your local time, day and night cycles, resets and waypoints. Unofficial fansite.">
@@ -46,7 +46,7 @@
     <div class="brand">
       <div class="brand-line">
         <h1>GW2 Timer</h1>
-        <span class="tag">v0.4.1 · Guild Wars 2 Boss &amp; Meta Timers · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
+        <span class="tag">v0.5.0 · Guild Wars 2 Boss &amp; Meta Timers · <a href="https://radmagelabs.com/">RadMage Labs</a></span>
       </div>
       <nav class="share-links" aria-label="Share and support"><button type="button" class="link-btn" data-share title="Share https://radmagelabs.com/gw2-timer/">share</button> · <a href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">buy me a coffee<span class="sr-only"> (opens a new tab)</span></a></nav>
     </div>
@@ -278,7 +278,7 @@
         <h2 id="market-title" tabindex="-1">Trading Post</h2>
         <span class="hint">prices from ArenaNet's public API</span>
       </div>
-      <p class="explain">Find an item and compare its highest buy order with its lowest sell listing. Prices are asked for when you open the Trading Post and when you search, straight from ArenaNet's API, with the time they were fetched; when the API does not answer, no price is shown.</p>
+      <p class="explain">Find an item and compare its highest buy order with its lowest sell listing. Prices are asked for when you open the Trading Post and when you search, straight from ArenaNet's API, with the time this page received them (when ArenaNet last updated them is not known: its answers carry no time); when the API does not answer, no price is shown.</p>
       <div class="notice-bar link-notice" id="tp-link-notice" role="status" hidden><span id="tp-link-notice-text"></span> <button type="button" class="link-btn" id="tp-link-notice-dismiss">Dismiss</button></div>
       <p class="tp-boot" id="tp-boot" role="status">Loading the Trading Post...</p>
       <p class="tp-boot-actions"><button type="button" class="btn small" id="tp-retry" hidden>Try again</button></p>
@@ -311,12 +311,46 @@
             </label>
             <button type="button" class="btn small" id="tp-favs" aria-pressed="false">Favorites (0)</button>
           </div>
+          <div class="tp-pf">
+            <button type="button" class="btn small" id="tp-pf-toggle" aria-expanded="false" aria-controls="tp-pf-panel">Price filters</button>
+            <div class="tp-pf-panel" id="tp-pf-panel" hidden>
+              <p class="hint" id="tp-pf-how">Coin amounts like 2g 50s 10c, 75s or 40c. A filter is checked only against a price that is loaded: an item with no price loaded is not checked, and is listed after the ones that pass, never among them.</p>
+              <div class="tp-pf-grid">
+                <fieldset class="tp-pf-set">
+                  <legend>Highest buy order</legend>
+                  <label class="field">from <input type="text" id="tp-pf-buyMin" data-tp-pf="buyMin" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="tp-pf-how tp-pf-err"></label>
+                  <label class="field">to <input type="text" id="tp-pf-buyMax" data-tp-pf="buyMax" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="tp-pf-how tp-pf-err"></label>
+                </fieldset>
+                <fieldset class="tp-pf-set">
+                  <legend>Lowest sell listing</legend>
+                  <label class="field">from <input type="text" id="tp-pf-sellMin" data-tp-pf="sellMin" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="tp-pf-how tp-pf-err"></label>
+                  <label class="field">to <input type="text" id="tp-pf-sellMax" data-tp-pf="sellMax" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="tp-pf-how tp-pf-err"></label>
+                </fieldset>
+                <fieldset class="tp-pf-set">
+                  <legend>Potential margin after fees</legend>
+                  <label class="field">at least <input type="text" id="tp-pf-marginMin" data-tp-pf="marginMin" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="tp-pf-how tp-pf-err"></label>
+                  <label class="field">at least, % of buy <input type="text" id="tp-pf-pctMin" data-tp-pf="pctMin" inputmode="decimal" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="tp-pf-pct tp-pf-err"></label>
+                  <p class="hint" id="tp-pf-pct">The percentage is of the highest buy order, compared exactly: a margin shown as 10.0% after rounding passes "at least 10" only if it is 10% or more.</p>
+                </fieldset>
+                <fieldset class="tp-pf-set">
+                  <legend>Total queued units</legend>
+                  <label class="field">wanted in all buy orders, at least <input type="text" id="tp-pf-wantedMin" data-tp-pf="wantedMin" inputmode="numeric" maxlength="15" autocomplete="off" spellcheck="false" aria-describedby="tp-pf-total tp-pf-err"></label>
+                  <label class="field">listed in all sell listings, at least <input type="text" id="tp-pf-listedMin" data-tp-pf="listedMin" inputmode="numeric" maxlength="15" autocomplete="off" spellcheck="false" aria-describedby="tp-pf-total tp-pf-err"></label>
+                  <p class="hint" id="tp-pf-total">These are the totals ArenaNet reports for every buy order and every sell listing together, at any price. They are not what can be bought or sold near the best price: much of it can sit far from it. An item's order book, in its details, shows what is near.</p>
+                </fieldset>
+              </div>
+              <p class="tp-pf-err" id="tp-pf-err" role="alert" hidden></p>
+              <p class="tp-pf-said" id="tp-pf-said" role="status"></p>
+              <p class="tp-pf-actions"><button type="button" class="btn small" id="tp-pf-clear" hidden>Clear price filters</button></p>
+            </div>
+          </div>
           <p class="tp-fav-unsaved" id="tp-fav-unsaved" hidden>Favorites cannot be saved in this browser, so they last only until this tab closes.</p>
         </div>
         <div class="tp-status">
           <p class="tp-crumbs" id="tp-crumbs" hidden><button type="button" class="btn small tp-home-btn" id="tp-home-btn"><span aria-hidden="true">‹</span> Trading Post home</button> <span class="tp-crumb-sep" aria-hidden="true">/</span> <span class="tp-crumb" id="tp-crumb" tabindex="-1"></span></p>
           <p class="tp-count" id="tp-count" role="status"></p>
           <p class="tp-scope" id="tp-scope"></p>
+          <p class="tp-fscope" id="tp-fscope" role="status" hidden></p>
           <p class="tp-prices" id="tp-prices"><span id="tp-prices-text" role="status"></span> <button type="button" class="link-btn" id="tp-refresh" hidden>Refresh prices</button></p>
           <div class="tp-whole" id="tp-whole" hidden>
             <button type="button" class="btn small" id="tp-whole-btn" aria-expanded="false" aria-controls="tp-whole-confirm">Load whole market</button>
@@ -412,7 +446,7 @@
 
   <dialog id="about" aria-labelledby="about-title">
     <div class="dialog-close"><button type="button" class="btn small" data-close>Close</button></div>
-    <h2 id="about-title">GW2 Timer v0.4.1</h2>
+    <h2 id="about-title">GW2 Timer v0.5.0</h2>
     <p>A Guild Wars 2 timer for world bosses and meta-events: what is in its scheduled window now, what starts next, in your local time. Unofficial fansite, not affiliated with ArenaNet or NCSOFT.</p>
     <h3>Scheduled, not live</h3>
     <p>Every time here is a scheduled start. The game publishes no live state for events, so a map can run early, late, fail, or close. "Scheduled now" means the scheduled window is open, not that the fight is on in your map.</p>
@@ -429,7 +463,7 @@
     <h3>Add to calendar</h3>
     <p>The Calendar button by the filters, or Add to calendar in an event's details, makes a calendar file (.ics) of the scheduled starts you choose, for the next start or up to 30 days, with an alarm if you want one. Each start is written in UTC, so your calendar shows it in your time zone. The file is made in this browser and never updates itself; if a schedule changes, download a new one. Whether a file's alarm is used, and what importing a file again does, depends on your calendar app.</p>
     <h3>Trading Post</h3>
-    <p>The Trading Post mode searches the items sold on the game's Trading Post (the item list is updated by hand, so the newest items can be missing) and shows each one's highest buy order and lowest sell listing, fetched from ArenaNet's public API when you search. It opens on a home with the item types to browse, your newest favorites, the gem exchange's current rates (what 100 gold buys and what 400 gems sell for, each its own price) and a Market Watch: eight familiar items used in crafting, chosen by hand (not a ranking). Their prices and rates are fetched when the Trading Post opens. It needs no account and no API key. A price sort says which items it covers; it ranks the whole market only after you choose Load whole market. Proceeds and margins after fees are estimates, not profits: an order has not filled until it does. Nothing here is a live feed of the game: the API itself can be a few minutes behind.</p>
+    <p>The Trading Post mode searches the items sold on the game's Trading Post (the item list is updated by hand, so the newest items can be missing) and shows each one's highest buy order and lowest sell listing, fetched from ArenaNet's public API when you search. It opens on a home with the item types to browse, your newest favorites, the gem exchange's current rates (what 100 gold buys and what 400 gems sell for, each its own price) and a Market Watch: eight familiar items used in crafting, chosen by hand (not a ranking). Their prices and rates are fetched when the Trading Post opens. It needs no account and no API key. A price sort says which items it covers; it ranks the whole market only after you choose Load whole market. Proceeds and margins after fees are estimates, not profits: an order has not filled until it does. Nothing here is a live feed of the game: each price, order book and rate says when this page received it, and when ArenaNet last updated it is not known.</p>
     <h3>Privacy</h3>
     <p>Settings, stars, adjustments, reminder choices and Trading Post favorites are saved in this browser only. A calendar file is made in this browser and saved by your browser like any download; nothing about it is sent anywhere or saved here. A search you type is not saved at all, and a link to an event or an item carries its name or id and nothing of yours. Two things leave the timer: the clock check asks this site's own address for the time, and the news panel loads headlines from guildwars2.com, so ArenaNet sees that request. You can turn news off. The Trading Post, once you open it, also asks ArenaNet's API (api.guildwars2.com) for prices, item details and gem exchange rates, and loads item icons from render.guildwars2.com, so ArenaNet sees those requests; nothing of yours is sent with them. The timer makes neither request.</p>
     <h3>Share and support</h3>

@@ -152,12 +152,67 @@
     return { order: ranked.concat(noSide, unpriced), ranked: ranked.length, noSide: noSide.length, unpriced: unpriced.length };
   }
 
+  /**
+   * The price filters, each named for the bound it sets on a quote (js/money.js quote()); a filter that is null or
+   * missing is not set. All in whole numbers: prices and the margin in copper, quantities in units, and the margin
+   * percentage in tenths of a percent (pctMin 105 is 10.5%), compared as margin * 1000 >= pctMin * buy so that no
+   * rounding of a displayed percentage decides anything.
+   *   buyMin, buyMax    the highest buy order, inclusive
+   *   sellMin, sellMax  the lowest sell listing, inclusive
+   *   marginMin         the potential margin after fees, at least
+   *   pctMin            the potential margin as a share of the highest buy order, at least
+   *   wantedMin         units wanted in ALL buy orders together, at least (the API's total, not depth near the best price)
+   *   listedMin         units listed in ALL sell listings together, at least (the same)
+   */
+  const FILTER_KEYS = ['buyMin', 'buyMax', 'sellMin', 'sellMax', 'marginMin', 'pctMin', 'wantedMin', 'listedMin'];
+  const setFilters = (f) => FILTER_KEYS.filter((k) => f && Number.isSafeInteger(f[k]));
+
+  /** Whether one loaded quote passes every filter that is set. A side the item lacks fails any filter on it: it is never a price of 0. */
+  function quotePasses(qt, f) {
+    const has = (k) => Number.isSafeInteger(f[k]);
+    if ((has('buyMin') || has('buyMax')) && qt.buy === null) return false;
+    if (has('buyMin') && qt.buy < f.buyMin) return false;
+    if (has('buyMax') && qt.buy > f.buyMax) return false;
+    if ((has('sellMin') || has('sellMax')) && qt.sell === null) return false;
+    if (has('sellMin') && qt.sell < f.sellMin) return false;
+    if (has('sellMax') && qt.sell > f.sellMax) return false;
+    if ((has('marginMin') || has('pctMin')) && qt.margin === null) return false;
+    if (has('marginMin') && qt.margin < f.marginMin) return false;
+    if (has('pctMin') && qt.margin * 1000 < f.pctMin * qt.buy) return false;
+    if (has('wantedMin') && qt.buyQty < f.wantedMin) return false;
+    if (has('listedMin') && qt.sellQty < f.listedMin) return false;
+    return true;
+  }
+
+  /**
+   * The indexes a search found, against the price filters: three answers, never two. priceOf(id) gives an item's
+   * quote when its price is loaded, null when the API has answered that it has no price for it, and undefined when
+   * no price is loaded (not asked for yet, on its way, or failed).
+   * Returns { pass, unchecked, passed, failed, uncheckedCount, checked }: `pass` the indexes that pass, in the order
+   * given; `unchecked` the ones with no price loaded, in the order given: they are not known to pass or to fail, and
+   * are neither dropped nor counted as passing. An item the API has no price for fails. With no filter set, everything
+   * passes and nothing is unchecked.
+   */
+  function priceFilter(cat, indexes, filters, priceOf) {
+    const f = filters || {};
+    if (!setFilters(f).length) return { pass: indexes.slice(), unchecked: [], passed: indexes.length, failed: 0, uncheckedCount: 0, checked: indexes.length };
+    const pass = [], unchecked = [];
+    let failed = 0;
+    for (const i of indexes) {
+      const qt = priceOf(cat.ids[i]);
+      if (qt === undefined) unchecked.push(i);
+      else if (qt !== null && quotePasses(qt, f)) pass.push(i);
+      else failed++;
+    }
+    return { pass, unchecked, passed: pass.length, failed, uncheckedCount: unchecked.length, checked: pass.length + failed };
+  }
+
   /** Item descriptions carry the game's markup ("<c=@flavor>...</c>", "<br>"): plain text, tags dropped. */
   function plainText(s) {
     return String(s || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim();
   }
 
-  const Catalog = { FORMAT, MAX_QUERY, MIN_QUERY, fold, parse, search, priceSort, plainText };
+  const Catalog = { FORMAT, MAX_QUERY, MIN_QUERY, FILTER_KEYS, fold, parse, search, priceSort, setFilters, quotePasses, priceFilter, plainText };
   if (typeof module === 'object' && module.exports) module.exports = Catalog;
   else root.GW2Catalog = Catalog;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

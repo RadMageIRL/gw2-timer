@@ -708,6 +708,23 @@ test(`the tagline, About, README and every asset say v${VERSION}, the newest ver
   assert.equal(assets.length, 11); // the stylesheet and ten scripts (search.js since v0.3.0 Phase C, link.js since Phase D, reminders.js since Phase E, ics.js since v0.4.0 Phase B)
   for (const a of assets) assert.ok(a.endsWith(`?v=${VERSION}`), a);
 });
+// v0.5.0 release candidate: axe-core (Lighthouse's engine) found "Copy link", "Copy chat code" and the Adjust
+// dialog's "-5 min" and "+5 min" named without their own words; speech input users say what they see (WCAG 2.5.3).
+test('every control given an aria-label has its visible words in that name (label in name), in the scripts and the page', () => {
+  const fold = (s) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const pairs = [];
+  for (const f of readdirSync(join(ROOT, 'js')).filter((n) => n.endsWith('.js'))) {
+    for (const seg of file(`js/${f}`).split(/\bh\(/).slice(1)) {
+      const lab = /'aria-label': (?:`([^`]*)`|'([^']*)')/.exec(seg), txt = /\btext: (?:'([^']*)'|`([^`]*)`)/.exec(seg);
+      if (lab && txt) pairs.push([f, lab[1] ?? lab[2], txt[1] ?? txt[2]]);
+    }
+  }
+  for (const m of html.matchAll(/<(button|a|summary)\b[^>]*\baria-label="([^"]*)"[^>]*>([\s\S]*?)<\/\1>/g)) pairs.push(['index.html', unescapeHtml(m[2]), unescapeHtml(m[3].replace(/<[^>]*>/g, ' '))]);
+  assert.ok(pairs.length >= 15, String(pairs.length));
+  // Words only: a sign or a symbol alone (+, -, the star) is not a word to say.
+  const bad = pairs.filter(([, label, shown]) => fold(shown) && !fold(label).includes(fold(shown)));
+  assert.deepEqual(bad, []);
+});
 test('the header, footer and About have Share and a Buy me a coffee link that opens a new tab, as FFXI Timer has', () => {
   const coffee = html.split('<a href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">').length - 1;
   const coffeeBtn = html.split('<a class="btn small" href="https://buymeacoffee.com/radmageirl" target="_blank" rel="noopener noreferrer">').length - 1;

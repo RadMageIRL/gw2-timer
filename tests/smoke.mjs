@@ -304,6 +304,8 @@ check('Adjust sets a start time from the time seen, survives reload, nudges, and
     await page.reload();
     await page.waitFor(`document.querySelector('${sel} .badge.adjusted') !== null`);
     await click(page, `${sel} [data-adjust]`); await settle();
+    // v0.5.0 release candidate (found by axe-core): the nudges' names hold their visible words (WCAG 2.5.3).
+    assert.deepEqual(await page.eval("[...document.querySelectorAll('[data-adj-nudge^=\"shackles-of-the-ancients:\"]')].map((b) => [b.textContent, b.getAttribute('aria-label')])"), [['-5 min', '5 min earlier'], ['+5 min', '5 min later']]);
     await click(page, '[data-adj-nudge="shackles-of-the-ancients:5"]'); await settle();
     assert.match(await text(page, '.adjust-panel .adj-now'), /from 01:15 UTC/);
     await click(page, '[data-adj-reset="shackles-of-the-ancients"]'); await settle();
@@ -1442,7 +1444,7 @@ check('Link: screen readers and keyboard: a modal named by the event and describ
     for (let i = 0; i < 14; i++) { await key(page, 'Tab', 'Tab', 9); where.push(await page.eval("(() => { const a = document.activeElement; return !a || a === document.body ? 'browser' : document.getElementById('event-dialog').contains(a) ? 'dialog' : 'page:' + (a.id || a.className); })()")); }
     assert.ok(!where.some((w) => w.startsWith('page:')) && where.filter((w) => w === 'dialog').length >= 10, where.join(','));
     const names = await page.eval("[...document.querySelectorAll('#event-dialog button, #event-dialog a')].map((b) => b.getAttribute('aria-label') || b.textContent.trim())");
-    assert.deepEqual(names, ['Close', 'Star Tequatl the Sunless', 'Copy waypoint for Tequatl the Sunless: [&BNABAAA=]', 'Tequatl the Sunless on the Guild Wars 2 Wiki (opens a new tab)', 'Copy a link to Tequatl the Sunless', 'Add to calendar: Tequatl the Sunless']);
+    assert.deepEqual(names, ['Close', 'Star Tequatl the Sunless', 'Copy waypoint for Tequatl the Sunless: [&BNABAAA=]', 'Tequatl the Sunless on the Guild Wars 2 Wiki (opens a new tab)', 'Copy link to Tequatl the Sunless', 'Add to calendar: Tequatl the Sunless']);
     assert.ok(!(await page.eval("[...document.querySelectorAll('#event-dialog *')].filter((n) => n.childElementCount === 0).map((n) => n.textContent).join(' ')")).includes('★'), 'the star glyph stays out of the names');
     await key(page, 'Escape', 'Escape', 27);
     await page.waitFor("!document.getElementById('event-dialog').open");
